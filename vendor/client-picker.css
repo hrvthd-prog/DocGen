@@ -1,0 +1,428 @@
+/* ──────────────────────────────────────────────────────────────
+   ClientPicker — Excel-stílusú szűrhető tábla, többszálú multi-select.
+   Önálló komponens; egyetlen CSS-fájl párral használható.
+   Brand-színek `--cp-*` változókkal felülírhatók.
+   ────────────────────────────────────────────────────────────── */
+
+/* Szín-tokenek alapértékkel (project tokens-szel felülírható) */
+.cp-root {
+  --cp-blue:    var(--c-green, #3DA68C);
+  --cp-green:   var(--c-green, #3DA68C);
+  --cp-amber:   var(--c-amber, #C27822);
+  --cp-red:     var(--c-red, #D95555);
+  --cp-text:    var(--c-text, #1A3238);
+  --cp-muted:   var(--c-muted, #6E9298);
+  --cp-bg:      var(--c-bg, #F2F8F7);
+  --cp-card:    var(--c-card, #FFFFFF);
+  --cp-border:  var(--c-border, #C6DFDB);
+  --cp-radius:  var(--radius-md, 10px);
+  --cp-radius-lg: var(--radius-lg, 14px);
+}
+
+/* Overlay */
+.cp-overlay {
+  position: fixed; inset: 0;
+  background: rgba(26,50,56,.45);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+  font-family: 'DM Sans', "Segoe UI", system-ui, sans-serif;
+  font-size: 13px;
+  color: var(--cp-text);
+}
+
+/* Dialog */
+.cp-dialog {
+  background: var(--cp-card);
+  border-radius: var(--cp-radius-lg);
+  box-shadow: 0 1px 3px rgba(26,50,56,.06), 0 12px 40px rgba(26,50,56,.18);
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1280px;
+  height: calc(100vh - 48px);
+  min-height: 560px;
+  overflow: hidden;
+  border: 1px solid var(--cp-border);
+}
+
+/* ── Fejléc ───────────────────────────────────────────────── */
+.cp-header {
+  padding: 14px 20px;
+  display: flex; align-items: center; gap: 12px;
+  border-bottom: 1px solid var(--cp-border);
+  flex-shrink: 0;
+}
+.cp-header-title { font-size: 14px; font-weight: 600; }
+.cp-header-spacer { flex: 1; }
+.cp-icon-btn {
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cp-muted);
+  border: none; cursor: pointer;
+}
+.cp-icon-btn:hover { background: var(--cp-bg); color: var(--cp-text); }
+
+/* ── Toolbar ──────────────────────────────────────────────── */
+.cp-toolbar {
+  padding: 10px 16px;
+  display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--cp-border);
+  background: var(--cp-bg);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.cp-search {
+  display: flex; align-items: center; gap: 6px;
+  background: #fff;
+  border: 1px solid var(--cp-border);
+  border-radius: 7px;
+  padding: 0 10px;
+  min-width: 280px;
+  flex: 1;
+  max-width: 420px;
+  transition: border-color .12s, box-shadow .12s;
+}
+.cp-search:focus-within {
+  border-color: var(--cp-blue);
+  box-shadow: 0 0 0 3px rgba(61,166,140,.15);
+}
+.cp-search svg { color: var(--cp-muted); flex-shrink: 0; }
+.cp-search input {
+  border: none; outline: none; background: transparent;
+  padding: 7px 0; flex: 1; font-size: 13px;
+  font-family: inherit; color: inherit;
+}
+.cp-search kbd {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10px; color: var(--cp-muted);
+  background: var(--cp-bg); padding: 2px 6px;
+  border-radius: 4px; border: 1px solid var(--cp-border);
+}
+
+.cp-tb-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 11px; border-radius: 6px;
+  background: #fff; border: 1px solid var(--cp-border);
+  color: var(--cp-text); font-size: 12px; font-weight: 500;
+  cursor: pointer; font-family: inherit;
+  transition: background .12s, border-color .12s;
+}
+.cp-tb-btn:hover { background: var(--cp-bg); border-color: var(--cp-muted); }
+.cp-tb-btn.active { background: var(--cp-blue); border-color: var(--cp-blue); color: #fff; }
+.cp-tb-sep {
+  width: 1px; height: 22px; background: var(--cp-border); margin: 0 2px;
+}
+
+/* ── Aktív szűrő chipek ───────────────────────────────────── */
+.cp-filterbar {
+  padding: 8px 16px;
+  display: flex; align-items: center; gap: 6px;
+  border-bottom: 1px solid var(--cp-border);
+  background: #F5FAFA;
+  flex-shrink: 0; flex-wrap: wrap;
+}
+.cp-filterbar.cp-hidden { display: none; }
+.cp-filterbar-label {
+  font-size: 10px; font-weight: 700; color: var(--cp-muted);
+  text-transform: uppercase; letter-spacing: .06em; margin-right: 2px;
+}
+.cp-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 4px 3px 10px;
+  background: #fff;
+  border: 1px solid var(--cp-blue);
+  color: var(--cp-text);
+  font-size: 11px; border-radius: 12px; font-weight: 500;
+}
+.cp-chip b { color: var(--cp-blue); font-weight: 600; }
+.cp-chip-x {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: none; background: transparent;
+  color: var(--cp-muted); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+.cp-chip-x:hover { background: var(--cp-red); color: #fff; }
+.cp-chip-clear {
+  font-size: 11px; color: var(--cp-red);
+  background: transparent; border: none; cursor: pointer;
+  padding: 3px 8px; border-radius: 6px; font-weight: 500;
+  margin-left: auto; font-family: inherit;
+}
+.cp-chip-clear:hover { background: rgba(217,85,85,.1); }
+
+/* ── Tábla ────────────────────────────────────────────────── */
+.cp-table-wrap { flex: 1; overflow: auto; position: relative; }
+.cp-table {
+  width: 100%; border-collapse: separate; border-spacing: 0;
+  font-size: 12px; table-layout: fixed;
+}
+.cp-table thead th {
+  background: #fff;
+  border-bottom: 1px solid var(--cp-border);
+  position: sticky; top: 0; z-index: 2;
+  font-weight: 600; color: var(--cp-text);
+  font-size: 11px; text-align: left;
+  padding: 0; height: 36px;
+  white-space: nowrap; user-select: none;
+}
+.cp-table thead th.cp-col-check {
+  width: 38px; text-align: center; padding: 0 6px;
+  background: var(--cp-bg);
+  border-right: 1px solid var(--cp-border);
+}
+.cp-table thead th.cp-col-num {
+  width: 44px; text-align: right; padding: 0 10px 0 0;
+  background: var(--cp-bg); color: var(--cp-muted);
+  font-weight: 500; border-right: 1px solid var(--cp-border);
+}
+.cp-th-inner {
+  display: flex; align-items: center; gap: 4px;
+  padding: 0 10px; height: 100%;
+  cursor: pointer; user-select: none;
+}
+.cp-th-inner:hover { background: var(--cp-bg); }
+.cp-th-inner.cp-has-filter { background: rgba(61,166,140,.06); }
+.cp-th-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.cp-th-sort, .cp-th-filter {
+  color: var(--cp-muted); display: inline-flex; align-items: center; flex-shrink: 0;
+}
+.cp-th-sort.cp-active, .cp-th-filter.cp-active { color: var(--cp-blue); }
+.cp-th-resize {
+  position: absolute; right: 0; top: 0; bottom: 0;
+  width: 4px; cursor: col-resize; z-index: 3;
+}
+.cp-th-resize:hover, .cp-th-resize.cp-dragging { background: var(--cp-blue); }
+
+.cp-table tbody tr { cursor: pointer; }
+.cp-table tbody td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #EDF4F3;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  user-select: none;
+  transition: background .12s ease;
+}
+.cp-table tbody td.cp-col-check {
+  text-align: center; padding: 0 6px;
+  background: var(--cp-bg);
+  border-right: 1px solid var(--cp-border);
+}
+.cp-table tbody td.cp-col-num {
+  text-align: right; padding: 0 10px 0 0;
+  background: var(--cp-bg); color: var(--cp-muted);
+  font-size: 11px; border-right: 1px solid var(--cp-border); width: 44px;
+}
+/* ── Hover — nem-kijelölt sor ──────────────────────────── */
+.cp-table tbody tr:hover td { background: #EEF7F5; }
+.cp-table tbody tr:hover td.cp-col-check,
+.cp-table tbody tr:hover td.cp-col-num   { background: #E6F1EF; }
+
+/* ── Kijelölt sor — egységes, szilárd háttér ────────────
+   Rgba helyett kiszámított szilárd szín: átlátszó réteg
+   fehér alapon és a szürke cp-bg alapon másképp renderel,
+   ami "foltos" megjelenést okoz. Szilárd értékkel ez elkerülhető.
+   ─────────────────────────────────────────────────────── */
+.cp-table tbody tr.cp-selected td { background: #E5F4F0; }
+
+/* Bal akcentus csík + kissé mélyebb tónus a struktúra-oszlopokon */
+.cp-table tbody tr.cp-selected td.cp-col-check {
+  background: #DBF0EA;
+  box-shadow: inset 3px 0 0 #3DA68C;
+}
+.cp-table tbody tr.cp-selected td.cp-col-num { background: #DBF0EA; }
+
+/* Kijelölt + hover */
+.cp-table tbody tr.cp-selected:hover td { background: #D9EDE8; }
+.cp-table tbody tr.cp-selected:hover td.cp-col-check {
+  background: #CFEAE3;
+  box-shadow: inset 3px 0 0 #3DA68C;
+}
+.cp-table tbody tr.cp-selected:hover td.cp-col-num { background: #CFEAE3; }
+
+/* ── Cursor (billentyűzetnavigáció) ──────────────────────
+   outline a tr-en — border-collapse:separate esetén működik
+   az összes modern böngészőben, nem klippeli a táblát.
+   ─────────────────────────────────────────────────────── */
+.cp-table tbody tr.cp-cursor { outline: 2px solid rgba(61,166,140,.45); outline-offset: -1px; }
+.cp-table tbody tr.cp-cursor td { box-shadow: none; }
+.cp-table tbody tr.cp-selected.cp-cursor { outline-color: #3DA68C; }
+.cp-table input[type="checkbox"] {
+  accent-color: var(--cp-blue);
+  width: 14px; height: 14px; cursor: pointer; vertical-align: middle;
+}
+
+.cp-empty { padding: 60px 20px; text-align: center; color: var(--cp-muted); }
+.cp-empty-title { font-size: 14px; font-weight: 600; color: var(--cp-text); margin-bottom: 6px; }
+.cp-empty-sub { font-size: 12px; }
+
+/* ── Státuszsor ──────────────────────────────────────────── */
+.cp-footer {
+  padding: 10px 16px; border-top: 1px solid var(--cp-border);
+  background: #fff;
+  display: flex; align-items: center; gap: 14px;
+  font-size: 12px; flex-shrink: 0;
+}
+.cp-footer-stat {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--cp-muted);
+}
+.cp-footer-stat b { color: var(--cp-text); font-weight: 600; }
+.cp-footer-stat.cp-clickable { cursor: pointer; padding: 3px 8px; border-radius: 6px; }
+.cp-footer-stat.cp-clickable:hover { background: var(--cp-bg); }
+.cp-footer-stat.cp-clickable.cp-active { background: rgba(61,166,140,.12); color: var(--cp-blue); }
+.cp-footer-stat.cp-clickable.cp-active b { color: var(--cp-blue); }
+.cp-footer-spacer { flex: 1; }
+
+.cp-dialog-actions { display: flex; gap: 8px; margin-left: auto; }
+.cp-btn {
+  padding: 6px 14px; font-size: 12px;
+  border-radius: 6px; font-weight: 500;
+  cursor: pointer; border: none; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: filter .15s;
+}
+.cp-btn:hover { filter: brightness(1.07); }
+.cp-btn-ghost {
+  background: transparent; color: var(--cp-text);
+  border: 1px solid var(--cp-border);
+}
+.cp-btn-ghost:hover { background: var(--cp-bg); }
+.cp-btn-primary { background: var(--cp-green); color: #fff; }
+
+/* ── Popup-ok ─────────────────────────────────────────────── */
+.cp-popup {
+  position: fixed; z-index: 1500;
+  background: #fff;
+  border: 1px solid var(--cp-border);
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(26,50,56,.18);
+  min-width: 280px; max-width: 360px;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  font-family: 'DM Sans', "Segoe UI", system-ui, sans-serif;
+  font-size: 12px; color: var(--cp-text);
+}
+.cp-popup-sec { border-bottom: 1px solid var(--cp-border); padding: 6px 8px; }
+.cp-popup-sec:last-child { border-bottom: none; }
+.cp-popup-sec-title {
+  font-size: 10px; font-weight: 700; color: var(--cp-muted);
+  text-transform: uppercase; letter-spacing: .05em;
+  padding: 4px 8px 6px;
+}
+.cp-popup-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-radius: 5px;
+  cursor: pointer; color: var(--cp-text);
+}
+.cp-popup-item:hover { background: var(--cp-bg); }
+.cp-popup-item.cp-active { background: rgba(61,166,140,.12); color: var(--cp-blue); }
+.cp-popup-item svg { color: var(--cp-muted); flex-shrink: 0; }
+.cp-popup-item.cp-active svg { color: var(--cp-blue); }
+.cp-popup-filter-row { display: flex; gap: 6px; padding: 4px 8px 6px; }
+.cp-popup-filter-row select,
+.cp-popup-filter-row input {
+  flex: 1; padding: 5px 8px;
+  border: 1px solid var(--cp-border);
+  border-radius: 5px; font-size: 12px;
+  background: #fff; outline: none;
+  font-family: inherit; color: inherit;
+}
+.cp-popup-filter-row select:focus,
+.cp-popup-filter-row input:focus { border-color: var(--cp-blue); }
+.cp-popup-values { max-height: 260px; overflow-y: auto; padding: 2px 4px; }
+.cp-popup-value-search { padding: 4px 8px 6px; }
+.cp-popup-value-search input {
+  width: 100%; padding: 5px 8px;
+  border: 1px solid var(--cp-border);
+  border-radius: 5px; font-size: 12px;
+  background: #fff; outline: none;
+  font-family: inherit; color: inherit;
+}
+.cp-popup-value-search input:focus { border-color: var(--cp-blue); }
+.cp-popup-vrow {
+  display: flex; align-items: center; gap: 7px;
+  padding: 4px 8px; border-radius: 4px; cursor: pointer;
+}
+.cp-popup-vrow:hover { background: var(--cp-bg); }
+.cp-popup-vrow input[type="checkbox"] { accent-color: var(--cp-blue); width: 13px; height: 13px; }
+.cp-popup-vrow .cp-count {
+  margin-left: auto; font-size: 10px;
+  color: var(--cp-muted); font-variant-numeric: tabular-nums;
+}
+.cp-popup-vrow .cp-label {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+}
+.cp-popup-actions {
+  display: flex; gap: 6px; padding: 8px;
+  border-top: 1px solid var(--cp-border);
+  background: var(--cp-bg);
+}
+.cp-popup-actions button {
+  flex: 1; padding: 5px 10px; border-radius: 5px;
+  font-size: 12px; font-weight: 500; cursor: pointer;
+  border: none; font-family: inherit;
+}
+.cp-popup-clear {
+  background: transparent; color: var(--cp-muted);
+  border: 1px solid var(--cp-border) !important;
+}
+.cp-popup-clear:hover {
+  background: #fff; color: var(--cp-red);
+  border-color: var(--cp-red) !important;
+}
+.cp-popup-apply { background: var(--cp-blue); color: #fff; }
+.cp-popup-apply:hover { filter: brightness(1.07); }
+
+.cp-views-popup .cp-popup-item { justify-content: space-between; }
+.cp-views-popup .cp-popup-item .cp-vname { flex: 1; }
+.cp-views-popup .cp-popup-item .cp-vdel {
+  opacity: 0; width: 18px; height: 18px;
+  border-radius: 50%; border: none;
+  background: transparent; color: var(--cp-muted);
+  cursor: pointer; font-family: inherit;
+}
+.cp-views-popup .cp-popup-item:hover .cp-vdel { opacity: 1; }
+.cp-views-popup .cp-popup-item .cp-vdel:hover { background: var(--cp-red); color: #fff; }
+.cp-views-save {
+  padding: 6px 8px;
+  border-top: 1px solid var(--cp-border);
+  display: flex; gap: 6px;
+}
+.cp-views-save input {
+  flex: 1; padding: 5px 8px;
+  border: 1px solid var(--cp-border);
+  border-radius: 5px; font-size: 12px; outline: none;
+  font-family: inherit; color: inherit;
+}
+.cp-views-save input:focus { border-color: var(--cp-blue); }
+.cp-views-save button {
+  padding: 5px 11px; background: var(--cp-green); color: #fff;
+  border: none; border-radius: 5px;
+  font-weight: 500; cursor: pointer; font-family: inherit;
+}
+
+.cp-help-popup { min-width: 320px; padding: 4px; }
+.cp-help-row {
+  display: grid; grid-template-columns: 1fr auto;
+  gap: 12px; padding: 5px 10px; align-items: center;
+}
+.cp-help-row .cp-desc { color: var(--cp-text); }
+.cp-help-row kbd {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10px; color: var(--cp-text);
+  background: var(--cp-bg); padding: 2px 7px;
+  border-radius: 4px; border: 1px solid var(--cp-border);
+  font-weight: 600;
+}
+
+/* Scrollbar (csak a CP-n belül) */
+.cp-root ::-webkit-scrollbar { width: 8px; height: 8px; }
+.cp-root ::-webkit-scrollbar-track { background: transparent; }
+.cp-root ::-webkit-scrollbar-thumb { background: var(--cp-border); border-radius: 4px; }
+.cp-root ::-webkit-scrollbar-thumb:hover { background: var(--cp-muted); }

@@ -1,0 +1,871 @@
+@import "tokens.css";
+
+html, body { overflow: auto; }
+
+/* ── Layout ───────────────────────────────────────────── */
+.app-root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-width: 920px;
+}
+
+/* ── Header ───────────────────────────────────────────── */
+.app-header {
+  height: var(--header-h);
+  background: #21474f;
+  border-bottom: none;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: var(--sp-4);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.app-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 22px;
+  font-weight: 400;
+  color: #fff;
+  letter-spacing: -.01em;
+  line-height: 1;
+}
+
+.app-logo__mark {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.12);
+}
+
+.app-logo__text {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.app-logo__sub {
+  font-family: var(--font-sans);
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(255,255,255,.4);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.header-excel-path {
+  font-size: 11px;
+  color: rgba(255,255,255,.38);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  font-family: var(--font-mono);
+}
+
+.header-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: rgba(255,255,255,.65);
+}
+
+#header-username {
+  font-weight: 500;
+  font-size: 12px;
+  color: rgba(255,255,255,.75);
+}
+
+.header-user-avatar {
+  width: 28px; height: 28px;
+  background: linear-gradient(135deg, #3BBFA6, #2B8A76);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.15);
+}
+
+#logout-btn {
+  padding: 5px 12px !important;
+  font-size: 11px !important;
+  background: rgba(255,255,255,.10) !important;
+  color: rgba(255,255,255,.75) !important;
+  border: 1px solid rgba(255,255,255,.18) !important;
+  border-radius: 8px !important;
+  transition: background .15s !important;
+}
+#logout-btn:hover {
+  background: rgba(255,255,255,.18) !important;
+  color: #fff !important;
+  filter: none !important;
+}
+
+/* ── Tab navigáció ────────────────────────────────────── */
+.tab-nav {
+  display: flex;
+  gap: 0;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-card);
+  flex-shrink: 0;
+  position: sticky;
+  top: var(--header-h);
+  z-index: 9;
+}
+
+.tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--c-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+  white-space: nowrap;
+  letter-spacing: .01em;
+}
+.tab-btn__icon {
+  flex-shrink: 0;
+  color: var(--c-muted);
+  opacity: .88;
+}
+.tab-btn:hover .tab-btn__icon { color: var(--c-text); opacity: 1; }
+.tab-btn:hover { color: var(--c-text); }
+.tab-btn.active {
+  color: var(--c-green);
+  border-bottom-color: var(--c-green);
+  font-weight: 600;
+}
+.tab-btn.active .tab-btn__icon {
+  color: var(--c-green);
+  opacity: 1;
+}
+
+/* ── Tab tartalmak ────────────────────────────────────── */
+.tab-content { display: none; }
+.tab-content.active { display: flex; min-height: calc(100vh - var(--header-h) - var(--tabnav-h)); }
+
+/* ── Sidebar ──────────────────────────────────────────── */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--c-sidebar);
+  border-right: 1px solid var(--c-border);
+  border-bottom: 1px solid var(--c-border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex-shrink: 0;
+  position: sticky;
+  top: calc(var(--header-h) + var(--tabnav-h));
+  align-self: flex-start;
+  min-height: 200px;
+  /* max-height CSS-ből törölve — JS resize kezeli */
+}
+
+.sidebar-section {
+  padding: 14px var(--sp-4);
+  border-bottom: 1px solid var(--c-border);
+}
+
+/* ── Sidebar resize fogantyú ──────────────────────────── */
+.sidebar-resize-handle {
+  height: 6px;
+  flex-shrink: 0;
+  cursor: ns-resize;
+  background: transparent;
+  transition: background .15s;
+  position: relative;
+}
+.sidebar-resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 28px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--c-muted);
+  opacity: .3;
+  transition: opacity .15s;
+}
+.sidebar-resize-handle:hover { background: rgba(33,112,93,.08); }
+.sidebar-resize-handle:hover::after { opacity: .7; }
+
+.sidebar-section-title {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--c-muted);
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  margin-bottom: 10px;
+  opacity: .7;
+}
+
+.sidebar-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: none;
+  border: none;
+  color: var(--c-text);
+  font-size: 12.5px;
+  font-weight: 400;
+  cursor: pointer;
+  text-align: left;
+  transition: background .12s, color .12s;
+  margin-bottom: 1px;
+}
+.sidebar-btn:hover {
+  background: rgba(33,71,79,.08);
+  color: #1A3238;
+}
+.sidebar-btn:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+
+/* ── Workspace (jobb panel) ───────────────────────────── */
+.workspace {
+  flex: 1;
+  padding: 20px;
+  display: flex;
+  gap: var(--sp-4);
+  background: var(--c-bg);
+}
+
+.workspace-col { flex: 1; display: flex; flex-direction: column; gap: var(--sp-4); }
+
+/* ── Kártyák a workspaceben ───────────────────────────── */
+.ws-card {
+  background: var(--c-card);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 4px rgba(33,71,79,.06);
+  overflow: hidden;
+}
+
+.ws-card-header {
+  padding: 11px var(--sp-4);
+  border-bottom: 1px solid var(--c-border);
+  background: #FAFDFD;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ws-card-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--c-muted);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.ws-card-body { padding: var(--sp-4); }
+
+/* ── Sablon rádiógombok ────────────────────────────────── */
+.template-radio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.template-radio-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 6px var(--sp-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background .1s;
+}
+.template-radio-item:hover { background: var(--c-bg); }
+.template-radio-item input[type="radio"],
+.template-radio-item input[type="checkbox"] { accent-color: var(--c-green); width: 14px; height: 14px; cursor: pointer; }
+.template-radio-item label { cursor: pointer; font-size: 13px; }
+
+/* ── Sablon csoport gombok ────────────────────────────── */
+.group-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: var(--sp-2);
+}
+
+.group-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-left: 0;
+}
+
+.group-filter-row + .group-filter-row {
+  padding-top: 2px;
+  border-top: 1px solid var(--c-border);
+}
+
+.group-filter-btn {
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--c-border);
+  color: var(--c-text);
+  border: none;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+  white-space: nowrap;
+}
+.group-filter-btn:hover { background: var(--c-green); color: #fff; }
+.group-filter-btn.active { background: var(--c-green); color: #fff; }
+
+/* ── Nyelv rádiógombok ────────────────────────────────── */
+.lang-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+/* ── Generálás gombsor ────────────────────────────────── */
+.gen-btn-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+/* ── Státusz szekció ──────────────────────────────────── */
+.status-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.status-text { font-size: 12px; color: var(--c-muted); min-height: 18px; }
+.progress-pct { font-size: 11px; color: var(--c-muted); text-align: right; }
+
+/* ── Táblázat (Tab 2, Tab 3) ──────────────────────────── */
+.data-table-wrap {
+  overflow: auto;
+  max-height: 320px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-md);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.data-table th {
+  background: var(--c-bg);
+  padding: 6px 10px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--c-muted);
+  border-bottom: 1px solid var(--c-border);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.data-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--c-border);
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tbody tr:nth-child(even) td { background: var(--c-bg); }
+.data-table tr:hover td { background: rgba(61,166,140,.07); }
+
+/* ── Üres állapot ─────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  color: var(--c-muted);
+  font-size: 13px;
+  padding: var(--sp-6) var(--sp-4);
+  font-style: italic;
+  opacity: .7;
+}
+.empty-state-msg { display: block; max-width: 32em; line-height: 1.45; }
+.bev-ui-icon {
+  display: block;
+  width: 44px;
+  height: 44px;
+  margin-bottom: var(--sp-3);
+  flex-shrink: 0;
+}
+.empty-state-icon { font-size: 28px; margin-bottom: var(--sp-2); }
+
+/* ── Checkbox lista dialog ────────────────────────────── */
+.checklist-scroll {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 340px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-1);
+}
+.checklist-scroll .empty-state {
+  min-height: 140px;
+  justify-content: center;
+  padding-top: var(--sp-5);
+  padding-bottom: var(--sp-5);
+}
+
+.checklist-actions {
+  display: flex;
+  gap: var(--sp-2);
+  font-size: 12px;
+}
+.checklist-action-link {
+  color: var(--c-green);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+
+/* ── Info row (beállítás panel) ───────────────────────── */
+.info-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--c-muted);
+  font-family: var(--font-sans);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 10px;
+}
+
+.info-row__icon {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  color: var(--c-muted);
+  opacity: .65;
+}
+
+/* ── Workspace modulok drag/resize ───────────────────── */
+.workspace-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 200px;
+}
+
+.ws-card {
+  position: relative;
+  resize: vertical;
+  overflow: hidden;
+  min-height: 120px;
+}
+
+.ws-card-drag-handle {
+  cursor: grab;
+  color: var(--c-muted);
+  font-size: 14px;
+  padding: 0 4px;
+  opacity: .5;
+  transition: opacity .12s;
+  flex-shrink: 0;
+}
+.ws-card-drag-handle:hover { opacity: 1; }
+.ws-card[draggable="true"] { cursor: default; }
+.ws-card.ws-dragging { opacity: .45; }
+.ws-card.ws-drag-over { outline: 2px solid var(--c-green); outline-offset: -2px; }
+
+/* Workspace resize divider */
+.ws-resize-divider {
+  width: 5px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  position: relative;
+  transition: background .15s;
+}
+.ws-resize-divider:hover,
+.ws-resize-divider.resizing { background: var(--c-green); border-radius: 3px; }
+
+/* ── Viewport scale (zoom CSS alapú, JS állítja be) ──── */
+
+/* ══════════════════════════════════════════════════════
+   B — Generálás gomb UX
+   ══════════════════════════════════════════════════════ */
+
+/* Primer gomb — progress fill overlay */
+.dg-primary-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.dg-btn-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0%;
+  background: rgba(255,255,255,.18);
+  transition: width .35s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+.dg-btn-label {
+  position: relative;
+  z-index: 1;
+  transition: none;
+}
+
+/* Mellékgomb-panel — mindig nyitva (DOCX/PDF mindig látszik) */
+.dg-alt-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding-top: 6px;
+}
+
+/* ══ 1. Sablon-lista keresőmező ════════════════════════════════════════════ */
+.dg-tpl-search-wrap {
+  position: relative;
+  margin-bottom: 8px;
+}
+.dg-tpl-search-wrap svg {
+  position: absolute;
+  left: 9px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--c-muted);
+  pointer-events: none;
+  width: 13px; height: 13px;
+}
+.dg-tpl-search {
+  width: 100%;
+  padding: 6px 10px 6px 30px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--c-text);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+  box-sizing: border-box;
+}
+.dg-tpl-search:focus {
+  border-color: var(--c-green);
+  box-shadow: 0 0 0 3px rgba(61,166,140,.10);
+}
+.dg-tpl-search::placeholder { color: var(--c-muted); }
+
+/* ══ 2. Generálás summary chip-sor ════════════════════════════════════════ */
+.dg-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 14px;
+  min-height: 26px;
+  align-items: center;
+}
+.dg-summary-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  color: var(--c-text);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dg-summary-chip--more {
+  background: transparent;
+  border-color: transparent;
+  color: var(--c-muted);
+  font-style: italic;
+}
+.dg-summary-chip--tpl {
+  border-color: var(--c-green);
+  color: var(--c-green);
+  background: rgba(61,166,140,.06);
+}
+.dg-summary-empty {
+  font-size: 11px;
+  color: var(--c-muted);
+  font-style: italic;
+}
+
+/* ══ 3. Workspace kártya állapot-jelzés ═══════════════════════════════════ */
+.ws-card-warning {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--c-amber);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity .2s;
+  margin-left: 6px;
+}
+.ws-card-warning.visible { opacity: 1; }
+
+/* ══ 4. Sidebar step badge ════════════════════════════════════════════════ */
+.sidebar-step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 700;
+  background: var(--c-border);
+  color: var(--c-muted);
+  flex-shrink: 0;
+  margin-right: 4px;
+  transition: background .2s, color .2s;
+}
+.sidebar-step-badge.done {
+  background: var(--c-green);
+  color: #fff;
+}
+.sidebar-section--pending {
+  border-left: 2px solid var(--c-amber);
+}
+.sidebar-section-title {
+  display: flex;
+  align-items: center;
+}
+
+/* ══ 6. Generálás inline result card ═══════════════════════════════════════ */
+.dg-result-card {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--c-border);
+  background: var(--c-bg);
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  animation: toast-in .2s ease;
+}
+.dg-result-card.visible { display: flex; }
+.dg-result-card.success {
+  background: rgba(61,166,140,.07);
+  border-color: rgba(61,166,140,.3);
+}
+.dg-result-card.error {
+  background: rgba(217,85,85,.06);
+  border-color: rgba(217,85,85,.25);
+}
+.dg-result-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c-text);
+}
+.dg-result-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ══ 7. Onboarding flow ════════════════════════════════════════════════════ */
+.dg-onboarding {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 48px 32px;
+  text-align: center;
+  flex: 1;
+}
+.dg-onboard-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 360px;
+}
+.dg-onboard-step {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  background: #fff;
+  border: 1px solid var(--c-border);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.dg-onboard-step:hover:not(.done) {
+  border-color: var(--c-green);
+  box-shadow: var(--shadow-sm);
+  transform: translateX(2px);
+}
+.dg-onboard-step.done {
+  background: rgba(61,166,140,.06);
+  border-color: rgba(61,166,140,.3);
+  cursor: default;
+}
+.dg-onboard-step.disabled {
+  opacity: .45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.dg-onboard-num {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: var(--c-border);
+  color: var(--c-muted);
+  font-size: 13px;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: background .2s, color .2s;
+}
+.dg-onboard-step.done .dg-onboard-num {
+  background: var(--c-green);
+  color: #fff;
+}
+.dg-onboard-label { font-size: 13px; font-weight: 500; flex: 1; }
+.dg-onboard-sub   { font-size: 11px; color: var(--c-muted); }
+.dg-onboard-arrow { color: var(--c-muted); font-size: 16px; }
+.dg-onboard-step.done .dg-onboard-arrow { color: var(--c-green); }
+
+/* ══ 8. Header breadcrumb ════════════════════════════════════════════════ */
+.header-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex: 1;
+  overflow: hidden;
+  font-size: 11px;
+}
+.header-bc-item {
+  color: rgba(255,255,255,.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+  cursor: pointer;
+  padding: 3px 7px;
+  border-radius: 5px;
+  transition: background .12s, color .12s;
+  font-family: inherit;
+  background: none;
+  border: none;
+  font-size: 11px;
+}
+.header-bc-item:hover {
+  background: rgba(255,255,255,.10);
+  color: rgba(255,255,255,.9);
+}
+.header-bc-sep {
+  color: rgba(255,255,255,.25);
+  font-size: 13px;
+  padding: 0 1px;
+  flex-shrink: 0;
+}
+.header-bc-item.muted { cursor: default; }
+.header-bc-item.muted:hover { background: none; color: rgba(255,255,255,.5); }
+
+/* ══ 9. Workspace split — tab tooltip ════════════════════════════════════ */
+.tab-btn[accesskey]::after {
+  content: ' (Alt+' attr(accesskey) ')';
+  font-size: 9px;
+  opacity: 0;
+  color: var(--c-muted);
+}
+.tab-btn[accesskey]:focus-visible::after { opacity: 1; }
+
+/* ══ 10. Egységes focus ring ══════════════════════════════════════════════ */
+:focus-visible {
+  outline: 2px solid var(--c-green);
+  outline-offset: 2px;
+}
+.btn:focus-visible {
+  outline: 2px solid var(--c-green);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(61,166,140,.15);
+}
+.sidebar-btn:focus-visible,
+.tab-btn:focus-visible {
+  outline: 2px solid var(--c-green);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}
+.field-input:focus-visible,
+.field-select:focus-visible {
+  outline: none;
+}
+
+/* ══ 11. Sablon-csoport collapse ══════════════════════════════════════════ */
+.group-filter-row--collapsible { position: relative; }
+.group-filter-row-toggle {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--c-muted);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 4px 4px 4px 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: inherit;
+}
+.group-filter-row-toggle:hover { color: var(--c-text); }
+.group-filter-row-toggle .toggle-arrow { transition: transform .15s; font-size: 9px; }
+.group-filter-row--collapsed .group-filter-row-toggle .toggle-arrow { transform: rotate(-90deg); }
+.group-filter-row--collapsed .group-filter-chips { display: none; }
+.group-filter-chips { display: flex; flex-wrap: wrap; gap: 4px; padding-bottom: 4px; }
+
+/* ══ 12. Dialog megjelenési animáció ═════════════════════════════════════ */
+@keyframes dialog-pop {
+  from { opacity: 0; transform: translate(-50%, calc(-50% - 6px)) scale(.97); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+.dialog-box {
+  animation: dialog-pop .18s cubic-bezier(.22,.68,0,1.2) both;
+}

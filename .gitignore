@@ -1,0 +1,33 @@
+# Adatbázis és konfiguráció – személyes adat, soha nem kerül verziókezelésbe
+data/
+*.json.bak
+
+# Dokumentumsablonok és generált iratok
+Sablonok/
+Kimenet/
+Kész fájlok/
+*.docx
+*.docm
+*.pdf
+
+# Táblázatok
+*.xlsx
+*.xlsm
+*.xlsb
+*.xls
+*.csv
+
+# Naplók
+logs/
+*.log
+
+# Szerkesztő / ágens metaadat
+.claude/
+.cursor/
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store
+*.bak
+*.swp
