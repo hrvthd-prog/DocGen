@@ -5,84 +5,6 @@ const DocgenModule = (() => {
   const currentUser = Settings.currentUser();
 
   // ── Hiányzó-adat napló ────────────────────────────────────────────────────
-  const MISSING_LOG_KEY    = 'docgen_missing_log';
-  const MERGE_NAMING_KEY   = 'docgen_merge_naming_global';
-  const MERGE_KEY          = () => 'docgen_merge_u_' + (currentUser || '').replace(/[^a-zA-Z0-9]/g, '_');
-
-  function appendMissingLog(entries) {
-    if (!entries || !entries.length) return;
-    const existing = Settings.get(MISSING_LOG_KEY, []);
-    Settings.set(MISSING_LOG_KEY, existing.concat(entries));
-  }
-
-  function showMissingLogDialog() {
-    const isAdmin  = Settings.isAdmin();
-    const allLogs  = Settings.get(MISSING_LOG_KEY, []);
-    // Admin látja az összes bejegyzést, többi felhasználó csak a sajátját
-    const logs = isAdmin ? allLogs : allLogs.filter(e => e.user === currentUser);
-
-    const colFiok = isAdmin ? `<th style="min-width:100px">Fiók</th>` : '';
-    const rows = logs.length
-      ? [...logs].reverse().map(e => {
-          const d = e.ts ? new Date(e.ts).toLocaleString('hu-HU', { dateStyle:'short', timeStyle:'short' }) : '—';
-          const fiokCol = isAdmin ? `<td style="font-size:11px">${escHtml(e.user || '—')}</td>` : '';
-          return `<tr>
-            <td style="white-space:nowrap;font-size:11px">${escHtml(d)}</td>
-            ${fiokCol}
-            <td style="font-size:11px">${escHtml(e.client || '—')}</td>
-            <td style="font-size:11px">${escHtml(e.template || '—')}</td>
-            <td style="font-size:11px">
-              <div style="display:flex;flex-wrap:wrap;gap:3px">
-                ${(e.emptyTags || []).map(t =>
-                  `<span style="background:var(--c-bg);border:1px solid var(--c-border);border-radius:3px;padding:1px 5px">${escHtml(t)}</span>`
-                ).join('')}
-              </div>
-            </td>
-          </tr>`;
-        }).join('')
-      : `<tr><td colspan="${isAdmin ? 5 : 4}" style="text-align:center;padding:20px;color:var(--c-muted);font-size:12px">
-           Még nincs naplóbejegyzés${isAdmin ? '' : ' ehhez a fiókhoz'}.
-         </td></tr>`;
-
-    showDialog({
-      title: isAdmin ? 'Hiányzó adatok naplója — összes fiók' : `Hiányzó adatok naplója — ${currentUser}`,
-      body: `
-        <div style="font-size:11px;color:var(--c-muted);margin-bottom:10px">
-          Azon mezők listája, amelyekre a generáláskor nem volt adat az import táblában.
-          ${isAdmin ? '<br>Admin nézetként az összes fiók bejegyzése látható.' : ''}
-        </div>
-        <div class="data-table-wrap" style="max-height:480px">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th style="min-width:110px">Dátum</th>
-                ${colFiok}
-                <th style="min-width:120px">Ügyfél</th>
-                <th style="min-width:140px">Sablon</th>
-                <th>Hiányzó mezők</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-      `,
-      footer: `
-        ${isAdmin ? `<button class="btn btn-danger btn-sm" id="dlg-clear-log">Napló törlése</button>` : ''}
-        <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Bezárás</button>
-      `,
-    });
-
-    if (isAdmin) {
-      const clearBtn = document.getElementById('dlg-clear-log');
-      if (clearBtn) {
-        clearBtn.addEventListener('click', () => {
-          Settings.set(MISSING_LOG_KEY, []);
-          closeDialog();
-          toast('✓ Napló törölve', 'success');
-        });
-      }
-    }
-  }
 
   // ── Állapot ──────────────────────────────────────────────────────────────
   let state = {
@@ -118,6 +40,15 @@ const DocgenModule = (() => {
   function init(el) {
     container = el;
     loadSettings();
+
+    // Az alegységek a magtól csak azt kapják meg, amire tényleg szükségük van.
+    DocgenNaming.init({
+      buildRenderRow,
+      firstEmployee: () => state.clientRows[0] || null,
+    });
+    DocgenMerge.init({ state, q, employeeName });
+    DocgenGroups.init({ state, refreshTemplates, rebuildGroupFilterBtns, saveSettings });
+
     render();
     restoreHandles();
 
@@ -154,34 +85,6 @@ const DocgenModule = (() => {
     return u ? 'docgen_u_' + u : 'docgen';
   }
 
-  // ── P5: Generált név-minta tárolás ─────────────────────────────────────────
-  // Hierarchia: fiók > globális > default
-  const NAME_TPL_USER_KEY   = () => 'docgen_nameTemplates_u_' + (currentUser || '').replace(/[^a-zA-Z0-9]/g, '_');
-  const NAME_TPL_GLOBAL_KEY = 'docgen_nameTemplates_global';
-
-  function getNamePattern(templateName) {
-    const userMap = Settings.get(NAME_TPL_USER_KEY(), {});
-    if (userMap[templateName]) return { pattern: userMap[templateName], scope: 'user' };
-    const globalMap = Settings.get(NAME_TPL_GLOBAL_KEY, {});
-    if (globalMap[templateName]) return { pattern: globalMap[templateName], scope: 'global' };
-    return { pattern: '', scope: 'default' };
-  }
-
-  function saveNamePattern(templateName, pattern, scope) {
-    const key = scope === 'global' ? NAME_TPL_GLOBAL_KEY : NAME_TPL_USER_KEY();
-    const map = Settings.get(key, {});
-    if (pattern && pattern.trim()) {
-      map[templateName] = pattern.trim();
-    } else {
-      delete map[templateName]; // visszaállítás default-ra
-    }
-    Settings.set(key, map);
-    BevLogger.info('NAME_TPL_SAVE',
-      `Név-minta mentve [${scope}]: ${templateName}`,
-      `pattern=${pattern || '(default)'}`,
-      `user=${currentUser}`);
-  }
-
   function loadSettings() {
     const s = Settings.get(_docgenKey(), {});
     state.autoOpen         = s.autoOpen         || false;
@@ -195,7 +98,7 @@ const DocgenModule = (() => {
     // Mai nap: globális, minden fiókra érvényes; alapértelmezett = mai dátum
     state.maiNap = Settings.get('global_mai_nap', '') || _todayDot();
     // PDF összefűzés — per-user beállítások
-    const ms = Settings.get(MERGE_KEY(), {});
+    const ms = Settings.get(DocgenMerge.MERGE_KEY(), {});
     state.mergeEnabled   = ms.enabled  ?? false;
     state.mergeMode      = ms.mode     ?? 'per_client';
     const rawTpls        = ms.mergeTemplates;
@@ -675,7 +578,7 @@ const DocgenModule = (() => {
             </label>
           </div>
           <div class="ws-card-body" id="dg-merge-body" style="padding:0">
-            ${_renderMergeCardBody()}
+            ${DocgenMerge.renderCardBody()}
           </div>
         </div>
 
@@ -719,10 +622,10 @@ const DocgenModule = (() => {
   // ── Eseménykötések ────────────────────────────────────────────────────────
   function bindSidebar() {
     const missingLogBtn = q('#dg-show-missing-log');
-    if (missingLogBtn) missingLogBtn.addEventListener('click', showMissingLogDialog);
-    q('#dg-manage-groups').addEventListener('click', openGroupsDialog);
+    if (missingLogBtn) missingLogBtn.addEventListener('click', DocgenMissingLog.showDialog);
+    q('#dg-manage-groups').addEventListener('click', DocgenGroups.openGroupsDialog);
     const visBtn = q('#dg-manage-visibility');
-    if (visBtn) visBtn.addEventListener('click', openVisibilityDialog);
+    if (visBtn) visBtn.addEventListener('click', DocgenGroups.openVisibilityDialog);
     q('#dg-set-output').addEventListener('click', onSetOutput);
     const switchOutputBtn = q('#dg-switch-output');
     if (switchOutputBtn) switchOutputBtn.addEventListener('click', onSwitchOutputDir);
@@ -854,11 +757,11 @@ const DocgenModule = (() => {
     if (mergeToggle) {
       mergeToggle.addEventListener('change', () => {
         state.mergeEnabled = mergeToggle.checked;
-        _saveMergeSettings();
-        updateMergeCard();
+        DocgenMerge.saveSettings();
+        DocgenMerge.updateCard();
       });
     }
-    _bindMergeCardBody();
+    DocgenMerge.bindCardBody();
 
     // ── Oszlop-szélességű resize divider ─────────────────────────────────────
     const divider   = q('#dg-col-divider');
@@ -1364,143 +1267,10 @@ const DocgenModule = (() => {
         {
           icon: '🏷️',
           label: 'Generált dokumentum elnevezése',
-          action: () => openNamePatternDialog(tplName),
+          action: () => DocgenNaming.openDialog(tplName),
         }
       ]);
     }, { passive: false });
-  }
-
-  // ── P5: Név-minta szerkesztő dialóg ───────────────────────────────────────
-  function openNamePatternDialog(templateName) {
-    const isAdmin = Settings.isAdmin();
-    const current = getNamePattern(templateName);
-    const defaultPreview = `${templateName} (default: VEZNEV KERNEV ${templateName}.docx)`;
-
-    // Példa-row a preview-hoz (első kiválasztott vagy első bármely sor)
-    // Az előnézet a séma szerint renderelt értékeket használja, hogy a
-    // fájlnév-minta pontosan azt mutassa, ami a generáláskor is keletkezik.
-    const exampleRow = state.clientRows[0]
-      ? buildRenderRow(state.clientRows[0])
-      : { 'Vezetéknév': 'MINTA', 'Keresztnév': 'József', surname: 'MINTA', forename: 'József' };
-
-    showDialog({
-      title: `Generált dokumentum elnevezése — ${templateName}`,
-      body: `
-        <div style="display:flex;flex-direction:column;gap:12px">
-          <div style="font-size:12px;color:var(--c-muted)">
-            Adj meg egy mintát a generált fájlnévhez. A vonszolható chip-eket beillesztheted
-            kattintással vagy húzással. Ha üresen hagyod, a default név lesz használva.
-          </div>
-
-          <div>
-            <label style="font-size:12px;color:var(--c-muted);margin-bottom:3px;display:block">
-              Vonszolható tokenek (dupla-kattintásra is beilleszthetők):
-            </label>
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-              <span class="npt-token" draggable="true" data-token="[Vezetéknév]"
-                style="background:var(--c-teal);color:#fff;padding:3px 10px;border-radius:12px;
-                       font-size:12px;cursor:grab;user-select:none">[Vezetéknév]</span>
-              <span class="npt-token" draggable="true" data-token="[Keresztnév]"
-                style="background:var(--c-teal);color:#fff;padding:3px 10px;border-radius:12px;
-                       font-size:12px;cursor:grab;user-select:none">[Keresztnév]</span>
-            </div>
-          </div>
-
-          <div>
-            <label style="font-size:12px;color:var(--c-muted);margin-bottom:3px;display:block">
-              Fájlnév-minta (a <code>.docx</code> automatikusan kerül a végére):
-            </label>
-            <input type="text" id="npt-input" class="field-input" style="width:100%;font-size:13px"
-              value="${escHtml(current.pattern)}"
-              placeholder="pl. Nyilatkozat kilépésről [Vezetéknév] [Keresztnév]">
-          </div>
-
-          <div style="background:var(--c-bg);border:1px solid var(--c-border);border-radius:6px;padding:8px 12px">
-            <div style="font-size:11px;color:var(--c-muted);margin-bottom:4px">Példa kimenet:</div>
-            <div id="npt-preview" style="font-family:Consolas,monospace;font-size:12px;color:var(--c-text)">—</div>
-          </div>
-
-          <div style="font-size:11px;color:var(--c-muted)">
-            Aktuális hatókör: <strong>${current.scope === 'user' ? 'fiók-szintű' : current.scope === 'global' ? 'globális' : 'default (alapértelmezett)'}</strong>
-            ${isAdmin ? '<br>Adminként a globális mentés minden fiókra hat (kivéve akinek saját van).' : ''}
-          </div>
-        </div>
-      `,
-      footer: `
-        <button class="btn btn-ghost btn-sm" id="npt-reset">Visszaállítás defaultra</button>
-        ${isAdmin ? `<button class="btn btn-teal btn-sm" id="npt-save-global">Mentés: globálisan</button>` : ''}
-        <button class="btn btn-primary btn-sm" id="npt-save-user">Mentés: fiókszintűen</button>
-        <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Mégse</button>
-      `,
-    });
-
-    const inputEl = document.getElementById('npt-input');
-    const previewEl = document.getElementById('npt-preview');
-
-    function refreshPreview() {
-      const pattern = inputEl.value.trim();
-      const sample = DocxService.outputFilename(templateName, exampleRow, pattern);
-      previewEl.textContent = sample || defaultPreview;
-    }
-    refreshPreview();
-    inputEl.addEventListener('input', refreshPreview);
-
-    // Token-chip: dupla-kattintásra a cursor-pozíciónál beilleszt
-    document.querySelectorAll('.npt-token').forEach(chip => {
-      chip.addEventListener('dblclick', () => insertToken(chip.dataset.token));
-      chip.addEventListener('dragstart', e => {
-        e.dataTransfer.setData('text/plain', chip.dataset.token);
-        e.dataTransfer.effectAllowed = 'copy';
-      });
-    });
-    // Az input fogadja a drop-eseményt
-    inputEl.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
-    inputEl.addEventListener('drop', e => {
-      e.preventDefault();
-      const token = e.dataTransfer.getData('text/plain');
-      if (token) insertToken(token);
-    });
-
-    function insertToken(token) {
-      const start = inputEl.selectionStart ?? inputEl.value.length;
-      const end   = inputEl.selectionEnd ?? inputEl.value.length;
-      // Spaces körötte (ha nincs)
-      const left = inputEl.value.slice(0, start);
-      const right = inputEl.value.slice(end);
-      const lspace = left && !left.endsWith(' ') ? ' ' : '';
-      const rspace = right && !right.startsWith(' ') ? ' ' : '';
-      inputEl.value = left + lspace + token + rspace + right;
-      const newPos = (left + lspace + token + rspace).length;
-      inputEl.focus();
-      inputEl.setSelectionRange(newPos, newPos);
-      refreshPreview();
-    }
-
-    document.getElementById('npt-reset').addEventListener('click', () => {
-      inputEl.value = '';
-      refreshPreview();
-    });
-
-    function doSave(scope) {
-      const pattern = inputEl.value.trim();
-      // Z4: validáció — vagy üres (= default), vagy legalább 1 nem-token karakter VAGY 1 token
-      if (pattern) {
-        const hasToken = pattern.includes('[Vezetéknév]') || pattern.includes('[Keresztnév]');
-        const stripped = pattern.replace(/\[Vezetéknév\]|\[Keresztnév\]/g, '').trim();
-        if (!hasToken && !stripped) {
-          toast('A minta nem lehet üres — adj meg legalább 1 tokent vagy szöveget', 'warn');
-          return;
-        }
-      }
-      saveNamePattern(templateName, pattern, scope);
-      closeDialog();
-      toast(`✓ Név-minta mentve [${scope === 'global' ? 'globális' : 'fiók'}]`, 'success');
-    }
-
-    document.getElementById('npt-save-user').addEventListener('click', () => doSave('user'));
-    if (isAdmin) {
-      document.getElementById('npt-save-global').addEventListener('click', () => doSave('global'));
-    }
   }
 
   function updateTemplateState() {
@@ -1705,566 +1475,6 @@ const DocgenModule = (() => {
     });
   }
 
-  // ── Csoport-kezelő dialog ─────────────────────────────────────────────────
-  const _groupCollapsed = {};
-
-  function openGroupsDialog() { renderGroupsDialog(); }
-
-  function renderGroupsDialog() {
-    const groups    = state.templateGroups;
-    const templates = [...new Set(state.allTemplates.map(t => t.name))];
-
-    showDialog({
-      title: `Sablon-csoportok — ${currentUser}`,
-      body: `
-        <div style="display:flex;flex-direction:column;gap:6px;max-height:520px;overflow-y:auto;padding-right:4px">
-          ${groups.map((g, gi) => {
-            const collapsed = !!_groupCollapsed[gi];
-            return `
-            <div class="card" style="padding:0;overflow:hidden;border:1px solid var(--c-border);border-radius:8px">
-              <div style="display:flex;gap:6px;align-items:center;padding:8px 10px;
-                background:var(--c-bg);border-bottom:${collapsed ? 'none' : '1px solid var(--c-border)'}">
-                <button class="btn btn-ghost btn-sm grp-toggle" data-gi="${gi}"
-                  style="width:22px;padding:0;font-size:12px;flex-shrink:0" title="${collapsed ? 'Kibontás' : 'Összecsukás'}">
-                  ${collapsed ? '▶' : '▼'}
-                </button>
-                <input class="field-input" style="flex:1;font-size:12px" value="${escHtml(g.name)}"
-                  id="gname-${gi}" placeholder="Csoport neve">
-                <span style="font-size:10px;color:var(--c-muted);flex-shrink:0">${g.templates.length} sablon</span>
-                <button class="btn btn-danger btn-sm" data-del="${gi}" style="flex-shrink:0">Törlés</button>
-              </div>
-              <div class="grp-body" data-gi="${gi}" style="display:${collapsed ? 'none' : 'flex'};flex-wrap:wrap;gap:4px;padding:8px 10px">
-                ${templates.map(t => `
-                  <label class="grp-tpl-item" draggable="true" data-tpl="${escHtml(t)}" data-gi="${gi}"
-                    style="display:flex;align-items:center;gap:3px;font-size:11px;padding:2px 8px;
-                    background:${g.templates.includes(t) ? 'var(--c-green)' : 'var(--c-bg)'};
-                    color:${g.templates.includes(t) ? '#fff' : 'var(--c-text)'};
-                    border:1px solid var(--c-border);border-radius:4px;cursor:grab;user-select:none">
-                    <input type="checkbox" data-gi="${gi}" data-tpl="${escHtml(t)}"
-                      ${g.templates.includes(t) ? 'checked' : ''}
-                      style="accent-color:var(--c-green);cursor:pointer">
-                    ${escHtml(t)}
-                  </label>
-                `).join('')}
-                ${!templates.length ? '<span style="font-size:11px;color:var(--c-muted)">Töltsd be a sablonmappát először.</span>' : ''}
-                <div class="grp-drop-zone" data-gi="${gi}"
-                  style="width:100%;min-height:22px;border:2px dashed transparent;border-radius:6px;
-                  display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--c-muted);
-                  margin-top:2px;transition:border-color .15s">
-                  Húzz ide sablont másik csoportból
-                </div>
-              </div>
-            </div>`;
-          }).join('')}
-          ${!groups.length ? bevEmptyState('Még nincs csoport.', 'groups-empty') : ''}
-          <button class="btn btn-teal btn-sm" id="dlg-add-group" style="margin-top:4px">+ Új csoport</button>
-        </div>
-      `,
-      footer: `
-        <button class="btn btn-ghost" onclick="closeDialog()">Mégse</button>
-        <button class="btn btn-primary" id="dlg-save-groups">Mentés</button>
-      `,
-    });
-
-    // Collapse/expand toggle
-    document.querySelectorAll('.grp-toggle').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const gi = Number(btn.dataset.gi);
-        _groupCollapsed[gi] = !_groupCollapsed[gi];
-        renderGroupsDialog();
-      });
-    });
-
-    // Checkbox live color update
-    document.querySelectorAll('input[data-gi][data-tpl]').forEach(cb => {
-      cb.addEventListener('change', () => {
-        const lbl = cb.closest('label');
-        if (!lbl) return;
-        lbl.style.background = cb.checked ? 'var(--c-green)' : 'var(--c-bg)';
-        lbl.style.color = cb.checked ? '#fff' : 'var(--c-text)';
-      });
-    });
-
-    // Drag & drop sablonok csoportok között
-    let _dragTpl = null, _dragSrcGi = null;
-    document.querySelectorAll('.grp-tpl-item').forEach(lbl => {
-      lbl.addEventListener('dragstart', e => {
-        _dragTpl   = lbl.dataset.tpl;
-        _dragSrcGi = Number(lbl.dataset.gi);
-        e.dataTransfer.effectAllowed = 'move';
-        setTimeout(() => { lbl.style.opacity = '.4'; }, 0);
-      });
-      lbl.addEventListener('dragend', () => { lbl.style.opacity = ''; });
-    });
-    document.querySelectorAll('.grp-drop-zone').forEach(zone => {
-      zone.addEventListener('dragover', e => {
-        e.preventDefault();
-        zone.style.borderColor = 'var(--c-green)';
-      });
-      zone.addEventListener('dragleave', () => { zone.style.borderColor = 'transparent'; });
-      zone.addEventListener('drop', e => {
-        e.preventDefault();
-        zone.style.borderColor = 'transparent';
-        const tgtGi = Number(zone.dataset.gi);
-        if (_dragTpl === null || tgtGi === _dragSrcGi) return;
-        const src = state.templateGroups[_dragSrcGi];
-        if (src) src.templates = src.templates.filter(t => t !== _dragTpl);
-        const tgt = state.templateGroups[tgtGi];
-        if (tgt && !tgt.templates.includes(_dragTpl)) tgt.templates.push(_dragTpl);
-        _dragTpl = null; _dragSrcGi = null;
-        renderGroupsDialog();
-      });
-    });
-
-    document.getElementById('dlg-add-group').addEventListener('click', () => {
-      const newGi = state.templateGroups.length;
-      state.templateGroups.push({ name: 'Új csoport', templates: [] });
-      _groupCollapsed[newGi] = false;
-      renderGroupsDialog();
-    });
-
-    document.getElementById('dlg-save-groups').addEventListener('click', () => {
-      const dlgEl = document.getElementById('dialog-overlay');
-      state.templateGroups.forEach((g, gi) => {
-        const nameEl = document.getElementById('gname-' + gi);
-        if (nameEl) g.name = nameEl.value.trim() || g.name;
-        g.templates = [...dlgEl.querySelectorAll(
-          `input[type="checkbox"][data-gi="${gi}"][data-tpl]:checked`
-        )].map(cb => cb.dataset.tpl);
-      });
-      saveSettings();
-      rebuildGroupFilterBtns();
-      closeDialog();
-      toast('✓ Csoportok mentve', 'success');
-    });
-
-    document.querySelectorAll('[data-del]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const gi = Number(btn.dataset.del);
-        state.templateGroups.splice(gi, 1);
-        delete _groupCollapsed[gi];
-        renderGroupsDialog();
-      });
-    });
-  }
-
-  // ── Sablon-láthatóság dialog ───────────────────────────────────────────────
-  function openVisibilityDialog() {
-    const allUsers = Settings.getAllUsers();
-    const map      = Settings.getTemplateAccounts();
-    const templates = [...new Set(state.allTemplates.map(t => t.name))];
-
-    if (!templates.length) { toast('Töltsd be a sablonmappát először.', 'warn'); return; }
-
-    showDialog({
-      title: 'Sablon-hozzárendelés fiókokhoz',
-      body: `
-        <div style="font-size:12px;color:var(--c-muted);margin-bottom:12px">
-          Ha egy sablon mellett <b>egy sem</b> van bejelölve, minden fiók látja.
-          Ha legalább egy be van jelölve, csak a megjelölt fiók(ok) látják.
-        </div>
-        <div class="data-table-wrap" style="max-height:400px">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th style="min-width:160px">Sablon</th>
-                ${allUsers.map(u => `<th style="white-space:normal;min-width:90px;font-size:10px">
-                  ${escHtml(u)}</th>`).join('')}
-              </tr>
-            </thead>
-            <tbody>
-              ${templates.map(t => {
-                const accts = map[t] || [];
-                return `<tr>
-                  <td title="${escHtml(t)}">${escHtml(t)}</td>
-                  ${allUsers.map(u => `
-                    <td style="text-align:center">
-                      <input type="checkbox" data-tpl="${escHtml(t)}" data-user="${escHtml(u)}"
-                        ${accts.includes(u) ? 'checked' : ''}>
-                    </td>
-                  `).join('')}
-                </tr>`;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      `,
-      footer: `
-        <button class="btn btn-ghost" onclick="closeDialog()">Mégse</button>
-        <button class="btn btn-primary" id="dlg-save-vis">Mentés</button>
-      `,
-    });
-
-    document.getElementById('dlg-save-vis').addEventListener('click', () => {
-      const newMap = {};
-      const dlgEl = document.getElementById('dialog-overlay');
-      dlgEl.querySelectorAll('input[type="checkbox"][data-tpl][data-user]').forEach(cb => {
-        const t = cb.dataset.tpl, u = cb.dataset.user;
-        if (!newMap[t]) newMap[t] = [];
-        if (cb.checked) newMap[t].push(u);
-      });
-      Settings.setTemplateAccounts(newMap);
-      toast('✓ Láthatóság mentve', 'success');
-      closeDialog();
-      refreshTemplates();
-    });
-  }
-
-  // ── PDF összefűzés helpers ────────────────────────────────────────────────
-
-  function _saveMergeSettings() {
-    Settings.set(MERGE_KEY(), {
-      enabled:        state.mergeEnabled,
-      mode:           state.mergeMode,
-      mergeTemplates: state.mergeTemplates === null ? null : [...state.mergeTemplates],
-    });
-  }
-
-  function _getMergeNaming() {
-    return Settings.get(MERGE_NAMING_KEY, {
-      perClient:   '[Vezetéknév] [Keresztnév] dokumentumcsomag',
-      perTemplate: '[dokumentumtípus neve] [adatlap neve]',
-    });
-  }
-
-  function _applyMergeName(pattern, tokens) {
-    return pattern
-      .replace(/\[([^\]]+)\]/g, (_, k) => (tokens[k] != null ? String(tokens[k]).trim() : ''))
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  function _excelBase() {
-    // Korábban az import-táblázat fájlneve adta az alapnevet; az adatforrás
-    // mostantól a nyilvántartás, ezért ez üres.
-    return '';
-  }
-
-  function _isMergeTemplateIncluded(tpl) {
-    return state.mergeTemplates === null || state.mergeTemplates.has(tpl);
-  }
-
-  function _renderMergeCardBody() {
-    if (!state.mergeEnabled) {
-      return `<div style="padding:8px 12px 10px;font-size:12px;color:var(--c-muted);font-style:italic">
-        Az összefűzés ki van kapcsolva.</div>`;
-    }
-
-    const mode   = state.mergeMode;
-    const chosen = [...state.chosenTemplates];
-
-    const tplItems = chosen.length
-      ? chosen.map(t => `
-          <label class="template-radio-item" style="font-size:12px;min-height:26px">
-            <input type="checkbox" name="dg-merge-tpl" value="${escHtml(t)}"
-              ${_isMergeTemplateIncluded(t) ? 'checked' : ''}>
-            <span>${escHtml(t)}</span>
-          </label>`).join('')
-      : `<div style="font-size:11px;color:var(--c-muted);padding:4px 0">Nincs kiválasztott sablon.</div>`;
-
-    return `
-      <div style="padding:8px 12px 6px">
-        <div style="font-size:10px;color:var(--c-muted);font-weight:600;text-transform:uppercase;
-            letter-spacing:.05em;margin-bottom:6px">Összefűzés módja</div>
-        <label class="template-radio-item" style="font-size:12px;min-height:26px">
-          <input type="radio" name="dg-merge-mode" value="per_client"
-            ${mode === 'per_client' ? 'checked' : ''}>
-          <span>Ügyfelenként — 1 csomag / ügyfél</span>
-        </label>
-        <label class="template-radio-item" style="font-size:12px;min-height:26px">
-          <input type="radio" name="dg-merge-mode" value="per_template"
-            ${mode === 'per_template' ? 'checked' : ''}>
-          <span>Dokumentumtípusonként (ügyfelek ABC sorrendben)</span>
-        </label>
-      </div>
-      <div style="padding:6px 12px 8px;border-top:1px solid var(--c-border)">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-          <span style="font-size:10px;color:var(--c-muted);font-weight:600;text-transform:uppercase;
-              letter-spacing:.05em">Beleértett sablonok</span>
-          <div style="display:flex;gap:10px">
-            <span class="checklist-action-link" id="dg-merge-tpl-all"
-              style="font-size:11px;cursor:pointer">Mind</span>
-            <span class="checklist-action-link" id="dg-merge-tpl-none"
-              style="font-size:11px;cursor:pointer">Egyik sem</span>
-          </div>
-        </div>
-        <div id="dg-merge-tpl-list">${tplItems}</div>
-      </div>
-      <div style="padding:6px 12px 8px;border-top:1px solid var(--c-border)">
-        <div style="font-size:10px;color:var(--c-muted);font-weight:600;text-transform:uppercase;
-            letter-spacing:.05em;margin-bottom:6px">Elkészülő összefűzött fájlok</div>
-        <div id="dg-merge-preview">${_buildMergePreviewHTML()}</div>
-      </div>
-      ${Settings.isAdmin() ? `
-      <div style="padding:4px 12px 8px;border-top:1px solid var(--c-border)">
-        <button class="btn btn-ghost btn-sm" id="dg-merge-naming-btn"
-          style="font-size:11px;width:100%;text-align:left">
-          ⚙ Elnevezési minta szerkesztése (admin)
-        </button>
-      </div>` : ''}
-    `;
-  }
-
-  function _buildMergePreviewHTML() {
-    if (!state.mergeEnabled || !state.selectedClients.length || !state.chosenTemplates.size) {
-      return `<div style="font-size:11px;color:var(--c-muted);font-style:italic">
-        Válassz ügyfeleket és sablonokat.</div>`;
-    }
-
-    const includedTpls = [...state.chosenTemplates].filter(_isMergeTemplateIncluded);
-    if (!includedTpls.length) {
-      return `<div style="font-size:11px;color:var(--c-amber)">
-        Nincs kijelölt sablon az összefűzéshez.</div>`;
-    }
-
-    const naming    = _getMergeNaming();
-    const excelBase = _excelBase();
-    let items, subNote;
-
-    if (state.mergeMode === 'per_client') {
-      const rows = state.clientRows.filter(r => state.selectedClients.includes(r.id));
-      items = rows.map(row => _applyMergeName(naming.perClient, {
-        'Vezetéknév': row['Vezetéknév'] || '',
-        'Keresztnév': row['Keresztnév'] || '',
-      }) + '.pdf');
-      subNote = `${includedTpls.length} sablon / csomag`;
-    } else {
-      items = includedTpls.map(tpl => _applyMergeName(naming.perTemplate, {
-        'dokumentumtípus neve': tpl,
-        'adatlap neve': excelBase,
-      }) + '.pdf');
-      subNote = `${state.selectedClients.length} ügyfél / fájl, ABC sorrendben`;
-    }
-
-    const pdfIcon = `<svg width="10" height="11" viewBox="0 0 14 16" fill="none"
-      style="flex-shrink:0;color:var(--c-red)">
-      <rect x="1" y="1" width="9" height="13" rx="1.5" stroke="currentColor" stroke-width="1.3"/>
-      <path d="M4 5h5M4 7.5h5M4 10h3" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
-      <path d="M10 1v3.5h4" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/>
-      <path d="M10 1l4 3.5" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/>
-    </svg>`;
-
-    const listHtml = items.map(name => `
-      <div style="display:flex;align-items:center;gap:5px;padding:2px 0;font-size:11px">
-        ${pdfIcon}
-        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-          title="${escHtml(name)}">${escHtml(name)}</span>
-      </div>`).join('');
-
-    return `
-      <div style="font-size:10px;color:var(--c-muted);margin-bottom:4px">${escHtml(subNote)}</div>
-      <div style="max-height:140px;overflow-y:auto">${listHtml}</div>`;
-  }
-
-  function updateMergeCard() {
-    const body = q('#dg-merge-body');
-    if (!body) return;
-    body.innerHTML = _renderMergeCardBody();
-    _bindMergeCardBody();
-    // Szinkronizálja a toggle-t is
-    const track = q('#dg-merge-toggle-track');
-    if (track) {
-      track.style.background = state.mergeEnabled ? 'var(--c-green)' : 'var(--c-border)';
-      const knob = track.firstElementChild;
-      if (knob) knob.style.left = state.mergeEnabled ? '17px' : '2px';
-    }
-    const lbl = q('#dg-merge-toggle-label');
-    if (lbl) lbl.textContent = state.mergeEnabled ? 'Aktív' : '';
-  }
-
-  function updateMergePreview() {
-    const el = q('#dg-merge-preview');
-    if (el) el.innerHTML = _buildMergePreviewHTML();
-  }
-
-  function _bindMergeCardBody() {
-    const tplList = q('#dg-merge-tpl-list');
-    if (tplList) {
-      tplList.addEventListener('change', e => {
-        if (e.target.name !== 'dg-merge-tpl') return;
-        const tpl = e.target.value;
-        if (e.target.checked) {
-          if (state.mergeTemplates !== null) {
-            state.mergeTemplates.add(tpl);
-            const allChosen = [...state.chosenTemplates];
-            if (allChosen.every(t => state.mergeTemplates.has(t))) state.mergeTemplates = null;
-          }
-        } else {
-          if (state.mergeTemplates === null) {
-            state.mergeTemplates = new Set([...state.chosenTemplates].filter(t => t !== tpl));
-          } else {
-            state.mergeTemplates.delete(tpl);
-          }
-        }
-        _saveMergeSettings();
-        updateMergePreview();
-      });
-    }
-    const tplAll = q('#dg-merge-tpl-all');
-    if (tplAll) tplAll.addEventListener('click', () => {
-      state.mergeTemplates = null;
-      _saveMergeSettings();
-      updateMergeCard();
-    });
-    const tplNone = q('#dg-merge-tpl-none');
-    if (tplNone) tplNone.addEventListener('click', () => {
-      state.mergeTemplates = new Set();
-      _saveMergeSettings();
-      updateMergeCard();
-    });
-    const mergeCard = q('#dg-card-merge');
-    if (mergeCard) {
-      mergeCard.querySelectorAll('input[name="dg-merge-mode"]').forEach(radio => {
-        radio.addEventListener('change', e => {
-          if (!e.target.checked) return;
-          state.mergeMode = e.target.value;
-          _saveMergeSettings();
-          updateMergePreview();
-        });
-      });
-    }
-    const namingBtn = q('#dg-merge-naming-btn');
-    if (namingBtn) namingBtn.addEventListener('click', openMergeNamingDialog);
-  }
-
-  function openMergeNamingDialog() {
-    const cur = _getMergeNaming();
-    showDialog({
-      title: 'PDF összefűzés — elnevezési minta',
-      body: `
-        <div style="font-size:12px;color:var(--c-muted);margin-bottom:14px;line-height:1.6">
-          Elérhető tokenek:<br>
-          <b>Ügyfelenként:</b> <code>[Vezetéknév]</code>, <code>[Keresztnév]</code><br>
-          <b>Sablononként:</b> <code>[dokumentumtípus neve]</code>, <code>[adatlap neve]</code>
-          <span style="font-size:11px">(= Excel fájl neve kiterjesztés nélkül)</span>
-        </div>
-        <div style="margin-bottom:10px">
-          <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">
-            Ügyfelenként — fájlnév minta:
-          </label>
-          <input type="text" id="dlg-merge-pc"
-            value="${escHtml(cur.perClient)}"
-            placeholder="[Vezetéknév] [Keresztnév] dokumentumcsomag"
-            style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--c-border);
-              border-radius:6px;background:var(--c-bg);color:var(--c-text);font-size:13px">
-        </div>
-        <div>
-          <label style="font-size:12px;font-weight:500;display:block;margin-bottom:4px">
-            Dokumentumtípusonként — fájlnév minta:
-          </label>
-          <input type="text" id="dlg-merge-pt"
-            value="${escHtml(cur.perTemplate)}"
-            placeholder="[dokumentumtípus neve] [adatlap neve]"
-            style="width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--c-border);
-              border-radius:6px;background:var(--c-bg);color:var(--c-text);font-size:13px">
-        </div>
-      `,
-      footer: `
-        <button class="btn btn-primary btn-sm" id="dlg-merge-save">Mentés</button>
-        <button class="btn btn-ghost btn-sm" id="dlg-merge-reset">Visszaállítás alapértelmezettre</button>
-        <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Mégse</button>
-      `,
-    });
-    document.getElementById('dlg-merge-save').addEventListener('click', () => {
-      const pc = document.getElementById('dlg-merge-pc').value.trim();
-      const pt = document.getElementById('dlg-merge-pt').value.trim();
-      Settings.set(MERGE_NAMING_KEY, {
-        perClient:   pc || '[Vezetéknév] [Keresztnév] dokumentumcsomag',
-        perTemplate: pt || '[dokumentumtípus neve] [adatlap neve]',
-      });
-      closeDialog();
-      updateMergePreview();
-      toast('✓ Elnevezési minta mentve', 'success');
-      BevLogger.info('MERGE_NAMING_SAVE', 'Összefűzés elnevezési minta mentve', `pc=${pc}, pt=${pt}`, `user=${currentUser}`);
-    });
-    document.getElementById('dlg-merge-reset').addEventListener('click', () => {
-      Settings.remove(MERGE_NAMING_KEY);
-      closeDialog();
-      updateMergePreview();
-      toast('Elnevezési minta visszaállítva alapértelmezettre', '');
-    });
-  }
-
-  async function _savePdfBuffer(buf, filename) {
-    if (state.outputDir) {
-      try { await FsService.writeToDir(state.outputDir, filename, buf); return; } catch {}
-    }
-    saveAs(new Blob([buf], { type: 'application/pdf' }), filename);
-  }
-
-  async function _runPdfMerge(pdfBufferMap, generated, clients, templates) {
-    if (!window.PDFLib) throw new Error('pdf-lib könyvtár nem elérhető');
-    const { PDFDocument } = PDFLib;
-
-    const includedTpls = templates.filter(_isMergeTemplateIncluded);
-    if (!includedTpls.length) return;
-
-    const naming    = _getMergeNaming();
-    const excelBase = _excelBase();
-
-    async function mergePdfs(buffers) {
-      const doc = await PDFDocument.create();
-      for (const buf of buffers) {
-        if (!buf) continue;
-        const src   = await PDFDocument.load(buf);
-        const pages = await doc.copyPages(src, src.getPageIndices());
-        pages.forEach(p => doc.addPage(p));
-      }
-      return new Uint8Array(await doc.save());
-    }
-
-    const savedNames = new Set([...pdfBufferMap.keys()]);
-
-    if (state.mergeMode === 'per_client') {
-      for (const client of clients) {
-        const clientName = employeeName(client);
-        const bufs = includedTpls.map(tpl => {
-          const entry = generated.find(g => g.clientName === clientName && g.templateName === tpl);
-          if (!entry) return null;
-          return pdfBufferMap.get(entry.name.replace(/\.docx$/i, '.pdf')) || null;
-        }).filter(Boolean);
-        if (!bufs.length) continue;
-
-        const baseName = _applyMergeName(naming.perClient, {
-          'Vezetéknév': client['Vezetéknév'] || '',
-          'Keresztnév': client['Keresztnév'] || '',
-        }) + '.pdf';
-        const outName = DocxService.uniqueFilename(baseName, savedNames);
-        savedNames.add(outName);
-
-        const merged = await mergePdfs(bufs);
-        await _savePdfBuffer(merged, outName);
-        BevLogger.info('PDF_MERGE_DONE', `Összefűzött PDF mentve (ügyfelenként): ${outName}`,
-          `templates=${includedTpls.join('|')}, pages=${bufs.length}`, `user=${currentUser}`);
-      }
-    } else {
-      const sortedClients = [...clients].sort((a, b) =>
-        employeeName(a).localeCompare(employeeName(b), 'hu'));
-
-      for (const tpl of includedTpls) {
-        const bufs = sortedClients.map(client => {
-          const clientName = employeeName(client);
-          const entry = generated.find(g => g.clientName === clientName && g.templateName === tpl);
-          if (!entry) return null;
-          return pdfBufferMap.get(entry.name.replace(/\.docx$/i, '.pdf')) || null;
-        }).filter(Boolean);
-        if (!bufs.length) continue;
-
-        const baseName = _applyMergeName(naming.perTemplate, {
-          'dokumentumtípus neve': tpl,
-          'adatlap neve': excelBase,
-        }) + '.pdf';
-        const outName = DocxService.uniqueFilename(baseName, savedNames);
-        savedNames.add(outName);
-
-        const merged = await mergePdfs(bufs);
-        await _savePdfBuffer(merged, outName);
-        BevLogger.info('PDF_MERGE_DONE', `Összefűzött PDF mentve (sablononként): ${outName}`,
-          `clients=${sortedClients.map(employeeName).join('|')}, tpl=${tpl}`, `user=${currentUser}`);
-      }
-    }
-  }
-
   // ── Generálás ─────────────────────────────────────────────────────────────
 
   // Összesítő kártya — statikus nézet (ügyfél × sablon, ügyfelenként csoportosítva)
@@ -2328,7 +1538,7 @@ const DocgenModule = (() => {
     // Teljes összesítő kártya
     _updateSummaryCard();
     // Merge kártya előnézet szinkronizálása
-    updateMergeCard();
+    DocgenMerge.updateCard();
   }
 
   function updateGenButtons() {
@@ -2583,7 +1793,7 @@ const DocgenModule = (() => {
       for (let ti = 0; ti < templates.length; ti++) {
         const templateName = templates[ti];
         // P5: per-sablon név-minta lookup
-        const np = getNamePattern(templateName);
+        const np = DocgenNaming.getNamePattern(templateName);
         const pattern = np.pattern;
         const tmplBuf = await findTemplate(state.templatesDir, templateName + '.docx');
         if (!tmplBuf) {
@@ -2645,7 +1855,7 @@ const DocgenModule = (() => {
         }
       }
 
-      appendMissingLog(missingLogEntries);
+      DocgenMissingLog.append(missingLogEntries);
 
       // ── DOCX mentési fázis ────────────────────────────────────────────────────
       // writeToDir valódi async (File System API) → a setStatus itt ténylegesen
@@ -2701,8 +1911,8 @@ const DocgenModule = (() => {
           progress.setPhase('PDF összefűzés…');
           setStatus('PDF összefűzés…', 99);
           try {
-            await _runPdfMerge(pdfBufferMap, generated, clients, templates);
-            const mergedCount = state.mergeMode === 'per_client' ? clients.length : [...state.chosenTemplates].filter(_isMergeTemplateIncluded).length;
+            await DocgenMerge.run(pdfBufferMap, generated, clients, templates);
+            const mergedCount = state.mergeMode === 'per_client' ? clients.length : [...state.chosenTemplates].filter(DocgenMerge.isTemplateIncluded).length;
             toast(`✓ ${mergedCount} összefűzött PDF elkészítve`, 'success');
           } catch (e) {
             BevLogger.error('PDF_MERGE', 'PDF összefűzés sikertelen', `error=${e.message}`, `user=${currentUser}`);
