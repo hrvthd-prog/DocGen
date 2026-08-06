@@ -165,6 +165,40 @@ const FsService = (() => {
     } catch { return null; }
   }
 
+  // Fájlnevek listázása a mappában, opcionális szűrővel
+  async function listFiles(dirHandle, filterFn) {
+    const names = [];
+    for await (const [name, entry] of dirHandle.entries()) {
+      if (entry.kind !== 'file') continue;
+      if (!filterFn || filterFn(name)) names.push(name);
+    }
+    return names.sort((a, b) => a.localeCompare(b, 'hu'));
+  }
+
+  async function fileExists(dirHandle, filename) {
+    try { await dirHandle.getFileHandle(filename); return true; }
+    catch { return false; }
+  }
+
+  async function deleteFromDir(dirHandle, filename) {
+    try { await dirHandle.removeEntry(filename); return true; }
+    catch { return false; }
+  }
+
+  // Szöveges fájl olvasása/írása – az adatbázis JSON-jaihoz
+  async function readTextFromDir(dirHandle, filename) {
+    const fh = await dirHandle.getFileHandle(filename);
+    const file = await fh.getFile();
+    return file.text();
+  }
+
+  async function writeTextToDir(dirHandle, filename, text) {
+    const fh = await dirHandle.getFileHandle(filename, { create: true });
+    const writable = await fh.createWritable();
+    await writable.write(new Blob([text], { type: 'application/json' }));
+    await writable.close();
+  }
+
   return {
     hasFsApi,
     getOrRequestDir,
@@ -175,6 +209,11 @@ const FsService = (() => {
     readFromDir,
     writeToDir,
     getSubDir,
+    listFiles,
+    fileExists,
+    deleteFromDir,
+    readTextFromDir,
+    writeTextToDir,
     // Publikus saveHandle/loadHandle automatikusan user-prefixelt kulcsot használ
     saveHandle: (key, handle) => saveHandle(userKey(key), handle),
     loadHandle: (key) => loadHandle(userKey(key)),
