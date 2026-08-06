@@ -37,6 +37,32 @@ const EmployeeRepo = (() => {
   // (A Horizontes útmutató is ezt a hármast használja duplikátumszűrésre.)
   const NATURAL_KEY_FIELDS = ['surname', 'forename', 'date_of_birth'];
 
+  /**
+   * Azonosító-típus → séma-mező megfeleltetés.
+   *
+   * Ezek a számok kétszer szerepelnének: egyszer az azonosító-történetben,
+   * egyszer az adatbekérő saját oszlopaként. Kétszer bekérni hibaforrás, ezért
+   * az azonosító-történet az elsődleges, és az *aktuális* érték automatikusan
+   * átmásolódik a megfelelő mezőbe – így az xlsx-export is helyes marad.
+   */
+  const IDENTIFIER_FIELD_MAP = {
+    sap:              'personnel_reg_number',
+    residence_permit: 'number_of_rp',
+    passport:         'pp_number',
+    tax:              'tax_number',
+    taj:              'TAJ',
+  };
+
+  /** Az aktuális azonosítók bemásolása a hozzájuk tartozó mezőkbe. */
+  function applyIdentifiersToFields(identifiers = [], fields = {}) {
+    const out = Object.assign({}, fields);
+    for (const [type, key] of Object.entries(IDENTIFIER_FIELD_MAP)) {
+      const cur = identifiers.find(i => i.type === type && i.current);
+      if (cur) out[key] = cur.value;
+    }
+    return out;
+  }
+
   let backend = null;
   let cache   = null;          // { employees: [], meta: {} }
   let dirty   = false;
@@ -493,7 +519,7 @@ const EmployeeRepo = (() => {
   }
 
   return {
-    ID_TYPES, NATURAL_KEY_FIELDS,
+    ID_TYPES, NATURAL_KEY_FIELDS, IDENTIFIER_FIELD_MAP, applyIdentifiersToFields,
     // tároló
     useBackend, hasBackend, describeBackend, onChange,
     createFileBackend, createIdbBackend, createMemoryBackend,

@@ -1,0 +1,176 @@
+/* ══════════════════════════════════════════════════════
+   Nyilvántartás fül
+   ══════════════════════════════════════════════════════ */
+
+.rg-count {
+  font-size: 11px;
+  color: var(--c-muted);
+  margin-left: auto;
+}
+
+.rg-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+.rg-search { flex: 1; min-width: 200px; }
+.rg-arch-toggle { flex-shrink: 0; white-space: nowrap; }
+
+.rg-table-wrap { max-height: calc(100vh - 260px); }
+
+.rg-actions { white-space: nowrap; text-align: right; }
+.rg-actions .btn { margin-left: 4px; }
+
+.rg-archived td { opacity: .55; font-style: italic; }
+.rg-dim { color: var(--c-muted); }
+
+/* Jelzi, hogy az azonosítónak van korábbi története */
+.rg-more {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--c-border);
+  color: var(--c-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.rg-stat {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 10px;
+  font-size: 11.5px;
+  color: var(--c-muted);
+}
+.rg-stat b { color: var(--c-text); font-variant-numeric: tabular-nums; }
+
+.rg-warn { color: var(--c-amber); }
+.rg-note {
+  padding: 2px 10px 6px;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--c-muted);
+}
+
+/* ══════════════════════════════════════════════════════
+   Munkavállalói űrlap
+   ══════════════════════════════════════════════════════ */
+
+.ef-wrap { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 620px; }
+
+.ef-group { border-top: 1px solid var(--c-border); padding-top: var(--sp-3); }
+.ef-group:first-child { border-top: none; padding-top: 0; }
+
+.ef-group-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--c-muted);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: var(--sp-3);
+}
+
+.ef-hint {
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--c-muted);
+  margin: -4px 0 var(--sp-3);
+  max-width: 60em;
+}
+
+.ef-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--sp-3);
+}
+
+.ef-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ef-label { font-size: 11px; color: var(--c-muted); }
+.ef-req { color: var(--c-red); margin-left: 2px; }
+
+.ef-field .field-input,
+.ef-field .field-select { width: 100%; }
+
+.ef-field-error { font-size: 10.5px; color: var(--c-red); line-height: 1.4; }
+.ef-field.has-error .field-input,
+.ef-field.has-error .field-select { border-color: var(--c-red); }
+
+.ef-error { flex: 1; font-size: 11.5px; color: var(--c-red); text-align: left; }
+
+.ef-empty { font-size: 11.5px; color: var(--c-muted); padding: 4px 0; }
+
+/* ── Azonosítók ─────────────────────────────────────── */
+
+.ef-id-list { display: flex; flex-direction: column; gap: 3px; margin-bottom: var(--sp-3); }
+
+.ef-id-row {
+  display: grid;
+  grid-template-columns: 150px 1fr 150px 70px 24px;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 5px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  background: var(--c-bg);
+  font-size: 12px;
+}
+.ef-id-row.is-current { background: rgba(61,166,140,.08); border-color: var(--c-green); }
+
+.ef-id-type   { color: var(--c-muted); font-size: 11px; }
+.ef-id-value  { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.ef-id-period { color: var(--c-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+.ef-id-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--c-muted);
+  text-align: right;
+}
+.ef-id-row.is-current .ef-id-badge { color: var(--c-green); }
+
+.ef-id-del {
+  border: none;
+  background: transparent;
+  color: var(--c-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 4px;
+}
+.ef-id-del:hover { color: var(--c-red); background: rgba(217,85,85,.12); }
+
+.ef-id-add {
+  display: grid;
+  grid-template-columns: 150px 1fr 150px auto;
+  gap: var(--sp-2);
+  align-items: center;
+}
+
+/* ── Számított mezők előnézete ──────────────────────── */
+
+.ef-computed { display: flex; flex-direction: column; gap: 2px; }
+.ef-computed-row {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: var(--sp-2);
+  padding: 3px 8px;
+  font-size: 12px;
+  border-radius: var(--radius-sm);
+}
+.ef-computed-row:nth-child(even) { background: var(--c-bg); }
+.ef-computed-label { color: var(--c-muted); font-size: 11px; }
+.ef-computed-value { color: var(--c-text); }
+.ef-computed-value i { color: var(--c-muted); }
+
+/* Azonosítóból töltött, közvetlenül nem szerkeszthető mezők */
+.ef-field--mirrored .field-input {
+  background: var(--c-bg);
+  color: var(--c-muted);
+  cursor: default;
+}
+.ef-mirror-note { font-size: 10px; color: var(--c-muted); font-style: italic; }

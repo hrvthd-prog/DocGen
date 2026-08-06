@@ -23,7 +23,7 @@ const SEED_SCHEMA = {
   groups: [
     { key: 'alap',          label: 'Alapadatok' },
     { key: 'szuletes',      label: 'Születési adatok' },
-    { key: 'azonosito',     label: 'Azonosítók' },
+    { key: 'azonosito',     label: 'Hatósági azonosítók' },
     { key: 'okmany',        label: 'Okmányok' },
     { key: 'kapcsolat',     label: 'Kapcsolat' },
     { key: 'lakcim',        label: 'Magyarországi lakcím' },

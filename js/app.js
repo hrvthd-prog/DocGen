@@ -124,11 +124,12 @@ window.updateHeaderBreadcrumb = function({ sourceName, clientCount, onSourceClic
 switchTab(Settings.get('last_tab', 'docgen'));
 
 DocgenModule.init(document.getElementById('tab-docgen'));
+RegistryModule.init(document.getElementById('tab-registry'));
 
-// A Nyilvántartás és a Beállítások modul a következő fázisokban készül el.
-for (const [id, label] of [['registry', 'Nyilvántartás'], ['settings', 'Beállítások']]) {
-  const el = document.getElementById('tab-' + id);
+// A Beállítások modul az 5. fázisban készül el.
+{
+  const el = document.getElementById('tab-settings');
   if (el && !el.childElementCount) {
-    el.innerHTML = `<div class="empty-state"><p>A(z) „${label}” modul még nem készült el.</p></div>`;
+    el.innerHTML = '<div class="empty-state"><span class="empty-state-msg">A „Beállítások” modul még nem készült el.</span></div>';
   }
 }
