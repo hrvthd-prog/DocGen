@@ -174,3 +174,72 @@
   cursor: default;
 }
 .ef-mirror-note { font-size: 10px; color: var(--c-muted); font-style: italic; }
+
+/* ══════════════════════════════════════════════════════
+   Beállítások fül – séma-szerkesztő
+   ══════════════════════════════════════════════════════ */
+
+.sv-intro { font-size: 12px; color: var(--c-muted); margin-bottom: var(--sp-3); max-width: 70em; }
+
+.sv-toolbar {
+  display: flex; align-items: center; gap: var(--sp-2);
+  margin-bottom: var(--sp-4); flex-wrap: wrap;
+}
+.sv-file-btn { position: relative; cursor: pointer; }
+.sv-problems { font-size: 11px; color: var(--c-amber); margin-left: auto; }
+
+.sv-group { margin-bottom: var(--sp-4); }
+.sv-group-title {
+  font-size: 10px; font-weight: 700; color: var(--c-muted);
+  text-transform: uppercase; letter-spacing: .06em; margin-bottom: var(--sp-2);
+}
+
+.sv-list { display: flex; flex-direction: column; gap: 2px; }
+
+.sv-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.4fr) 90px minmax(120px, 2fr) auto;
+  align-items: center; gap: var(--sp-2);
+  padding: 5px 8px; border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm); background: var(--c-card); font-size: 12px;
+}
+.sv-row:hover { background: var(--c-bg); }
+
+.sv-row-label { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.sv-key { font-size: 10px; color: var(--c-muted); font-family: var(--font-mono, monospace); }
+.sv-type { font-size: 10.5px; color: var(--c-muted); }
+.sv-detail {
+  font-size: 11px; color: var(--c-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sv-row-actions { display: flex; align-items: center; gap: 2px; white-space: nowrap; }
+
+.sv-move {
+  border: none; background: transparent; color: var(--c-muted);
+  cursor: pointer; padding: 2px 5px; border-radius: 4px; font-size: 12px;
+}
+.sv-move:hover { background: var(--c-border); color: var(--c-text); }
+
+/* Mezőszerkesztő űrlap */
+.sv-form {
+  display: grid; grid-template-columns: repeat(2, minmax(200px, 1fr));
+  gap: var(--sp-3); min-width: 560px;
+}
+.sv-wide { grid-column: 1 / -1; }
+.sv-req-row { align-self: end; }
+
+.sv-enum-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1.6fr 24px;
+  gap: var(--sp-2); align-items: center; margin-bottom: 4px;
+}
+
+.sv-warn-list {
+  margin: 0 0 10px 18px; font-size: 12px; line-height: 1.9; color: var(--c-text);
+}
+
+/* Séma-összevetés */
+.sv-diff { min-width: 560px; max-width: 760px; }
+.sv-diff-sec { margin-bottom: var(--sp-4); }
+.sv-diff-sec .check-row { align-items: flex-start; font-size: 12px; line-height: 1.5; }
+.sv-diff-sec .check-row i { color: var(--c-muted); }

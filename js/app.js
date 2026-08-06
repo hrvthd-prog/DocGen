@@ -125,11 +125,4 @@ switchTab(Settings.get('last_tab', 'docgen'));
 
 DocgenModule.init(document.getElementById('tab-docgen'));
 RegistryModule.init(document.getElementById('tab-registry'));
-
-// A Beállítások modul az 5. fázisban készül el.
-{
-  const el = document.getElementById('tab-settings');
-  if (el && !el.childElementCount) {
-    el.innerHTML = '<div class="empty-state"><span class="empty-state-msg">A „Beállítások” modul még nem készült el.</span></div>';
-  }
-}
+SettingsModule.init(document.getElementById('tab-settings'));
