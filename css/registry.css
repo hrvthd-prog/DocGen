@@ -243,3 +243,24 @@
 .sv-diff-sec { margin-bottom: var(--sp-4); }
 .sv-diff-sec .check-row { align-items: flex-start; font-size: 12px; line-height: 1.5; }
 .sv-diff-sec .check-row i { color: var(--c-muted); }
+
+/* ── xlsx be/kimenet ────────────────────────────────── */
+.rg-toolbar--io { margin-top: -4px; }
+.rg-io-note { font-size: 10.5px; color: var(--c-muted); }
+
+.xio-wrap { min-width: 620px; max-width: 860px; }
+.xio-summary {
+  display: flex; gap: var(--sp-4); flex-wrap: wrap;
+  margin: var(--sp-2) 0 var(--sp-3); font-size: 12px; color: var(--c-muted);
+}
+.xio-summary b { color: var(--c-text); font-variant-numeric: tabular-nums; }
+.xio-summary .xio-warn b { color: var(--c-amber); }
+
+.xio-table { max-height: 320px; margin-bottom: var(--sp-3); }
+.xio-table td { white-space: normal; max-width: 320px; }
+.xio-invalid td { background: rgba(217,85,85,.07) !important; }
+
+.xio-new { color: var(--c-green); font-weight: 600; }
+.xio-upd { color: var(--c-blue);  font-weight: 600; }
+.xio-dup { color: var(--c-muted); font-weight: 600; }
+.data-table i { color: var(--c-muted); font-size: 11px; }

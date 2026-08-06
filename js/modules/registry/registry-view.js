@@ -58,9 +58,11 @@ const RegistryModule = (() => {
   async function useFileBackend(dirHandle) {
     state.dirHandle   = dirHandle;
     state.backendKind = 'file';
-    SchemaStore.useBackend(makeConfigBackend(dirHandle));
+    SchemaStore.useBackend(makeConfigBackend(dirHandle, 'schema'));
+    ExportProfiles.useBackend(makeConfigBackend(dirHandle, 'profiles'));
     EmployeeRepo.useBackend(EmployeeRepo.createFileBackend(dirHandle));
     await SchemaStore.load();
+    await ExportProfiles.load();
     await EmployeeRepo.load();
     state.ready = true;
     renderSidebar();
@@ -69,41 +71,47 @@ const RegistryModule = (() => {
 
   async function useIdbBackend() {
     state.backendKind = 'idb';
-    SchemaStore.useBackend(makeIdbConfigBackend());
+    SchemaStore.useBackend(makeIdbConfigBackend('schema'));
+    ExportProfiles.useBackend(makeIdbConfigBackend('profiles'));
     EmployeeRepo.useBackend(EmployeeRepo.createIdbBackend());
     await SchemaStore.load();
+    await ExportProfiles.load();
     await EmployeeRepo.load();
     state.ready = true;
     renderSidebar();
     renderList();
   }
 
-  /** A séma és az export profilok külön fájlban – személyes adat nélkül. */
-  function makeConfigBackend(dirHandle) {
+  /**
+   * A séma és az export profilok egy közös config fájlban – személyes adat
+   * nélkül, így gépek között szabadon vihető.
+   */
+  function makeConfigBackend(dirHandle, key) {
     const FILE = 'docgen-config.json';
     return {
       describe: () => `${dirHandle.name}/${FILE}`,
       async load() {
         try {
           const cfg = JSON.parse(await FsService.readTextFromDir(dirHandle, FILE));
-          return cfg.schema || null;
+          return cfg[key] || null;
         } catch { return null; }
       },
-      async save(schema) {
+      async save(data) {
         let cfg = {};
         try { cfg = JSON.parse(await FsService.readTextFromDir(dirHandle, FILE)); } catch {}
-        cfg.schema = schema;
+        cfg[key] = data;
         cfg.savedAt = new Date().toISOString();
         await FsService.writeTextToDir(dirHandle, FILE, JSON.stringify(cfg, null, 2));
       },
     };
   }
 
-  function makeIdbConfigBackend() {
+  function makeIdbConfigBackend(key) {
+    const k = 'config_' + key;
     return {
       describe: () => 'böngésző tároló',
-      async load() { try { return (await FsService.loadHandle('config_schema')) || null; } catch { return null; } },
-      async save(schema) { await FsService.saveHandle('config_schema', JSON.parse(JSON.stringify(schema))); },
+      async load() { try { return (await FsService.loadHandle(k)) || null; } catch { return null; } },
+      async save(data) { await FsService.saveHandle(k, JSON.parse(JSON.stringify(data))); },
     };
   }
 
@@ -128,6 +136,15 @@ const RegistryModule = (() => {
                   <span>Archiváltak is</span>
                 </label>
                 <button class="btn btn-primary btn-sm" id="rg-new">Új munkavállaló</button>
+              </div>
+              <div class="rg-toolbar rg-toolbar--io">
+                <label class="btn btn-ghost btn-sm sv-file-btn">
+                  Import adatbekérőből…
+                  <input type="file" id="rg-import" accept=".xlsx,.xlsm" hidden>
+                </label>
+                <button class="btn btn-ghost btn-sm" id="rg-export-data">Export xlsx-be</button>
+                <button class="btn btn-ghost btn-sm" id="rg-export-template">Üres sablon letöltése</button>
+                <span class="rg-io-note" id="rg-export-note"></span>
               </div>
               <div id="rg-list"></div>
             </div>
@@ -195,6 +212,14 @@ const RegistryModule = (() => {
     const cnt = document.getElementById('rg-count');
     if (cnt) cnt.textContent = `${rows.length} személy`;
     refreshStats();
+
+    // Az export mindig azt viszi, amit a felhasználó épp lát
+    const note = document.getElementById('rg-export-note');
+    if (note) {
+      note.textContent = (state.query || state.showArchived)
+        ? `az export a ${rows.length} látható rekordot viszi`
+        : '';
+    }
 
     if (!rows.length) {
       box.innerHTML = bevEmptyState(
@@ -264,6 +289,21 @@ const RegistryModule = (() => {
       renderList();
     });
     document.getElementById('rg-new').addEventListener('click', () => openForm(null));
+
+    document.getElementById('rg-import').addEventListener('change', ev => {
+      const file = ev.target.files[0];
+      ev.target.value = '';
+      if (!file) return;
+      if (!state.ready) { toast('A nyilvántartás még nem töltődött be.', 'error'); return; }
+      RegistryXlsxIO.importFile(file, renderList);
+    });
+    document.getElementById('rg-export-data').addEventListener('click', () => {
+      // A szűrt (látható) halmazt exportáljuk – amit a felhasználó épp lát
+      const rows = EmployeeRepo.search(state.query, { includeArchived: state.showArchived });
+      RegistryXlsxIO.exportData(rows);
+    });
+    document.getElementById('rg-export-template').addEventListener('click',
+      () => RegistryXlsxIO.exportTemplate());
   }
 
   function openForm(id) {
