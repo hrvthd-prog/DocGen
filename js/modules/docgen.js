@@ -86,9 +86,6 @@ const DocgenModule = (() => {
 
   // ── Állapot ──────────────────────────────────────────────────────────────
   let state = {
-    excelFile:        null,
-    excelSheets:      [],
-    excelSheet:       '',
     clientRows:       [],
     selectedClients:  [],
     clientFilterCols: [],
@@ -123,14 +120,32 @@ const DocgenModule = (() => {
     loadSettings();
     render();
     restoreHandles();
+
+    // A nyilvántartás bármely változása (felvitel, import, archiválás) azonnal
+    // látszódjon itt is – így nem lehet elavult listából generálni.
+    EmployeeRepo.onChange(() => { loadFromRegistry({ silent: true }); renderAll(); });
+
     window.addEventListener('docgenTabActivated', e => {
       if (e.detail !== 'docgen') return;
+      loadFromRegistry({ silent: true });
+      renderAll();
       // P4: tab-aktiváción re-scan a sablonmappa esetén — frissíti, ha közben módosult
       if (state.templatesDir) {
         refreshTemplates({ silent: true }).catch(err =>
           BevLogger.warn('TEMPLATE_RESCAN', 'Tab-aktiváción re-scan sikertelen', err.message, ''));
       }
     });
+  }
+
+  /** Oldalsáv és munkaterület újrarajzolása a jelenlegi állapotból. */
+  function renderAll() {
+    const sb = q('#dg-sidebar');
+    if (sb) { sb.innerHTML = renderSidebar(); bindSidebar(); }
+    const ws = q('#dg-workspace');
+    if (ws) { ws.innerHTML = renderWorkspace(); bindWorkspace(); refreshTemplateList(); }
+    updateClientCount();
+    updateGenButtons();
+    updateGenSummary();
   }
 
   // Per-user settings kulcs — minden fióknak saját mentése van
@@ -172,7 +187,6 @@ const DocgenModule = (() => {
     state.autoOpen         = s.autoOpen         || false;
     state.selectedClients  = s.selectedClients  || [];
     state.clientFilterCols = s.clientFilterCols || [];
-    state.excelSheet       = s.excelSheet       || '';
     // backward compat: migrate old single chosenTemplate string
     const savedTpls = s.chosenTemplates || (s.chosenTemplate ? [s.chosenTemplate] : []);
     state.chosenTemplates  = new Set(savedTpls);
@@ -194,7 +208,6 @@ const DocgenModule = (() => {
       selectedClients:  state.selectedClients,
       chosenTemplates:  [...state.chosenTemplates],
       clientFilterCols: state.clientFilterCols,
-      excelSheet:       state.excelSheet,
     });
     Settings.setAccountGroups(currentUser, state.templateGroups);
   }
@@ -227,7 +240,7 @@ const DocgenModule = (() => {
     const ws = q('#dg-workspace');
     if (!ws || !ws.querySelector('.dg-onboarding')) return; // nem onboard nézetben vagyunk
 
-    const hasExcel = !!state.excelFile;
+    const hasExcel = state.clientRows.length > 0;
     const hasDir   = !!state.templatesDir;
 
     // Mind a kettő kész → teljes workspace re-render, onboard elhagyása
@@ -241,7 +254,7 @@ const DocgenModule = (() => {
     }
 
     // Progresszív lépés-frissítés a meglévő DOM-on
-    const step1 = q('#dg-ob-excel');
+    const step1 = q('#dg-ob-registry');
     const step2 = q('#dg-ob-dir');
     const step3 = q('#dg-ob-clients');
 
@@ -297,32 +310,6 @@ const DocgenModule = (() => {
     } catch (e) {
       BevLogger.warn('OUTPUT_DIR_RESTORE', 'Output mappa restore sikertelen', e.message, '');
     }
-
-    try {
-      const h = await FsService.loadHandle('excel_file');
-      if (h) {
-        if (await FsService.queryPermissionOnly(h)) {
-          state.excelFile = h;
-          const sheets = await ExcelService.listSheets(h);
-          state.excelSheets = sheets;
-          const saved = state.excelSheet;
-          state.excelSheet = sheets.includes(saved) ? saved : (sheets[0] || '');
-          _populateSheetSelect(sheets, state.excelSheet);
-          await loadExcel(h, state.excelSheet);
-          _refreshOnboardSteps(); // excel visszaállítva + adatok betöltve → kilépés
-        } else {
-          state.excelFile = h;   // tároljuk a handle-t, hogy a picker-kattintás tudja újra kérni a jogot
-          const xlBtn  = q('#dg-load-excel');
-          const xlInfo = q('#dg-excel-info');
-          if (xlBtn)  xlBtn.textContent  = 'Másik import-táblázat betöltése';
-          if (xlInfo) { xlInfo.textContent = h.name; xlInfo.title = h.name; }
-          _refreshOnboardSteps(); // handle ismert (engedély nélkül) → onboard step 2 aktiválás
-          // Mindig ajánld a visszatöltést — h.name fallback ha savedName üres
-          const savedName = _userPref('docgen_last_excel') || h.name;
-          _offerExcelRestore(h, savedName);
-        }
-      }
-    } catch {}
   }
 
   function showDirRestoreBanner(knownHandle) {
@@ -400,40 +387,6 @@ const DocgenModule = (() => {
     Settings.set(k, value);
   }
 
-  function _offerExcelRestore(handle, name) {
-    function show() {
-      showDialog({
-        title: 'Utolsó ügyfél-lista visszatöltése',
-        body: `<p style="margin:0 0 12px;font-size:13px">Visszatöltsük az utolsó Excel-fájlt?</p>
-               <div style="background:var(--c-bg);border-radius:6px;padding:10px 14px;font-size:13px;display:flex;align-items:center;gap:10px">
-                 <span style="font-size:18px">📊</span><span>${escHtml(name)}</span>
-               </div>`,
-        footer: `<button class="btn btn-primary btn-sm" id="dg-restore-excel-yes">Igen, visszatöltés</button>
-                 <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Nem</button>`,
-      });
-      document.getElementById('dg-restore-excel-yes').addEventListener('click', async () => {
-        closeDialog();
-        try {
-          if (await FsService.verifyPermission(handle)) {
-            state.excelFile = handle;
-            const sheets = await ExcelService.listSheets(handle);
-            state.excelSheets = sheets;
-            const saved = state.excelSheet;
-            state.excelSheet = sheets.includes(saved) ? saved : (sheets[0] || '');
-            _populateSheetSelect(sheets, state.excelSheet);
-            await loadExcel(handle, state.excelSheet);
-          }
-        } catch { toast('Hozzáférés megtagadva', 'error'); }
-      });
-    }
-    if (container.classList.contains('active')) { show(); return; }
-    window.addEventListener('docgenTabActivated', function handler(e) {
-      if (e.detail !== 'docgen') return;
-      window.removeEventListener('docgenTabActivated', handler);
-      show();
-    });
-  }
-
   // ── Render ────────────────────────────────────────────────────────────────
   function render() {
     container.innerHTML = `
@@ -464,25 +417,22 @@ const DocgenModule = (() => {
 
   function renderSidebar() {
     const cnt      = state.selectedClients.length;
-    const xlName   = state.excelFile ? (state.excelFile.name || '…') : 'Nincs betöltve';
     const dirName  = state.templatesDir ? state.templatesDir.name : 'Nincs beállítva';
-    const xlLabel  = state.excelFile ? 'Másik import-táblázat betöltése' : 'Import-táblázat betöltése';
-    const canPick  = state.clientRows.length > 0 || cnt > 0;
+    const osszes   = state.clientRows.length;
+    const canPick  = osszes > 0;
     const isAdmin  = Settings.isAdmin();
-    const step1done = !!state.excelFile;
+    const step1done = cnt > 0;
     const step2done = !!state.templatesDir;
     const step3done = !!state.outputDir;
     const pendingStep = !step1done ? 1 : !step2done ? 2 : !step3done ? 3 : 0;
     return `
       <div class="sidebar-section ${pendingStep === 1 ? 'sidebar-section--pending' : ''}">
-        <div class="sidebar-section-title"><span class="sidebar-step-badge ${step1done ? 'done' : ''}" id="dg-step-1">1</span>Adat</div>
-        <button class="sidebar-btn" id="dg-load-excel">${escHtml(xlLabel)}</button>
-        <div class="info-row" id="dg-excel-info" title="${escHtml(xlName)}">${_folderSVG}${escHtml(xlName)}</div>
-        <select class="field-select" id="dg-sheet-sel" style="margin-top:6px;display:${state.excelSheets.length > 1 ? '' : 'none'}">
-          ${state.excelSheets.map(s => `<option ${s === state.excelSheet ? 'selected' : ''}>${escHtml(s)}</option>`).join('')}
-        </select>
+        <div class="sidebar-section-title"><span class="sidebar-step-badge ${step1done ? 'done' : ''}" id="dg-step-1">1</span>Személyek</div>
+        <div class="info-row" id="dg-source-info" title="Az adatok a Nyilvántartás fülön kezelhetők">
+          ${_folderSVG}${osszes ? `Nyilvántartás – ${osszes} személy` : 'A nyilvántartás üres'}
+        </div>
         <button class="sidebar-btn" id="dg-choose-clients" ${canPick ? '' : 'disabled'}>
-          Ügyfelek kiválasztása
+          Személyek kiválasztása
           <span class="badge ${cnt ? 'badge-green' : 'badge-muted'}" style="margin-left:auto">${cnt}</span>
         </button>
       </div>
@@ -574,26 +524,29 @@ const DocgenModule = (() => {
     // Onboard mindaddig látható, amíg mind a két kötelező lépés nem teljesül.
     // (&&-ról ||-ra változott: ha csak az egyik van meg, még onboardon maradunk
     // és a progresszív lépésfrissítő aktiválja a következő gombot.)
-    const onboardMode = !state.excelFile || !state.templatesDir;
+    // Onboard mindaddig látható, amíg a nyilvántartás üres vagy nincs sablonmappa.
+    const vanSzemely = state.clientRows.length > 0;
+    const hasDir     = !!state.templatesDir;
+    const onboardMode = !vanSzemely || !hasDir;
     if (onboardMode) {
-      const hasExcel = !!state.excelFile;
-      const hasDir   = !!state.templatesDir;
-      const step1Cls = hasExcel ? 'done' : '';
-      const step2Cls = hasDir   ? 'done' : hasExcel ? '' : 'disabled';
-      const step3Cls = hasExcel ? ''     : 'disabled';
-      const step2Sub = hasExcel ? 'A .docx sablonokat tartalmazó mappa'
-                                : 'Import-táblázat betöltése után érhető el';
-      const step3Sub = hasExcel ? 'Válaszd ki, kinek generáljunk dokumentumot'
-                                : 'Excel betöltése után érhető el';
+      const step1Cls = vanSzemely ? 'done' : '';
+      const step2Cls = hasDir ? 'done' : vanSzemely ? '' : 'disabled';
+      const step3Cls = vanSzemely ? '' : 'disabled';
+      const step2Sub = vanSzemely ? 'A .docx sablonokat tartalmazó mappa'
+                                  : 'A nyilvántartás feltöltése után érhető el';
+      const step3Sub = vanSzemely ? 'Válaszd ki, kinek generáljunk dokumentumot'
+                                  : 'A nyilvántartás feltöltése után érhető el';
       return `
         <div class="dg-onboarding">
           <div style="font-size:13px;color:var(--c-muted)">Az első generáláshoz kövesd a lépéseket:</div>
           <div class="dg-onboard-steps">
-            <div class="dg-onboard-step ${step1Cls}" id="dg-ob-excel">
+            <div class="dg-onboard-step ${step1Cls}" id="dg-ob-registry">
               <div class="dg-onboard-num">1</div>
               <div>
-                <div class="dg-onboard-label">Import-táblázat betöltése</div>
-                <div class="dg-onboard-sub">.xlsb / .xlsx fájl az ügyfelekkel</div>
+                <div class="dg-onboard-label">Személyek felvitele</div>
+                <div class="dg-onboard-sub">${vanSzemely
+                  ? state.clientRows.length + ' személy a nyilvántartásban'
+                  : 'Ugrás a Nyilvántartás fülre'}</div>
               </div>
               <span class="dg-onboard-arrow">›</span>
             </div>
@@ -608,7 +561,7 @@ const DocgenModule = (() => {
             <div class="dg-onboard-step ${step3Cls}" id="dg-ob-clients">
               <div class="dg-onboard-num">3</div>
               <div>
-                <div class="dg-onboard-label">Ügyfelek kiválasztása</div>
+                <div class="dg-onboard-label">Személyek kiválasztása</div>
                 <div class="dg-onboard-sub">${step3Sub}</div>
               </div>
               <span class="dg-onboard-arrow">›</span>
@@ -765,36 +718,8 @@ const DocgenModule = (() => {
 
   // ── Eseménykötések ────────────────────────────────────────────────────────
   function bindSidebar() {
-    q('#dg-load-excel').addEventListener('click', onLoadExcel);
     const missingLogBtn = q('#dg-show-missing-log');
     if (missingLogBtn) missingLogBtn.addEventListener('click', showMissingLogDialog);
-    const sheetSel = q('#dg-sheet-sel');
-    if (sheetSel) sheetSel.addEventListener('change', async (e) => {
-      state.excelSheet = e.target.value;
-      saveSettings();
-      if (state.excelFile) await loadExcel(state.excelFile, state.excelSheet);
-    });
-    const xlInfo = q('#dg-excel-info');
-    if (xlInfo) xlInfo.addEventListener('contextmenu', e => {
-      if (!state.excelFile) return;
-      e.preventDefault();
-      const filePath = _loadHandlePath('excel_file') || _tryGetHandlePath(state.excelFile);
-      _showCtxMenu(e.clientX, e.clientY, [
-        {
-          icon: '📊',
-          label: 'Megnyitás Excelben',
-          action: async () => {
-            if (!filePath) { toast('A fájl elérési útja nem elérhető. Ellenőrizd, hogy a PDF szerver fut.', 'warn'); return; }
-            const ok = await _openViaServer(filePath);
-            if (!ok) toast('Megnyitás sikertelen — a PDF szerver szükséges', 'error');
-          }
-        }
-      ]);
-    }, { passive: false });
-    q('#dg-choose-clients').addEventListener('click', openClientDialog);
-    q('#dg-set-dir').addEventListener('click', onSetTemplatesDir);
-    const switchDirBtn = q('#dg-switch-dir');
-    if (switchDirBtn) switchDirBtn.addEventListener('click', onSwitchTemplatesDir);
     q('#dg-manage-groups').addEventListener('click', openGroupsDialog);
     const visBtn = q('#dg-manage-visibility');
     if (visBtn) visBtn.addEventListener('click', openVisibilityDialog);
@@ -839,8 +764,10 @@ const DocgenModule = (() => {
   function bindWorkspace() {
     // Onboarding gombok — pointer-events:none CSS védi a 'disabled' lépéseket,
     // így a handlert mindig hozzácsatoljuk; a klick csak aktív lépésen sül el.
-    const obExcel = q('#dg-ob-excel');
-    if (obExcel) obExcel.addEventListener('click', onLoadExcel);
+    const obRegistry = q('#dg-ob-registry');
+    if (obRegistry) obRegistry.addEventListener('click', () => {
+      document.querySelector('.tab-btn[data-tab="registry"]')?.click();
+    });
     const obDir = q('#dg-ob-dir');
     if (obDir) obDir.addEventListener('click', onSetTemplatesDir);
     const obClients = q('#dg-ob-clients');
@@ -1062,79 +989,82 @@ const DocgenModule = (() => {
   }
 
   // ── Import-táblázat betöltés ───────────────────────────────────────────────
-  async function onLoadExcel() {
-    if (FsService.hasFsApi) {
-      try {
-        const [picked] = await window.showOpenFilePicker({
-          id: 'excel_file',
-          startIn: 'documents',
-          types: [{ description: 'Excel', accept: { 'application/octet-stream': ['.xlsx', '.xlsb', '.xlsm', '.xls'] } }],
-        });
-        await FsService.saveHandle('excel_file', picked);
-        _userPref('docgen_last_excel', picked.name);
-        const pickedPath = _tryGetHandlePath(picked);
-        if (pickedPath) _storeHandlePath('excel_file', pickedPath);
-        state.excelFile = picked;
-        const sheets = await ExcelService.listSheets(picked);
-        state.excelSheets = sheets;
-        state.excelSheet  = sheets[0] || '';
-        _populateSheetSelect(sheets, state.excelSheet);
-        await loadExcel(picked, state.excelSheet);
-        _refreshOnboardSteps();
-      } catch (e) {
-        if (e.name !== 'AbortError') {
-          BevLogger.error('EXCEL_OPEN', 'Excel fájl megnyitása sikertelen', e.message, '');
-          toast('Fájl megnyitási hiba: ' + e.message, 'error');
-        }
-      }
-    } else {
-      const inp = document.createElement('input');
-      inp.type = 'file'; inp.accept = '.xlsx,.xlsb,.xlsm,.xls';
-      inp.onchange = async () => {
-        if (!inp.files[0]) return;
-        state.excelFile = inp.files[0];
-        const sheets = await ExcelService.listSheets(inp.files[0]);
-        state.excelSheets = sheets;
-        state.excelSheet  = sheets[0] || '';
-        _populateSheetSelect(sheets, state.excelSheet);
-        await loadExcel(inp.files[0], state.excelSheet);
-        _refreshOnboardSteps();
-      };
-      inp.click();
+  /**
+   * Az adatforrás a nyilvántartás. A sorok mindig frissen állnak elő, hogy a
+   * Nyilvántartás fülön végzett módosítás azonnal látszódjon itt is.
+   *
+   * A kiválasztás kulcsa a rekord állandó belső azonosítója – korábban a
+   * megjelenített név volt, amitől két azonos nevű ember egybeolvadt.
+   */
+  function loadFromRegistry({ silent = false } = {}) {
+    if (!EmployeeRepo.hasBackend()) return;
+    try {
+      state.clientRows = EmployeeRepo.all();
+    } catch {
+      state.clientRows = [];   // a nyilvántartás még nincs betöltve
+      return;
     }
+
+    // Időközben törölt/archivált személyek kiesnek a kijelölésből
+    const letezo = new Set(state.clientRows.map(e => e.id));
+    const elotte = state.selectedClients.length;
+    state.selectedClients = state.selectedClients.filter(id => letezo.has(id));
+    if (!silent && elotte !== state.selectedClients.length) {
+      toast(`${elotte - state.selectedClients.length} kijelölt személy már nem elérhető`, 'warn');
+    }
+
+    updateClientCount();
+    saveSettings();
   }
 
-  async function loadExcel(handle, sheet) {
-    try {
-      const sheetName = sheet || state.excelSheet;
-      const allRows = sheetName
-        ? await ExcelService.readRowsFromSheet(handle, sheetName)
-        : await ExcelService.readRows(handle);
-      const notEmpty = v => v !== null && v !== undefined && String(v).trim() !== '';
-      const rows = allRows.filter(r =>
-        (notEmpty(r['Vezetéknév']) || notEmpty(r['Last name'])) &&
-        (notEmpty(r['Keresztnév']) || notEmpty(r['First name']))
-      );
-      state.clientRows = rows.map(DocxService.enrichClientRow);
-      window.updateHeaderBreadcrumb?.({
-        excelName: handle.name || '?',
-        clientCount: state.selectedClients.length,
-        onExcelClick: onLoadExcel,
-        onClientClick: openClientDialog,
-      });
-      const allNames = state.clientRows.map(rowDisplayName);
-      state.selectedClients = state.selectedClients.filter(n => allNames.includes(n));
-      toast(`✓ ${rows.length} ügyfél betöltve`, 'success');
-      if (!state.selectedClients.length)
-        toast('Válaszd ki az ügyfeleket a generáláshoz.', 'warn');
-      const loadBtn = q('#dg-load-excel');
-      if (loadBtn) loadBtn.textContent = 'Másik import-táblázat betöltése';
-      updateClientCount();
-      saveSettings();
-    } catch (e) {
-      BevLogger.error('EXCEL_LOAD', 'Import-táblázat betöltése sikertelen', e.message, state.excelFile?.name || '');
-      toast('Import-táblázat betöltési hiba: ' + e.message, 'error');
+  /** Egy rekord megjelenítendő neve a listákban és a fájlnevekben. */
+  function employeeName(emp) {
+    const v = SchemaStore.resolveValues(emp.fields, 'hu');
+    return v.full_name || v.surname || v.forename || '(névtelen)';
+  }
+
+  /**
+   * A sablonokba kerülő értékkészlet: a séma szerint magyarra renderelve,
+   * a számított mezőkkel együtt, plusz a nem sémabeli extra jelölők.
+   */
+  function buildRenderRow(emp) {
+    const v = SchemaStore.resolveValues(emp.fields, 'hu');
+
+    // A gépi kulcsok mellé a magyar címkék is bekerülnek kulcsként. Így a
+    // fájlnév-minták ([Vezetéknév]) és a magyar nevű sablon-jelölők a
+    // séma-feloldó nélkül, egyszerű kulcskereséssel is működnek.
+    for (const f of SchemaStore.fields()) {
+      const cimke = f.label.hu;
+      if (cimke && v[cimke] === undefined) v[cimke] = v[f.key];
     }
+
+    v['mai nap'] = state.maiNap;
+    const sap = EmployeeRepo.currentIdentifier(emp, 'sap');
+    if (sap) v['Azonosító'] = sap.value;
+    return v;
+  }
+
+  /**
+   * Séma-alapú jelölő-feloldó egy rekordhoz.
+   *
+   * Ez teszi lehetővé a kétnyelvű sablonokat: `{{Neme}}` → „Férfi",
+   * `{{Neme_EN}}` → „Male" – ugyanabból a mezőből, a séma fordításai alapján.
+   * A magyar címke, a gépi kulcs és a jelölő-aliasok mind működnek.
+   */
+  function makeSchemaResolver(emp) {
+    const gyorsito = new Map();
+    return (name) => {
+      if (gyorsito.has(name)) return gyorsito.get(name);
+      let out = null;
+      const hit = SchemaStore.resolveTag(name);
+      if (hit) {
+        out = hit.field.type === 'computed'
+          ? SchemaStore.computeField(hit.field, emp.fields, hit.lang)
+          : ValueCodec.render(hit.field, emp.fields[hit.field.key], hit.lang);
+      }
+      gyorsito.set(name, out);
+      return out;
+    };
   }
 
   function updateClientCount() {
@@ -1145,13 +1075,13 @@ const DocgenModule = (() => {
       badge.textContent = state.selectedClients.length;
       badge.className = 'badge ' + (state.selectedClients.length ? 'badge-green' : 'badge-muted');
     }
-    const canPick = state.clientRows.length > 0 || state.selectedClients.length > 0;
-    q('#dg-choose-clients').disabled = !canPick;
+    const canPick = state.clientRows.length > 0;
+    const pickBtn = q('#dg-choose-clients');
+    if (pickBtn) pickBtn.disabled = !canPick;
     updateGenSummary();
     window.updateHeaderBreadcrumb?.({
-      excelName: state.excelFile?.name,
+      sourceName: state.clientRows.length ? `Nyilvántartás (${state.clientRows.length} személy)` : null,
       clientCount: state.selectedClients.length,
-      onExcelClick: onLoadExcel,
       onClientClick: openClientDialog,
     });
   }
@@ -1447,7 +1377,11 @@ const DocgenModule = (() => {
     const defaultPreview = `${templateName} (default: VEZNEV KERNEV ${templateName}.docx)`;
 
     // Példa-row a preview-hoz (első kiválasztott vagy első bármely sor)
-    const exampleRow = state.clientRows[0] || { 'Vezetéknév': 'MINTA', 'Keresztnév': 'József' };
+    // Az előnézet a séma szerint renderelt értékeket használja, hogy a
+    // fájlnév-minta pontosan azt mutassa, ami a generáláskor is keletkezik.
+    const exampleRow = state.clientRows[0]
+      ? buildRenderRow(state.clientRows[0])
+      : { 'Vezetéknév': 'MINTA', 'Keresztnév': 'József', surname: 'MINTA', forename: 'József' };
 
     showDialog({
       title: `Generált dokumentum elnevezése — ${templateName}`,
@@ -1737,32 +1671,31 @@ const DocgenModule = (() => {
     }
   }
 
-  function _populateSheetSelect(sheets, current) {
-    const sel = q('#dg-sheet-sel');
-    if (!sel) return;
-    sel.innerHTML = sheets.map(s => `<option ${s === current ? 'selected' : ''}>${escHtml(s)}</option>`).join('');
-    sel.style.display = sheets.length > 1 ? '' : 'none';
-  }
-
-  // ── Ügyfél-választó ───────────────────────────────────────────────────────
+  // ── Személy-választó ───────────────────────────────────────────────────────
   async function openClientDialog() {
+    loadFromRegistry({ silent: true });
     if (!state.clientRows.length) {
-      if (state.excelFile) {
-        try {
-          if (await FsService.verifyPermission(state.excelFile)) {
-            await loadExcel(state.excelFile, state.excelSheet);
-          } else { toast('Import-táblázat hozzáférés megtagadva', 'error'); return; }
-        } catch { toast('Import-táblázat visszatöltése sikertelen', 'error'); return; }
-      } else { toast('Tölts be import-táblázatot!', 'warn'); return; }
+      toast('A nyilvántartás üres — vidd fel a személyeket a Nyilvántartás fülön.', 'warn');
+      return;
     }
-    if (!state.clientRows.length) return;
+
+    // A választóban a séma szerinti, magyarra fordított értékek jelennek meg,
+    // de a kiválasztás kulcsa az állandó belső azonosító marad.
+    const megjelenites = state.clientRows.map(emp => {
+      const v = SchemaStore.resolveValues(emp.fields, 'hu');
+      const sap = EmployeeRepo.currentIdentifier(emp, 'sap');
+      return Object.assign({}, v, {
+        __id: emp.id,
+        'Azonosító': sap ? sap.value : '',
+      });
+    });
 
     ClientPicker.open({
-      title:      'Ügyfelek kiválasztása',
-      rows:       state.clientRows,
+      title:      'Személyek kiválasztása',
+      rows:       megjelenites,
       storageKey: 'docgen-clients',
       selected:   state.selectedClients,
-      rowKey:     rowDisplayName,
+      rowKey:     r => r.__id,
       onSave: (rows, keys) => {
         state.selectedClients = keys;
         updateClientCount();
@@ -2002,7 +1935,9 @@ const DocgenModule = (() => {
   }
 
   function _excelBase() {
-    return state.excelFile ? (state.excelFile.name || '').replace(/\.[^.]+$/, '') : '';
+    // Korábban az import-táblázat fájlneve adta az alapnevet; az adatforrás
+    // mostantól a nyilvántartás, ezért ez üres.
+    return '';
   }
 
   function _isMergeTemplateIncluded(tpl) {
@@ -2087,7 +2022,7 @@ const DocgenModule = (() => {
     let items, subNote;
 
     if (state.mergeMode === 'per_client') {
-      const rows = state.clientRows.filter(r => state.selectedClients.includes(rowDisplayName(r)));
+      const rows = state.clientRows.filter(r => state.selectedClients.includes(r.id));
       items = rows.map(row => _applyMergeName(naming.perClient, {
         'Vezetéknév': row['Vezetéknév'] || '',
         'Keresztnév': row['Keresztnév'] || '',
@@ -2282,7 +2217,7 @@ const DocgenModule = (() => {
 
     if (state.mergeMode === 'per_client') {
       for (const client of clients) {
-        const clientName = rowDisplayName(client);
+        const clientName = employeeName(client);
         const bufs = includedTpls.map(tpl => {
           const entry = generated.find(g => g.clientName === clientName && g.templateName === tpl);
           if (!entry) return null;
@@ -2304,11 +2239,11 @@ const DocgenModule = (() => {
       }
     } else {
       const sortedClients = [...clients].sort((a, b) =>
-        rowDisplayName(a).localeCompare(rowDisplayName(b), 'hu'));
+        employeeName(a).localeCompare(employeeName(b), 'hu'));
 
       for (const tpl of includedTpls) {
         const bufs = sortedClients.map(client => {
-          const clientName = rowDisplayName(client);
+          const clientName = employeeName(client);
           const entry = generated.find(g => g.clientName === clientName && g.templateName === tpl);
           if (!entry) return null;
           return pdfBufferMap.get(entry.name.replace(/\.docx$/i, '.pdf')) || null;
@@ -2325,7 +2260,7 @@ const DocgenModule = (() => {
         const merged = await mergePdfs(bufs);
         await _savePdfBuffer(merged, outName);
         BevLogger.info('PDF_MERGE_DONE', `Összefűzött PDF mentve (sablononként): ${outName}`,
-          `clients=${sortedClients.map(rowDisplayName).join('|')}, tpl=${tpl}`, `user=${currentUser}`);
+          `clients=${sortedClients.map(employeeName).join('|')}, tpl=${tpl}`, `user=${currentUser}`);
       }
     }
   }
@@ -2460,7 +2395,7 @@ const DocgenModule = (() => {
         : '⬇ Letöltés (böngésző)';
 
       const rows = clients.map(client => {
-        const name = rowDisplayName(client);
+        const name = employeeName(client);
         return `
           <div style="display:flex;align-items:flex-start;gap:8px;padding:5px 8px;
               border-radius:6px;background:var(--c-bg);margin-bottom:3px">
@@ -2533,7 +2468,7 @@ const DocgenModule = (() => {
     const items = [];
     for (let ti = 0; ti < templates.length; ti++)
       for (let ci = 0; ci < clients.length; ci++)
-        items.push({ clientName: rowDisplayName(clients[ci]), templateName: templates[ti], status: 'waiting' });
+        items.push({ clientName: employeeName(clients[ci]), templateName: templates[ti], status: 'waiting' });
 
     const total = items.length;
     let doneCount = 0;
@@ -2618,7 +2553,7 @@ const DocgenModule = (() => {
     if (!state.chosenTemplates.size)     { toast('Nincs kiválasztott sablon', 'warn'); return; }
     if (!state.templatesDir)             { toast('Nincs sablonmappa beállítva', 'warn'); return; }
 
-    const clients   = state.clientRows.filter(r => state.selectedClients.includes(rowDisplayName(r)));
+    const clients   = state.clientRows.filter(r => state.selectedClients.includes(r.id));
     const templates = [...state.chosenTemplates];
     const total     = clients.length * templates.length;
     let done = 0;
@@ -2635,7 +2570,7 @@ const DocgenModule = (() => {
       BevLogger.snapshot({ clients: clients.length, templates: templates.length, total,
         outputDir: state.outputDir?.name || null,
         templatesDir: state.templatesDir?.name || null }),
-      `user=${currentUser}, clients=[${clients.slice(0,5).map(rowDisplayName).join('|')}${clients.length>5?'…':''}], templates=[${templates.slice(0,5).join('|')}${templates.length>5?'…':''}]`);
+      `user=${currentUser}, clients=[${clients.slice(0,5).map(employeeName).join('|')}${clients.length>5?'…':''}], templates=[${templates.slice(0,5).join('|')}${templates.length>5?'…':''}]`);
 
     setStatus('Generálás…', 0);
     setGenButtons(false);
@@ -2658,7 +2593,7 @@ const DocgenModule = (() => {
           for (let ci = 0; ci < clients.length; ci++) {
             const itemIdx = ti * clients.length + ci;
             progress.setError(itemIdx);
-            errors.push(`${rowDisplayName(clients[ci])} / ${templateName}: sablon nem található`);
+            errors.push(`${employeeName(clients[ci])} / ${templateName}: sablon nem található`);
             done++;
           }
           setStatus(`Sablon hiányzik: ${templateName}`, Math.round(done / total * 100));
@@ -2668,14 +2603,15 @@ const DocgenModule = (() => {
         for (let ci = 0; ci < clients.length; ci++) {
           const row = clients[ci];
           const itemIdx = ti * clients.length + ci;
-          const clientName = rowDisplayName(row);
+          const clientName = employeeName(row);
           const pct = Math.round(done / total * 100);
           progress.setActive(itemIdx);
           setStatus(`${clientName} / ${templateName}  (${done + 1}/${total})`, pct);
           await _yieldFrame();   // ← böngésző repaint engedélyezése ELŐTTE, hogy a státusz látszódjon
           try {
-            const enrichedRow = { ...row, 'mai nap': state.maiNap };
-            const { buffer: outBuf, emptyTags } = await DocxService.generateDocx(tmplBuf, enrichedRow);
+            const enrichedRow = buildRenderRow(row);
+            const { buffer: outBuf, emptyTags } = await DocxService.generateDocx(
+              tmplBuf, enrichedRow, { resolve: makeSchemaResolver(row) });
             emptyTags.forEach(t => allEmptyTags.add(t));
             if (emptyTags.length > 0) {
               missingLogEntries.push({
@@ -2941,5 +2877,11 @@ const DocgenModule = (() => {
     return null;
   }
 
-  return { init };
+  return {
+    init,
+    // A sablonokba kerülő értékkészlet és a jelölő-feloldó: előnézethez és
+    // ellenőrzéshez kívülről is használható.
+    buildRenderRow,
+    makeSchemaResolver,
+  };
 })();

@@ -28,11 +28,31 @@ const DocxService = (() => {
     return s;
   }
 
-  // emptyTags: opcionális Set — ide kerülnek azok a tag-ek, melyekre nem volt adat
-  function makeParser(data, emptyTags) {
+  /**
+   * Jelölő-feloldó a sablonokhoz.
+   *
+   * @param data      sima objektum: kulcs = oszlopnév (a séma nélküli, régi mód)
+   * @param emptyTags opcionális Set — ide kerülnek azok a jelölők, amikre nem volt adat
+   * @param resolve   opcionális függvény: (mezőnév) => string | null
+   *                  Ez a séma-alapú feloldás belépési pontja: ismeri a magyar és
+   *                  angol változatot (`Neme` / `Neme_EN`) és a számított mezőket.
+   *                  `null` = a séma nem ismeri, essünk vissza a sima kulcskeresésre.
+   */
+  function makeParser(data, emptyTags, resolve) {
     const normalized = {};
-    for (const k of Object.keys(data)) {
+    for (const k of Object.keys(data || {})) {
       normalized[String(k).trim().toLowerCase()] = k;
+    }
+
+    function lookup(name) {
+      if (resolve) {
+        const v = resolve(name);
+        if (v !== null && v !== undefined) return v;
+      }
+      const origKey = normalized[name.toLowerCase().replace(/_/g, ' ')]
+                   ?? normalized[name.toLowerCase()]
+                   ?? name;
+      return data ? data[origKey] : '';
     }
 
     return (tag) => ({
@@ -40,16 +60,13 @@ const DocxService = (() => {
         let t = String(tag || '').trim();
 
         if (t.startsWith('CHECK:')) {
-          const col = t.slice(6).trim();
-          const origKey = normalized[col.toLowerCase()] || col;
-          const val = String(data[origKey] ?? '').trim().toLowerCase();
+          const val = String(lookup(t.slice(6).trim()) ?? '').trim().toLowerCase();
           return TRUTHY.has(val) ? CHECKED : UNCHECKED;
         }
 
         if (t.startsWith('B:')) t = t.slice(2).trim();
 
-        const origKey = normalized[t.toLowerCase().replace(/_/g, ' ')] ?? normalized[t.toLowerCase()] ?? t;
-        const result = formatValue(data[origKey]);
+        const result = formatValue(lookup(t));
 
         // Ha üres az eredmény és van tracker, rögzítjük a hiányzó mezőt
         if (emptyTags && result === '') emptyTags.add(t);
@@ -87,14 +104,17 @@ const DocxService = (() => {
 
   // Visszatérési érték: { buffer: Uint8Array, emptyTags: string[] }
   // emptyTags: azon sablon-mezők nevei, melyekhez nem volt adat az import sorban
-  async function generateDocx(templateBuffer, rowData) {
+  //
+  // opts.resolve: séma-alapú feloldó. Ha meg van adva, a számított mezőket a séma
+  // adja, ezért az itteni (bedrótozott) összefűzés kimarad.
+  async function generateDocx(templateBuffer, rowData, opts = {}) {
     const zip  = new PizZip(templateBuffer);
-    const data = enrichClientRow(rowData);
+    const data = opts.resolve ? (rowData || {}) : enrichClientRow(rowData);
     const emptyTags = new Set();
 
     const doc = new Docxtemplater(zip, {
       delimiters: { start: '{{', end: '}}' },
-      parser: makeParser(data, emptyTags),
+      parser: makeParser(data, emptyTags, opts.resolve),
       nullGetter: () => '',
       paragraphLoop: true,
       linebreaks: true,
