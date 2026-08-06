@@ -82,10 +82,24 @@ embert, és az ismételt import nem hoz létre duplikátumot.
 
 ## PDF
 
-A generálás `.docx`-et készít. A PDF-fé alakítás **külön lépés**, mert szerver
-nem telepíthető. Hogy melyik út járható ezen a gépen, azt a
-[`tools/pdf-proba/`](tools/pdf-proba/OLVASD-EL.md) csomag dönti el —
-kattintsd végig, és írd be az eredményt az `EREDMENY.md`-be.
+A generálás `.docx`-et készít. A PDF-fé alakítás **külön lépés**, mert
+böngészőből nem lehet Wordöt vezérelni, szervert pedig nem telepíthetünk.
+
+1. Generálj — a `.docx` fájlok a kimeneti mappába kerülnek
+2. Másold a **`tools/docx-pdf.vbs`** fájlt a kimeneti mappába, és kattints rá
+   duplán (vagy húzd rá a mappát) — minden `.docx` mellé PDF kerül, almappákban is
+3. Ha összefűzött PDF is kell: **Dokumentumok → Összefűzés a kimeneti mappából**
+
+A konverzió a Wordöt használja, ezért a PDF **teljesen hű** az eredetihez.
+Ha már fut a Word, a szkript ahhoz csatlakozik és nem zárja be a végén.
+
+> **Ha szerkeszted a `.vbs` fájlt:** UTF-16 LE kódolással, BOM-mal mentsd.
+> A Windows Script Host különben ANSI-ként olvassa, és minden ékezet elromlik —
+> nemcsak az üzenetekben, hanem a PDF-ben is. (UTF-8 BOM-mal el sem indul.)
+> A `test/vbs-encoding.test.js` ezt ellenőrzi.
+
+A környezet felmérésének csomagja: [`tools/pdf-proba/`](tools/pdf-proba/OLVASD-EL.md),
+az eredménye: [`EREDMENY.md`](tools/pdf-proba/EREDMENY.md).
 
 ## Frissítés
 
@@ -102,8 +116,8 @@ valóban megtörtént, órákat vitt el, mire kiderült.
 node test/run-all.js
 ```
 
-Hat tesztcsomag, 140 teszt — séma, azonosító-történet, xlsx oda-vissza,
-jelölőfeloldás. Böngészőt nem igényel.
+Nyolc tesztcsomag, 152 teszt — séma, azonosító-történet, xlsx oda-vissza,
+jelölőfeloldás, naplózás, szkript-kódolás. Böngészőt nem igényel.
 
 Nincs build-lépés és nincs csomagkezelő: a `js/` fájljai közvetlenül töltődnek
 be, a sorrendjük az `index.html`-ben számít. Új modul a saját rétegének végére

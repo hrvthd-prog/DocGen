@@ -20,6 +20,11 @@ const DocgenModule = (() => {
     activeGroups:     new Set(),
     outputDir:        null,
     maiNap:           '',
+    // A legutóbbi generálás fájljai [{name, clientName, templateName}].
+    // Ebből találja meg az összefűzés a lemezre került PDF-eket.
+    // Szándékosan csak memóriában él: a fájlnevek személyneveket tartalmaznak,
+    // ezért nem tesszük a böngésző tárolójába.
+    lastGenerated:    [],
     // ── PDF összefűzés ──────────────────────────────────────────────────────
     mergeEnabled:    false,
     mergeMode:       'per_client',   // 'per_client' | 'per_template'
@@ -117,16 +122,12 @@ const DocgenModule = (() => {
 
   // ── PDF kimenet ───────────────────────────────────────────────────────────
   // A PDF-előállítás tudatosan le van választva a generálásról: az app dolga ott
-  // ér véget, hogy helyes nevű DOCX-ek vannak a kimeneti mappában. A konverziós
-  // sávot (Word-makró / .vbs / Microsoft Print to PDF / böngészős nyomtatás) a
-  // környezet-próba eredménye alapján a 9. fázis köti be ide – addig a böngészős
-  // nyomtatás az egyetlen út, ami mindenhol működik.
-  const PdfBackend = {
-    isAvailable() { return false; },
-    async convert(/* docxBuf, filename */) {
-      throw new Error('Nincs beállított PDF-konverzió.');
-    },
-  };
+  // ér véget, hogy helyes nevű DOCX-ek vannak a kimeneti mappában.
+  //
+  // A konverziót a tools/docx-pdf.vbs végzi (Word COM) – a környezet-próba
+  // szerint ez az út járható, és teljes Word-hűséget ad. Böngészőből nem lehet
+  // Wordöt vezérelni, ezért itt nincs és nem is lehet beépített konverzió;
+  // tartaléknak marad a böngészős nyomtatás (openPrintSelectDialog).
 
   // A korábbi helyi kiszolgáló nyitotta meg a mappákat az Intézőben és oldotta fel
   // az abszolút útvonalakat. Ezek kényelmi funkciók voltak – hiányukban az app
@@ -1770,7 +1771,6 @@ const DocgenModule = (() => {
     const errors = [], generated = [];
     const allEmptyTags      = new Set();   // összegyűjtött hiányzó mezők az összes dokumentumból
     const missingLogEntries = [];          // naplóba kerülő bejegyzések
-    const pdfBufferMap      = new Map();   // pdfName → Uint8Array (összefűzéshez)
 
     // ── Live progress az összesítő kártyán ───────────────────────────────────
     const progress = _openProgressDialog(clients, templates);
@@ -1877,48 +1877,19 @@ const DocgenModule = (() => {
         }
       }
 
-      if (pdf && generated.length) {
-        progress.setPhase('PDF generálása…');
-        if (PdfBackend.isAvailable()) {
-          let pi = 0;
-          for (const { buf, name, itemIdx } of generated) {
-            progress.setPdf(itemIdx);
-            const pdfName = name.replace(/\.docx$/i, '.pdf');
-            setStatus(`PDF (${pi + 1}/${generated.length}): ${pdfName}`, Math.round(pi / generated.length * 100));
-            try {
-              const pdfBuf = await PdfBackend.convert(buf, name);
-              pdfBufferMap.set(pdfName, pdfBuf);
-              if (state.outputDir) {
-                try { await FsService.writeToDir(state.outputDir, pdfName, pdfBuf); }
-                catch { saveAs(new Blob([pdfBuf], { type: 'application/pdf' }), pdfName); }
-              } else {
-                saveAs(new Blob([pdfBuf], { type: 'application/pdf' }), pdfName);
-              }
-            } catch (e) {
-              BevLogger.error('PDF_CONVERT', `PDF konverzió sikertelen: ${pdfName}`,
-                `error=${e.message}\nstack=${e.stack || '(no stack)'}\nfilename=${name}, bufSize=${buf?.length || 0}`,
-                `pdfName=${pdfName}, user=${currentUser}, outputDir=${state.outputDir?.name || 'browser-download'}`);
-              errors.push(`PDF – ${pdfName}: ${e.message}`);
-            }
-            pi++;
-          }
-        } else {
-          openPrintSelectDialog(generated);
-        }
+      // A PDF-fé alakítás szándékosan NEM része a generálásnak: böngészőből nem
+      // lehet Wordöt vezérelni, szervert pedig nem telepíthetünk. Az app itt
+      // befejezi a dolgát – helyes nevű DOCX-ek vannak a kimeneti mappában –,
+      // a konverziót a tools/docx-pdf.vbs végzi (Word COM, teljes hűséggel).
+      //
+      // Ezt jegyezzük meg, hogy az összefűzés utólag megtalálja a PDF-eket:
+      state.lastGenerated = generated.map(g => ({
+        name: g.name, clientName: g.clientName, templateName: g.templateName,
+      }));
 
-        // ── PDF összefűzési fázis ─────────────────────────────────────────────
-        if (state.mergeEnabled && pdfBufferMap.size > 0) {
-          progress.setPhase('PDF összefűzés…');
-          setStatus('PDF összefűzés…', 99);
-          try {
-            await DocgenMerge.run(pdfBufferMap, generated, clients, templates);
-            const mergedCount = state.mergeMode === 'per_client' ? clients.length : [...state.chosenTemplates].filter(DocgenMerge.isTemplateIncluded).length;
-            toast(`✓ ${mergedCount} összefűzött PDF elkészítve`, 'success');
-          } catch (e) {
-            BevLogger.error('PDF_MERGE', 'PDF összefűzés sikertelen', `error=${e.message}`, `user=${currentUser}`);
-            errors.push(`PDF összefűzés: ${e.message}`);
-          }
-        }
+      if (pdf && generated.length) {
+        // Tartalék út, ha valakinél nem működik a .vbs: böngészős nyomtatás.
+        openPrintSelectDialog(generated);
       }
 
       progress.finish(errors.length);

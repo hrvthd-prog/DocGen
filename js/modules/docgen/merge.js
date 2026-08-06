@@ -98,6 +98,17 @@ const DocgenMerge = (() => {
             letter-spacing:.05em;margin-bottom:6px">Elkészülő összefűzött fájlok</div>
         <div id="dg-merge-preview">${_buildMergePreviewHTML()}</div>
       </div>
+
+      <div style="padding:8px 12px;border-top:1px solid var(--c-border)">
+        <button class="btn btn-primary btn-sm" id="dg-merge-run-btn"
+          style="font-size:11px;width:100%">
+          Összefűzés a kimeneti mappából
+        </button>
+        <div style="font-size:10px;color:var(--c-muted);margin-top:5px;line-height:1.4">
+          Előbb generálj, majd futtasd a <code>docx-pdf.vbs</code> fájlt a kimeneti
+          mappában — utána kattints ide.
+        </div>
+      </div>
       ${Settings.isAdmin() ? `
       <div style="padding:4px 12px 8px;border-top:1px solid var(--c-border)">
         <button class="btn btn-ghost btn-sm" id="dg-merge-naming-btn"
@@ -228,6 +239,22 @@ const DocgenMerge = (() => {
     }
     const namingBtn = ctx.q('#dg-merge-naming-btn');
     if (namingBtn) namingBtn.addEventListener('click', openMergeNamingDialog);
+
+    const runBtn = ctx.q('#dg-merge-run-btn');
+    if (runBtn) runBtn.addEventListener('click', async () => {
+      runBtn.disabled = true;
+      const eredetiSzoveg = runBtn.textContent;
+      runBtn.textContent = 'Összefűzés…';
+      try {
+        await runFromOutputDir();
+      } catch (e) {
+        BevLogger.error('PDF_MERGE', 'PDF összefűzés sikertelen', `error=${e.message}`, `user=${currentUser}`);
+        toast(`PDF összefűzés: ${e.message}`, 'error');
+      } finally {
+        runBtn.disabled = false;
+        runBtn.textContent = eredetiSzoveg;
+      }
+    });
   }
 
   function openMergeNamingDialog() {
@@ -293,6 +320,57 @@ const DocgenMerge = (() => {
       try { await FsService.writeToDir(ctx.state.outputDir, filename, buf); return; } catch {}
     }
     saveAs(new Blob([buf], { type: 'application/pdf' }), filename);
+  }
+
+  /**
+   * Összefűzés a kimeneti mappában TALÁLHATÓ PDF-ekből.
+   *
+   * Az app csak DOCX-et készít; a PDF-fé alakítás külön lépés
+   * (tools/docx-pdf.vbs). Ezért az összefűzés nem a generálás része, hanem
+   * utólagos művelet: beolvassa a legutóbbi generálás fájljaihoz tartozó
+   * PDF-eket a lemezről, és azokat fűzi össze.
+   */
+  async function runFromOutputDir() {
+    const gen = ctx.state.lastGenerated;
+    if (!gen || !gen.length) {
+      toast('Előbb generálj dokumentumokat', 'warn');
+      return;
+    }
+    if (!ctx.state.outputDir) {
+      toast('Nincs kimeneti mappa kiválasztva', 'warn');
+      return;
+    }
+
+    // A DOCX mellé a .vbs azonos alapnéven teszi le a PDF-et.
+    const map = new Map();
+    const hianyzo = [];
+    for (const g of gen) {
+      const pdfNev = g.name.replace(/\.docx$/i, '.pdf');
+      try {
+        const buf = await FsService.readFromDir(ctx.state.outputDir, pdfNev);
+        if (buf) map.set(pdfNev, buf); else hianyzo.push(pdfNev);
+      } catch { hianyzo.push(pdfNev); }
+    }
+
+    if (!map.size) {
+      toast('Nincs egyetlen PDF sem a kimeneti mappában — futtasd előbb a docx-pdf.vbs fájlt', 'warn');
+      BevLogger.warn('PDF_MERGE_NOPDF', 'Összefűzés PDF nélkül',
+        `vart=${gen.length}, hianyzo=${hianyzo.length}`, `user=${currentUser}`);
+      return;
+    }
+
+    const clients   = ctx.state.clientRows.filter(r => ctx.state.selectedClients.includes(r.id));
+    const templates = [...ctx.state.chosenTemplates];
+
+    await _runPdfMerge(map, gen, clients, templates);
+
+    if (hianyzo.length) {
+      toast(`✓ Összefűzve — ${hianyzo.length} PDF hiányzott`, 'warn');
+      BevLogger.warn('PDF_MERGE_PARTIAL', `Összefűzés hiányos: ${hianyzo.length} PDF nem volt meg`,
+        hianyzo.slice(0, 10).join('\n'), `user=${currentUser}`);
+    } else {
+      toast('✓ PDF-ek összefűzve', 'success');
+    }
   }
 
   async function _runPdfMerge(pdfBufferMap, generated, clients, templates) {
@@ -363,7 +441,7 @@ const DocgenMerge = (() => {
         const merged = await mergePdfs(bufs);
         await _savePdfBuffer(merged, outName);
         BevLogger.info('PDF_MERGE_DONE', `Összefűzött PDF mentve (sablononként): ${outName}`,
-          `clients=${sortedClients.map(employeeName).join('|')}, tpl=${tpl}`, `user=${currentUser}`);
+          `clients=${sortedClients.map(ctx.employeeName).join('|')}, tpl=${tpl}`, `user=${currentUser}`);
       }
     }
   }
@@ -375,6 +453,7 @@ const DocgenMerge = (() => {
     bindCardBody:     _bindMergeCardBody,
     updateCard:       updateMergeCard,
     run:              _runPdfMerge,
+    runFromOutputDir,
     isTemplateIncluded: _isMergeTemplateIncluded,
     MERGE_KEY,
   };
