@@ -214,9 +214,32 @@ const XlsxWrite = (() => {
 
   // ── Kimenet ────────────────────────────────────────────────────────────────
 
+  // A fejlesztés során EGYSZER előfordult, hogy a writeBuffer() nem tért vissza
+  // (a UI némán megállt). Sokszori újraméréssel nem sikerült reprodukálni –
+  // minden alkalommal 17–26 ms alatt lefutott –, ezért az okát nem ismerjük.
+  //
+  // Amíg nem tudjuk, legalább ne néma fagyás legyen belőle: ha a kiírás
+  // ésszerű időn belül nem fejeződik be, hibát dobunk, amit a hívó meg tud
+  // jeleníteni és a napló rögzít. A határ ezerszerese a mért időnek, tehát
+  // lassú gépen sem szólal meg tévesen.
+  const IRAS_HATARIDO_MS = 30000;
+
   async function toBuffer(opts) {
     const wb = await build(opts);
-    return wb.xlsx.writeBuffer();
+
+    let idozito;
+    const hatarido = new Promise((_, elutasit) => {
+      idozito = setTimeout(() => elutasit(new Error(
+        `Az xlsx kiírása ${IRAS_HATARIDO_MS / 1000} másodperc alatt sem fejeződött be. ` +
+        'Próbáld újra; ha ismétlődik, jelezd — ez egy ismert, még nem tisztázott hiba.'
+      )), IRAS_HATARIDO_MS);
+    });
+
+    try {
+      return await Promise.race([wb.xlsx.writeBuffer(), hatarido]);
+    } finally {
+      clearTimeout(idozito);
+    }
   }
 
   function suggestFilename(profile, filled) {

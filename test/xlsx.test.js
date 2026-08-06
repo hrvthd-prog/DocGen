@@ -385,6 +385,62 @@ atest('hiányos sor kimarad, nem hoz létre féloldalas rekordot', async () => {
 });
 
 // ── Futtatás ────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// Az xlsx-kiírás időkorlátja
+//
+// A fejlesztés során egyszer előfordult, hogy a writeBuffer() nem tért vissza,
+// és a felület némán megállt. Reprodukálni nem sikerült, ezért az okát nem
+// ismerjük — de az őrnek, ami hibává alakítja a fagyást, működnie kell.
+// A forrás egy másolatán rövidített határidővel próbáljuk ki, hogy a teszt
+// gyors maradjon; minden más a valódi kód.
+asection('Az xlsx-kiírás nem fagyhat be némán');
+
+function xlsxWriteRovidHataridovel(writeBufferFn) {
+  const forras = fs.readFileSync(path.join(__dirname, '../js/services/xlsx-write.js'), 'utf8')
+    .replace('const IRAS_HATARIDO_MS = 30000;', 'const IRAS_HATARIDO_MS = 80;');
+  if (!/IRAS_HATARIDO_MS = 80/.test(forras)) {
+    throw new Error('nem találom az időkorlát-konstanst — átnevezték?');
+  }
+
+  // Valódi ExcelJS, hogy a build() rendesen lefusson; csak a záró hívást cseréljük.
+  class AkadoWorkbook extends ExcelJS.Workbook {
+    constructor() { super(); this.xlsx.writeBuffer = writeBufferFn; }
+  }
+
+  const sb = { ...sandbox, ExcelJS: { ...ExcelJS, Workbook: AkadoWorkbook } };
+  sb.globalThis = sb; sb.window = sb; sb.self = sb;
+  vm.createContext(sb);
+  for (const [rel, name] of modules) {
+    let code = fs.readFileSync(path.join(__dirname, rel), 'utf8');
+    if (rel.endsWith('xlsx-write.js')) code = forras;
+    code += `\nglobalThis.${name} = ${name};`;
+    vm.runInContext(code, sb, { filename: rel });
+  }
+  sb.SchemaStore.loadFrom(sb.SEED_SCHEMA);
+  sb.ExportProfiles.loadFrom(null);
+  return sb;
+}
+
+atest('a beragadt kiírás hibává alakul, nem néma fagyássá', async () => {
+  const sb = xlsxWriteRovidHataridovel(() => new Promise(() => {}));   // sosem tér vissza
+  const kezdet = Date.now();
+  let hiba = null;
+  try {
+    await sb.XlsxWrite.toBuffer({ schema: sb.SchemaStore.get(), profile: sb.ExportProfiles.get('horizontes'), employees: [] });
+  } catch (e) { hiba = e; }
+
+  assert(hiba, 'nem dobott hibát — a felület némán fagyna');
+  assert(/sem fejeződött be/.test(hiba.message), `váratlan hibaüzenet: ${hiba.message}`);
+  const eltelt = Date.now() - kezdet;
+  assert(eltelt < 3000, `túl sokáig várt: ${eltelt} ms`);
+});
+
+atest('a normál kiírást az őr nem zavarja', async () => {
+  const sb = xlsxWriteRovidHataridovel(() => Promise.resolve(Buffer.from('xlsx-adat')));
+  const buf = await sb.XlsxWrite.toBuffer({ schema: sb.SchemaStore.get(), profile: sb.ExportProfiles.get('horizontes'), employees: [] });
+  assert(buf && Buffer.from(buf).toString() === 'xlsx-adat', 'nem a várt puffert adta vissza');
+});
+
 (async () => {
   for (const item of queue) {
     if (item.section) { console.log(`\n[${item.section}]`); continue; }
