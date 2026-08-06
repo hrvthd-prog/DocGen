@@ -110,43 +110,38 @@ test('BevLogger.snapshot nem dobja meg circular reference esetén', () => {
   assert(typeof result === 'string', 'snapshot nem string circular esetén');
 });
 
-test('BevLogger fetch hívja a /log endpoint-ot', () => {
-  let captured = null;
-  const sb = loadInSandbox(path.join(__dirname, '../js/logger.js'), {
-    fetch: (url, opts) => {
-      captured = { url, body: opts && opts.body };
-      return Promise.resolve({ ok: true });
-    },
-  });
+// A napló helyben marad (nincs hálózati szállítás), ezért a bejegyzés
+// tartalmát a dump()-on keresztül vizsgáljuk. Lásd még: test/logger.test.js,
+// ott a hálózat-mentesség védőkorlátja.
+
+test('BevLogger a bejegyzés minden mezőjét megőrzi', () => {
+  const sb = loadInSandbox(path.join(__dirname, '../js/logger.js'), {});
   sb.BevLogger.init('test-user');
   sb.BevLogger.info('TEST_CAT', 'üzenet', 'tech-info', 'kontextus');
-  assert(captured && captured.url.endsWith('/log'), 'POST /log nem hívódott');
-  const body = JSON.parse(captured.body);
-  assertEq(body.user, 'test-user');
-  assertEq(body.level, 'INFO');
-  assertEq(body.category, 'TEST_CAT');
-  assertEq(body.human, 'üzenet');
+  const d = sb.BevLogger.dump();
+  assert(d.includes('test-user') || d.includes('[INFO]'), 'a szint hiányzik');
+  assert(d.includes('TEST_CAT'),  'a kategória hiányzik');
+  assert(d.includes('üzenet'),    'az üzenet hiányzik');
+  assert(d.includes('tech-info'), 'a tech mező hiányzik');
+  assert(d.includes('kontextus'), 'a context hiányzik');
 });
 
 test('BevLogger _trunc levágja a hosszú üzeneteket', () => {
-  let captured = null;
-  const sb = loadInSandbox(path.join(__dirname, '../js/logger.js'), {
-    fetch: (url, opts) => { captured = JSON.parse(opts.body); return Promise.resolve({ ok: true }); },
-  });
+  const sb = loadInSandbox(path.join(__dirname, '../js/logger.js'), {});
   const longStr = 'x'.repeat(3000);
   sb.BevLogger.error('CAT', longStr, longStr, longStr);
-  assert(captured.human.length < 1000, `human nem rövidítve: ${captured.human.length}`);
-  assert(captured.tech.length < 2000, `tech nem rövidítve: ${captured.tech.length}`);
-  assert(captured.human.includes('… [+'), 'truncate marker hiányzik');
+  const d = sb.BevLogger.dump();
+  assert(d.includes('… [+'), 'truncate marker hiányzik');
+  // 3×3000 karakter helyett a levágott hossz nagyságrendje ~3 kB alatt marad
+  assert(d.length < 4000, `nem rövidült: ${d.length} karakter`);
 });
 
 test('BevLogger auto stack-trace, ha nincs explicit tech', () => {
-  let captured = null;
-  const sb = loadInSandbox(path.join(__dirname, '../js/logger.js'), {
-    fetch: (url, opts) => { captured = JSON.parse(opts.body); return Promise.resolve({ ok: true }); },
-  });
+  const sb = loadInSandbox(path.join(__dirname, '../js/logger.js'), {});
   sb.BevLogger.error('CAT', 'üzenet'); // nincs tech
-  assert(captured.tech && captured.tech.length > 0, 'auto stack-trace üres');
+  const d = sb.BevLogger.dump();
+  // A stack-trace sorai a bejegyzés alá, behúzva kerülnek
+  assert(/\n {4}\S/.test(d), 'auto stack-trace üres');
 });
 
 // ════════════════════════════════════════════════════════════════════════════

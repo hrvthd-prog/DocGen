@@ -4,9 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DocGen — Dokumentumkezelő</title>
-  <link rel="stylesheet" href="css/app.css">
-  <link rel="stylesheet" href="css/registry.css">
-  <link rel="stylesheet" href="vendor/client-picker.css">
+
+  <!-- FRISSÍTÉSKOR: a hivatkozásokon lévő ?v=1 számot növeld meg (Csere: „?v=1" → „?v=2").
+       Enélkül a böngésző a gyorsítótárból veszi a régi JS-t, és a felhasználók
+       hetekig a frissítés előtti kódot futtatnák. Egyetlen csere ebben a fájlban. -->
+  <link rel="stylesheet" href="css/app.css?v=1">
+  <link rel="stylesheet" href="css/registry.css?v=1">
+  <link rel="stylesheet" href="vendor/client-picker.css?v=1">
 </head>
 <body>
   <svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" class="bev-sprite" style="position:absolute;overflow:hidden" aria-hidden="true">
@@ -74,49 +78,49 @@
   <div id="dialog-overlay" class="dialog-overlay hidden"></div>
 
   <!-- Vendor -->
-  <script src="vendor/pdf-lib.min.js"></script>
-  <script src="vendor/client-picker.js"></script>
-  <script src="vendor/xlsx.full.min.js"></script>
-  <script src="vendor/pizzip.min.js"></script>
-  <script src="vendor/docxtemplater.js"></script>
-  <script src="vendor/FileSaver.min.js"></script>
-  <script src="vendor/exceljs.min.js"></script>
+  <script src="vendor/pdf-lib.min.js?v=1"></script>
+  <script src="vendor/client-picker.js?v=1"></script>
+  <script src="vendor/xlsx.full.min.js?v=1"></script>
+  <script src="vendor/pizzip.min.js?v=1"></script>
+  <script src="vendor/docxtemplater.js?v=1"></script>
+  <script src="vendor/FileSaver.min.js?v=1"></script>
+  <script src="vendor/exceljs.min.js?v=1"></script>
 
   <!-- Naplózás -->
-  <script src="js/logger.js"></script>
+  <script src="js/logger.js?v=1"></script>
 
   <!-- Service réteg -->
-  <script src="js/services/settings-service.js"></script>
-  <script src="js/services/fs-service.js"></script>
-  <script src="js/services/excel-service.js"></script>
-  <script src="js/services/docx-service.js"></script>
-  <script src="js/services/employee-repo.js"></script>
-  <script src="js/services/xlsx-write.js"></script>
-  <script src="js/services/xlsx-read.js"></script>
+  <script src="js/services/settings-service.js?v=1"></script>
+  <script src="js/services/fs-service.js?v=1"></script>
+  <script src="js/services/excel-service.js?v=1"></script>
+  <script src="js/services/docx-service.js?v=1"></script>
+  <script src="js/services/employee-repo.js?v=1"></script>
+  <script src="js/services/xlsx-write.js?v=1"></script>
+  <script src="js/services/xlsx-read.js?v=1"></script>
 
   <!-- Séma-réteg (a séma adat, nem kód – lásd js/schema/seed-schema.js) -->
-  <script src="js/schema/value-codec.js"></script>
-  <script src="js/schema/seed-schema.js"></script>
-  <script src="js/schema/schema-store.js"></script>
-  <script src="js/schema/schema-from-xlsx.js"></script>
-  <script src="js/schema/export-profiles.js"></script>
+  <script src="js/schema/value-codec.js?v=1"></script>
+  <script src="js/schema/seed-schema.js?v=1"></script>
+  <script src="js/schema/schema-store.js?v=1"></script>
+  <script src="js/schema/schema-from-xlsx.js?v=1"></script>
+  <script src="js/schema/export-profiles.js?v=1"></script>
 
   <!-- Megosztott segédfüggvények -->
-  <script src="js/utils.js"></script>
+  <script src="js/utils.js?v=1"></script>
 
   <!-- Modulok -->
   <!-- Dokumentumgenerálás: alegységek a mag előtt töltődnek -->
-  <script src="js/modules/docgen/missing-log.js"></script>
-  <script src="js/modules/docgen/naming.js"></script>
-  <script src="js/modules/docgen/merge.js"></script>
-  <script src="js/modules/docgen/groups.js"></script>
-  <script src="js/modules/docgen.js"></script>
-  <script src="js/modules/registry/employee-form.js"></script>
-  <script src="js/modules/registry/xlsx-io.js"></script>
-  <script src="js/modules/registry/registry-view.js"></script>
-  <script src="js/modules/settings/settings-view.js"></script>
+  <script src="js/modules/docgen/missing-log.js?v=1"></script>
+  <script src="js/modules/docgen/naming.js?v=1"></script>
+  <script src="js/modules/docgen/merge.js?v=1"></script>
+  <script src="js/modules/docgen/groups.js?v=1"></script>
+  <script src="js/modules/docgen.js?v=1"></script>
+  <script src="js/modules/registry/employee-form.js?v=1"></script>
+  <script src="js/modules/registry/xlsx-io.js?v=1"></script>
+  <script src="js/modules/registry/registry-view.js?v=1"></script>
+  <script src="js/modules/settings/settings-view.js?v=1"></script>
 
   <!-- App shell -->
-  <script src="js/app.js"></script>
+  <script src="js/app.js?v=1"></script>
 </body>
 </html>

@@ -1,7 +1,16 @@
 'use strict';
 
+/**
+ * Naplózás — kizárólag helyben.
+ *
+ * A napló SOHA nem hagyja el a gépet: a `context` személyes adatot is
+ * tartalmazhat (állapot-pillanatkép), ezért nincs hálózati szállítás.
+ * A bejegyzések a konzolra és egy korlátos memóriapufferbe kerülnek;
+ * a puffer a `dump()`-pal kérhető le, ha egy hibát utólag kell megnézni.
+ */
 const BevLogger = (() => {
-  const SERVER = 'http://127.0.0.1:3456/log';
+  const MAX_BEJEGYZES = 500;      // korlátos puffer: hosszú munkamenet se egye a memóriát
+  const _puffer = [];
   let _user = 'ismeretlen';
 
   // Stack trace gyűjtő — ha nincs explicit tech, automatikusan generál egyet
@@ -24,7 +33,8 @@ const BevLogger = (() => {
       // Ha nincs tech, auto stack trace
       const techStr = tech ? _trunc(tech, 1500) : _autoStack();
       const ctxStr  = _trunc(context, 600);
-      const payload = {
+      const bejegyzes = {
+        ts:       new Date().toISOString(),
         user:     _user,
         level,
         category,
@@ -32,12 +42,24 @@ const BevLogger = (() => {
         tech:     techStr,
         context:  ctxStr,
       };
-      fetch(SERVER, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      }).catch(() => {});
+
+      _puffer.push(bejegyzes);
+      if (_puffer.length > MAX_BEJEGYZES) _puffer.shift();
+
+      const sor = `[${level}] ${category}: ${bejegyzes.human}`;
+      if (level === 'HIBA')      console.error(sor, bejegyzes);
+      else if (level === 'FIGY') console.warn(sor, bejegyzes);
+      else                       console.log(sor);
     } catch (_) {}
+  }
+
+  // A puffer tartalma szövegként — hiba utólagos kivizsgálásához.
+  function dump() {
+    return _puffer
+      .map(b => `${b.ts} [${b.level}] ${b.category}: ${b.human}` +
+                (b.context ? `\n    ctx: ${b.context}` : '') +
+                (b.tech    ? `\n    ${b.tech}` : ''))
+      .join('\n');
   }
 
   function init(user) {
@@ -74,5 +96,5 @@ const BevLogger = (() => {
     });
   }
 
-  return { init, log, error, warn, info, debug, snapshot, initGlobalHandlers };
+  return { init, log, error, warn, info, debug, snapshot, initGlobalHandlers, dump };
 })();
