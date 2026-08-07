@@ -1,0 +1,389 @@
+'use strict';
+
+// Ügykövetés tesztjei. Futtatás: node test/cases.test.js
+//
+// A hangsúly azon van, amit hatósági ügyintézésnél utólag meg kell tudni
+// mondani: mikor mi történt, milyen kimenettel zárult, és melyik kérelemből
+// származik egy engedélyszám.
+
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+let passed = 0, failed = 0;
+const failures = [];
+const queue = [];
+
+function atest(name, fn) { queue.push({ name, fn }); }
+function asection(name) { queue.push({ section: name }); }
+function assert(c, m) { if (!c) throw new Error(m || 'assertion failed'); }
+function assertEq(a, b, m) {
+  if (a !== b) throw new Error(`${m || 'assertEq'}: várt ${JSON.stringify(b)}, kapott ${JSON.stringify(a)}`);
+}
+async function assertThrows(fn, minta, m) {
+  let dobott = null;
+  try { await fn(); } catch (e) { dobott = e; }
+  assert(dobott, m || 'nem dobott hibát');
+  if (minta) assert(minta.test(dobott.message), `váratlan hibaüzenet: ${dobott.message}`);
+}
+
+// ── Sandbox ─────────────────────────────────────────────────────────────────
+const sandbox = {
+  console, Date, Math, JSON, Set, Map, Object, Array, String, Number, Boolean,
+  Error, RegExp, Promise, isNaN, parseInt, parseFloat, crypto, setTimeout, clearTimeout,
+};
+sandbox.globalThis = sandbox;
+vm.createContext(sandbox);
+
+for (const [rel, name] of [
+  ['../js/services/employee-repo.js', 'EmployeeRepo'],
+  ['../js/schema/case-types.js',      'CaseTypes'],
+  ['../js/services/case-repo.js',     'CaseRepo'],
+]) {
+  let code = fs.readFileSync(path.join(__dirname, rel), 'utf8');
+  code += `\nglobalThis.${name} = ${name};`;
+  vm.runInContext(code, sandbox, { filename: rel });
+}
+const { EmployeeRepo, CaseTypes, CaseRepo } = sandbox;
+CaseTypes.loadFrom(null);
+
+async function tisztaAllapot() {
+  EmployeeRepo.useBackend(EmployeeRepo.createMemoryBackend());
+  CaseRepo.useBackend(CaseRepo.createMemoryBackend());
+  await EmployeeRepo.load();
+  await CaseRepo.load();
+}
+
+function ujDolgozo(fields = {}) {
+  return EmployeeRepo.create({
+    fields: Object.assign({ surname: 'Nagy', forename: 'Béla' }, fields),
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+asection('Ügytípusok és határidők');
+
+atest('a kérelmek alapértelmezett határideje 70 nap', async () => {
+  assertEq(CaseTypes.DEFAULT_APPLICATION_DAYS, 70);
+  for (const t of CaseTypes.all().filter(x => x.kind === 'kerelem')) {
+    assertEq(t.defaultDurationDays, 70, `${t.key} határideje nem 70 nap`);
+  }
+});
+
+atest('a 70 nap valóban 70 nappal későbbi dátumot ad', async () => {
+  const d = CaseTypes.suggestDueDate('rp_elso', {}, '2026-01-01');
+  assertEq(d, '2026-03-12');   // 2026-01-01 + 70 nap
+});
+
+atest('a határidő a dolgozó adatából is számolható, ha az a jövőben van', async () => {
+  // A meghosszabbítást a lejárat előtt 30 nappal kell beadni
+  const d = CaseTypes.suggestDueDate('rp_hosszabbitas',
+    { expiration_of_rp: '2027-06-30' }, '2026-08-01');
+  assertEq(d, '2027-05-31');
+});
+
+atest('lejárt engedélynél nem ad múltbeli határidőt, hanem a 70 napot', async () => {
+  // Múltbeli határidő félrevezető lenne – „már rég lejárt" helyett kapjunk
+  // valós, teljesíthető dátumot.
+  const d = CaseTypes.suggestDueDate('rp_hosszabbitas',
+    { expiration_of_rp: '2020-01-01' }, '2026-08-01');
+  assertEq(d, '2026-10-10');   // 2026-08-01 + 70 nap
+});
+
+atest('mind a négy elutasítás-fajta rögzíthető', async () => {
+  const kulcsok = CaseTypes.outcomes().map(o => o.key);
+  for (const k of ['megadva', 'elutasitva', 'megszuntetve', 'elutasitva_ervn', 'visszavonva']) {
+    assert(kulcsok.includes(k), `hiányzó kimenetel: ${k}`);
+  }
+  assert(/érdemi vizsgálat nélkül/i.test(CaseTypes.outcomeLabel('elutasitva_ervn')));
+});
+
+atest('minden ügytípusnak van záró státusza – különben lezárhatatlan lenne', async () => {
+  for (const t of CaseTypes.all()) {
+    assert(t.statuses.some(s => s.terminal), `${t.key}: nincs záró státusz`);
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+asection('Ügy életciklusa');
+
+atest('új ügy a típus első státuszával és javasolt határidővel indul', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', openedAt: '2026-01-01' });
+
+  assertEq(ugy.status, 'elokeszites');
+  assertEq(ugy.dueAt, '2026-03-12');
+  assertEq(ugy.closedAt, null);
+  assertEq(ugy.events.length, 1, 'a megnyitás nem került a történetbe');
+});
+
+atest('a javasolt határidő kézzel felülírható', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({
+    employeeId: emp.id, type: 'rp_elso', openedAt: '2026-01-01', dueAt: '2026-02-15',
+  });
+  assertEq(ugy.dueAt, '2026-02-15');
+
+  CaseRepo.update(ugy.id, { dueAt: '2026-04-01' });
+  assertEq(CaseRepo.get(ugy.id).dueAt, '2026-04-01', 'a módosított határidő nem rögzült');
+});
+
+atest('a státuszváltás bekerül az esemény-történetbe', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso' });
+
+  CaseRepo.setStatus(ugy.id, 'beadva', { note: 'Személyesen benyújtva' });
+  CaseRepo.setStatus(ugy.id, 'hianypotlas', { note: 'Hiányzik a szálláshely-igazolás' });
+
+  const u = CaseRepo.get(ugy.id);
+  assertEq(u.status, 'hianypotlas');
+  assertEq(u.events.length, 3, 'nem minden lépés került a történetbe');
+  assertEq(u.events[1].status, 'beadva');
+  assert(/szálláshely/i.test(u.events[2].note), 'a megjegyzés elveszett');
+});
+
+atest('idegen státusz nem fogadható el', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'szallashely_valtozas' });
+  await assertThrows(() => CaseRepo.setStatus(ugy.id, 'elbiralas'),
+    /nem tartozik ehhez az ügytípushoz/, 'elfogadott egy másik típus státuszát');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+asection('Lezárás és kimenetel');
+
+atest('lezáráshoz kötelező a kimenetel megadása', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso' });
+  // Kimenetel nélkül utólag nem lehetne megmondani, mi lett az ügy vége
+  await assertThrows(() => CaseRepo.setStatus(ugy.id, 'lezarva'),
+    /kimenetelt/, 'kimenetel nélkül is lezárta');
+});
+
+atest('mind a négy negatív kimenetel rögzíthető és visszaolvasható', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  for (const kimenet of ['elutasitva', 'megszuntetve', 'elutasitva_ervn', 'visszavonva']) {
+    const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso' });
+    CaseRepo.setStatus(ugy.id, 'lezarva', { outcome: kimenet, note: 'teszt' });
+    const u = CaseRepo.get(ugy.id);
+    assertEq(u.outcome, kimenet);
+    assert(u.closedAt, `${kimenet}: nincs lezárási időpont`);
+    assertEq(u.events[u.events.length - 1].outcome, kimenet, 'a kimenetel nincs a történetben');
+  }
+});
+
+atest('ismeretlen kimenetelt nem fogad el', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso' });
+  await assertThrows(() => CaseRepo.setStatus(ugy.id, 'lezarva', { outcome: 'talan' }),
+    /Ismeretlen kimenetel/);
+});
+
+atest('lezárt ügynél a határidő már nem számít lejártnak', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', dueAt: '2020-01-01' });
+  assertEq(CaseRepo.urgency(ugy, '2026-08-07'), 'lejart');
+
+  CaseRepo.setStatus(ugy.id, 'lezarva', { outcome: 'megadva' });
+  assertEq(CaseRepo.urgency(CaseRepo.get(ugy.id), '2026-08-07'), 'lezart');
+  assertEq(CaseRepo.daysLeft(CaseRepo.get(ugy.id), '2026-08-07'), null);
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+asection('EH szám és iktatószám');
+
+atest('mindkettő megadható létrehozáskor és módosításkor', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({
+    employeeId: emp.id, type: 'rp_elso',
+    ehNumber: 'EH-2026-001', fileNumber: 'IKT-12345/2026',
+  });
+  assertEq(ugy.ehNumber, 'EH-2026-001');
+  assertEq(ugy.fileNumber, 'IKT-12345/2026');
+
+  CaseRepo.update(ugy.id, { ehNumber: 'EH-2026-002' });
+  assertEq(CaseRepo.get(ugy.id).ehNumber, 'EH-2026-002');
+});
+
+atest('státuszváltáskor is megadható – gyakran ekkor derül ki', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso' });
+
+  // Az iktatószám a beadáskor keletkezik
+  CaseRepo.setStatus(ugy.id, 'beadva', { fileNumber: 'IKT-999/2026', note: 'beadva' });
+  const u = CaseRepo.get(ugy.id);
+  assertEq(u.fileNumber, 'IKT-999/2026');
+  assertEq(u.events[1].fileNumber, 'IKT-999/2026', 'az esemény nem őrizte meg');
+});
+
+atest('EH számra és iktatószámra lehet keresni', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', ehNumber: 'EH-AAA-111' });
+  CaseRepo.create({ employeeId: emp.id, type: 'letelepedes', fileNumber: 'IKT-BBB-222' });
+
+  assertEq(CaseRepo.search('aaa-111').length, 1);
+  assertEq(CaseRepo.search('bbb-222').length, 1);
+  assertEq(CaseRepo.search('nincsilyen').length, 0);
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+asection('Kapcsolat az azonosító-történettel');
+
+atest('a lezárt kérelem új engedélyszáma a dolgozóhoz kerül, a régi lezárul', async () => {
+  await tisztaAllapot();
+  const emp = EmployeeRepo.create({
+    fields: { surname: 'Nagy', forename: 'Béla', number_of_rp: 'RP-REGI' },
+    identifiers: [{ type: 'residence_permit', value: 'RP-REGI' }],
+  });
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas' });
+  CaseRepo.setStatus(ugy.id, 'lezarva', { outcome: 'megadva' });
+  CaseRepo.recordProducedIdentifier(ugy.id, { value: 'RP-UJ-2026' });
+
+  const u = EmployeeRepo.get(emp.id);
+  assertEq(EmployeeRepo.currentIdentifier(u, 'residence_permit').value, 'RP-UJ-2026');
+  assertEq(u.identifiers.filter(i => !i.current)[0].value, 'RP-REGI', 'a régi nem záródott le');
+  // A tükrözött mező is követi – ezen múlik az xlsx-export helyessége
+  assertEq(u.fields.number_of_rp, 'RP-UJ-2026', 'az xlsx-mező a régi számot őrzi');
+});
+
+atest('visszakereshető, MELYIK ügy hozta az azonosítót', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', ehNumber: 'EH-777' });
+  CaseRepo.setStatus(ugy.id, 'lezarva', { outcome: 'megadva' });
+  CaseRepo.recordProducedIdentifier(ugy.id, { value: 'RP-ELSO-1' });
+
+  const u = CaseRepo.get(ugy.id);
+  assertEq(u.producedId.value, 'RP-ELSO-1');
+  assertEq(u.producedId.type, 'residence_permit');
+  assertEq(u.ehNumber, 'EH-777', 'az EH szám elveszett');
+});
+
+atest('bejelentésnél nem lehet azonosítót rögzíteni', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'szallashely_valtozas' });
+  await assertThrows(() => CaseRepo.recordProducedIdentifier(ugy.id, { value: 'X' }),
+    /nem hoz azonosítót/);
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+asection('Határidő-figyelés');
+
+atest('lejárt / sürgős / nyitott besorolás', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const MA = '2026-08-07';
+  const lejart  = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', dueAt: '2026-08-01' });
+  const surgos  = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', dueAt: '2026-08-15' });
+  const nyugodt = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', dueAt: '2026-12-01' });
+
+  assertEq(CaseRepo.urgency(lejart, MA),  'lejart');
+  assertEq(CaseRepo.urgency(surgos, MA),  'surgos');
+  assertEq(CaseRepo.urgency(nyugodt, MA), 'nyitott');
+  assertEq(CaseRepo.daysLeft(lejart, MA), -6);
+});
+
+atest('a nyitott ügyek listája a legégetőbbel kezd', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const MA = '2026-08-07';
+  CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', dueAt: '2026-12-01' });
+  CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', dueAt: '2026-07-01' });
+  CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', dueAt: '2026-08-10' });
+
+  const sorrend = CaseRepo.openCases(MA).map(c => c.dueAt);
+  assertEq(sorrend.join(','), '2026-07-01,2026-08-10,2026-12-01');
+});
+
+atest('a közelgő lejáratot felveti, de csak ha nincs rá nyitott ügy', async () => {
+  await tisztaAllapot();
+  const emp = EmployeeRepo.create({
+    fields: { surname: 'Kis', forename: 'Éva', expiration_of_rp: '2026-08-20' },
+  });
+  const MA = '2026-08-07';
+
+  let javaslat = CaseRepo.suggestRenewals(EmployeeRepo.all(), { ma: MA });
+  assertEq(javaslat.length, 1, 'nem vetette fel a közelgő lejáratot');
+  assertEq(javaslat[0].daysLeft, 13);
+
+  CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas' });
+  javaslat = CaseRepo.suggestRenewals(EmployeeRepo.all(), { ma: MA });
+  assertEq(javaslat.length, 0, 'nyitott ügy mellett is felvetette');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+asection('Tárolás és sértetlenség');
+
+atest('az ügyek mentés-betöltés után változatlanok', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({
+    employeeId: emp.id, type: 'rp_elso', ehNumber: 'EH-1', fileNumber: 'IKT-1',
+  });
+  CaseRepo.setStatus(ugy.id, 'beadva', { note: 'beadva' });
+  CaseRepo.setStatus(ugy.id, 'lezarva', { outcome: 'elutasitva_ervn', note: 'formai hiba' });
+  await CaseRepo.flush();
+
+  await CaseRepo.load();
+  const u = CaseRepo.get(ugy.id);
+  assertEq(u.outcome, 'elutasitva_ervn');
+  assertEq(u.ehNumber, 'EH-1');
+  assertEq(u.events.length, 3);
+  assert(/formai hiba/.test(u.events[2].note));
+});
+
+atest('a dolgozó törlésekor az ügyei sem maradnak árván', async () => {
+  await tisztaAllapot();
+  const a = ujDolgozo();
+  const b = EmployeeRepo.create({ fields: { surname: 'Kis', forename: 'Éva' } });
+  CaseRepo.create({ employeeId: a.id, type: 'rp_elso' });
+  CaseRepo.create({ employeeId: a.id, type: 'letelepedes' });
+  CaseRepo.create({ employeeId: b.id, type: 'rp_elso' });
+
+  assertEq(CaseRepo.destroyForEmployee(a.id), 2);
+  assertEq(CaseRepo.all().length, 1);
+  assertEq(CaseRepo.forEmployee(b.id).length, 1);
+});
+
+atest('ügytípus nélkül nem hozható létre ügy', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  await assertThrows(() => CaseRepo.create({ employeeId: emp.id, type: 'nincs_ilyen' }),
+    /Ismeretlen ügytípus/);
+  await assertThrows(() => CaseRepo.create({ type: 'rp_elso' }),
+    /nincs dolgozóhoz rendelve/);
+});
+
+// ── Futtatás ────────────────────────────────────────────────────────────────
+(async () => {
+  for (const item of queue) {
+    if (item.section) { console.log(`\n[${item.section}]`); continue; }
+    try { await item.fn(); console.log(`  ✓ ${item.name}`); passed++; }
+    catch (e) {
+      console.log(`  ✗ ${item.name}`);
+      console.log(`    ${e.message}`);
+      failed++; failures.push({ name: item.name, error: e.message });
+    }
+  }
+  console.log('\n' + '='.repeat(60));
+  console.log(`Eredmény: ${passed} sikeres / ${failed} hibás (összesen ${passed + failed})`);
+  if (failed > 0) {
+    console.log('\nHibás tesztek:');
+    failures.forEach(f => console.log(`  - ${f.name}: ${f.error}`));
+    process.exit(1);
+  }
+  console.log('Mind sikeres ✓');
+  process.exit(0);
+})();

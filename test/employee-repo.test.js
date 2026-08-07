@@ -282,6 +282,52 @@ atest('sérült adat esetén üres nyilvántartással indul, nem omlik össze', 
 });
 
 // ── Futtatás ────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// Az azonosító-tükrözés minden úton érvényesül
+//
+// A SAP-szám és az engedélyszám kétszer szerepel: az azonosító-történetben és
+// az adatbekérő saját oszlopában. A tükrözés eddig CSAK az űrlapon futott le,
+// ezért az addIdentifier()-en át rögzített új engedély után a mező a régi
+// számot őrizte – az xlsx-export elavult adatot írt volna ki. Ez akkor sült
+// volna ki élesben, amikor egy ügy lezárása rögzíti az új engedélyszámot.
+asection('Azonosító-tükrözés a mezőkbe');
+
+atest('új azonosító után a mező is az újat mutatja', async () => {
+  Repo.useBackend(Repo.createMemoryBackend());
+  await Repo.load();
+  const e = Repo.create({
+    fields: { surname: 'Tukor', forename: 'Elek', number_of_rp: 'RP-REGI' },
+    identifiers: [{ type: 'residence_permit', value: 'RP-REGI' }],
+  });
+  Repo.addIdentifier(e.id, { type: 'residence_permit', value: 'RP-UJ' });
+
+  const u = Repo.get(e.id);
+  assertEq(u.fields.number_of_rp, 'RP-UJ', 'a mező a régi számot őrzi');
+  assertEq(Repo.currentIdentifier(u, 'residence_permit').value, 'RP-UJ');
+  assertEq(u.identifiers.filter(i => !i.current)[0].value, 'RP-REGI', 'a régi nem záródott le');
+});
+
+atest('létrehozáskor a mező az azonosítóból töltődik', async () => {
+  Repo.useBackend(Repo.createMemoryBackend());
+  await Repo.load();
+  const e = Repo.create({
+    fields: { surname: 'Tukor', forename: 'Anna' },      // nincs megadva mező
+    identifiers: [{ type: 'sap', value: 'SAP-777' }],
+  });
+  assertEq(Repo.get(e.id).fields.personnel_reg_number, 'SAP-777');
+});
+
+atest('azonosító törlése NEM üríti a mezőt – kézi adat nem veszhet el', async () => {
+  Repo.useBackend(Repo.createMemoryBackend());
+  await Repo.load();
+  const e = Repo.create({
+    fields: { surname: 'Tukor', forename: 'Bela' },
+    identifiers: [{ type: 'taj', value: '123456789' }],
+  });
+  Repo.removeIdentifier(e.id, '123456789', 'taj');
+  assertEq(Repo.get(e.id).fields.TAJ, '123456789', 'a mező kiürült');
+});
+
 (async () => {
   for (const item of queue) {
     if (item.section) { console.log(`

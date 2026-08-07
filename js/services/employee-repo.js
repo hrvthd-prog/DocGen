@@ -63,6 +63,21 @@ const EmployeeRepo = (() => {
     return out;
   }
 
+  /**
+   * A tükrözés érvényesítése a rekordon.
+   *
+   * Minden olyan ponton le kell futnia, ahol az azonosítók változnak – nem
+   * csak az űrlapon. Új tartózkodási engedély rögzítésekor (pl. egy ügy
+   * lezárásakor) enélkül az `number_of_rp` mező a RÉGI számot őrizné, és az
+   * xlsx-export elavult adatot írna ki.
+   *
+   * Törléskor szándékosan nem üríti a mezőt: a leképezés csak *rátölt* az
+   * aktuális azonosítóból, hogy kézzel felvitt adatot ne semmisítsen meg.
+   */
+  function syncIdentifierFields(emp) {
+    emp.fields = applyIdentifiersToFields(emp.identifiers, emp.fields);
+  }
+
   let backend = null;
   let cache   = null;          // { employees: [], meta: {} }
   let dirty   = false;
@@ -331,6 +346,7 @@ const EmployeeRepo = (() => {
       updatedBy: currentUserName(),
       schemaVersion,
     };
+    syncIdentifierFields(emp);
     const problems = validate(emp, { employees: cache.employees });
     if (problems.length) throw new Error(problems.join(' '));
     cache.employees.push(emp);
@@ -355,6 +371,7 @@ const EmployeeRepo = (() => {
     emp.fields       = next.fields;
     emp.identifiers  = next.identifiers;
     emp.schemaVersion = next.schemaVersion;
+    if (identifiers) syncIdentifierFields(emp);
     emp.updatedAt    = nowIso();
     emp.updatedBy    = currentUserName();
     scheduleSave();
@@ -381,6 +398,7 @@ const EmployeeRepo = (() => {
     if (idf.current) closePrevious(emp, idf.type, idf.validFrom);
     if (!idf.validFrom) idf.validFrom = nowIso().slice(0, 10);
     emp.identifiers.push(idf);
+    syncIdentifierFields(emp);
     emp.updatedAt = nowIso();
     emp.updatedBy = currentUserName();
     scheduleSave();
