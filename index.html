@@ -10,6 +10,7 @@
        hetekig a frissítés előtti kódot futtatnák. Egyetlen csere ebben a fájlban. -->
   <link rel="stylesheet" href="css/app.css?v=1">
   <link rel="stylesheet" href="css/registry.css?v=1">
+  <link rel="stylesheet" href="css/cases.css?v=1">
   <link rel="stylesheet" href="vendor/client-picker.css?v=1">
 </head>
 <body>
@@ -23,6 +24,11 @@
       <circle cx="9" cy="8.5" r="3.1" fill="none" stroke="currentColor" stroke-width="1.6"/>
       <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M3.5 19c0-3 2.5-4.8 5.5-4.8s5.5 1.8 5.5 4.8"/>
       <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M17 9.5h4M17 13h4M17 16.5h3"/>
+    </symbol>
+    <symbol id="ic-tab-cases" viewBox="0 0 24 24">
+      <rect x="3" y="6" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M9 6V4.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 4.5V6M3 11h18"/>
+      <circle cx="12" cy="15.5" r="2.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
     </symbol>
     <symbol id="ic-tab-settings" viewBox="0 0 24 24">
       <circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.6"/>
@@ -61,7 +67,11 @@
         <svg class="tab-btn__icon" width="18" height="18" aria-hidden="true"><use href="#ic-tab-registry"/></svg>
         <span>Nyilvántartás</span>
       </button>
-      <button class="tab-btn" type="button" data-tab="settings" accesskey="3">
+      <button class="tab-btn" type="button" data-tab="cases" accesskey="3">
+        <svg class="tab-btn__icon" width="18" height="18" aria-hidden="true"><use href="#ic-tab-cases"/></svg>
+        <span>Ügyek</span>
+      </button>
+      <button class="tab-btn" type="button" data-tab="settings" accesskey="4">
         <svg class="tab-btn__icon" width="18" height="18" aria-hidden="true"><use href="#ic-tab-settings"/></svg>
         <span>Beállítások</span>
       </button>
@@ -70,6 +80,7 @@
     <!-- Tab tartalmak -->
     <div id="tab-docgen"   class="tab-content active"></div>
     <div id="tab-registry" class="tab-content"></div>
+    <div id="tab-cases"    class="tab-content"></div>
     <div id="tab-settings" class="tab-content"></div>
 
   </div>
@@ -117,7 +128,12 @@
   <script src="js/modules/registry/employee-form.js?v=1"></script>
   <script src="js/modules/registry/xlsx-io.js?v=1"></script>
   <script src="js/modules/registry/registry-view.js?v=1"></script>
-  <script src="js/modules/settings/settings-view.js?v=1"></script>
+<script src="js/schema/case-types.js?v=1"></script>
+  <script src="js/services/case-repo.js?v=1"></script>
+  <script src="js/modules/cases/case-timeline.js?v=1"></script>
+  <script src="js/modules/cases/case-form.js?v=1"></script>
+  <script src="js/modules/cases/cases-view.js?v=1"></script>
+    <script src="js/modules/settings/settings-view.js?v=1"></script>
 
   <!-- App shell -->
   <script src="js/app.js?v=1"></script>

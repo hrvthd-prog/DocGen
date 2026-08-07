@@ -246,6 +246,128 @@ const CaseRepo = (() => {
     );
   }
 
+  // ── Idővonal ───────────────────────────────────────────────────────────────
+
+  /**
+   * Egy ügy teljes idővonala: ami megtörtént, és ami még hátravan.
+   *
+   * Négyféle pont kerül rá:
+   *   'esemeny'    – ami ténylegesen megtörtént (az events[]-ből)
+   *   'ablak'      – a benyújtási ablak három mérföldköve (számított)
+   *   'hatarido'   – az ügyintézési határidő
+   *   'ma'         – a mai nap, hogy legyen viszonyítási pont
+   *
+   * Minden pont megkapja, hogy múltbeli, mai vagy jövőbeli – a felület ebből
+   * színez. Számított (nem rögzített) pontnál `computed: true`, mert azok nem
+   * tények, hanem következtetések: a felhasználónak látnia kell a különbséget.
+   */
+  function timeline(caseOrId, employeeFields = {}, ma = null) {
+    const c = typeof caseOrId === 'string' ? get(caseOrId) : caseOrId;
+    if (!c) return [];
+
+    const maNap = (ma ? new Date(ma) : new Date());
+    const maIso = CaseTypes.isoDate(maNap);
+    const pontok = [];
+
+    // 1. Ami megtörtént
+    for (const e of c.events) {
+      const nap = String(e.at).slice(0, 10);
+      pontok.push({
+        kind: 'esemeny',
+        date: nap,
+        at: e.at,
+        label: CaseTypes.statusLabel(c.type, e.status) || e.status,
+        note: e.note || '',
+        user: e.user || '',
+        outcome: e.outcome || null,
+        ehNumber: e.ehNumber || '',
+        fileNumber: e.fileNumber || '',
+        computed: false,
+      });
+    }
+
+    // 2. Benyújtási ablak – csak ha az engedély lejárata ismert
+    const ablak = CaseTypes.submissionWindow(c.type, employeeFields);
+    if (ablak) {
+      pontok.push({ kind: 'ablak', date: ablak.earliest, computed: true,
+        label: 'Benyújtás legkorábban', windowRole: 'earliest',
+        note: 'Ennél korábban nem fogadják be' });
+      pontok.push({ kind: 'ablak', date: ablak.latest, computed: true,
+        label: 'Benyújtás ajánlott határnapja', windowRole: 'latest',
+        note: 'Eddig érdemes beadni' });
+      pontok.push({ kind: 'ablak', date: ablak.final, computed: true,
+        label: 'Benyújtás legvégső napja', windowRole: 'final',
+        note: 'Az utolsó nap, amikor még beadható' });
+      pontok.push({ kind: 'ablak', date: ablak.basis, computed: true,
+        label: 'A jelenlegi engedély lejár', windowRole: 'basis' });
+    }
+
+    // 3. Ügyintézési határidő
+    if (c.dueAt) {
+      pontok.push({
+        kind: 'hatarido', date: c.dueAt, computed: true,
+        label: isAdvisory(c) ? 'Határidő (tájékoztató)' : 'Ügyintézési határidő',
+        note: c.triggerDate
+          ? `${CaseTypes.triggerLabel(c.type)}: ${c.triggerDate}`
+          : '',
+        advisory: isAdvisory(c),
+      });
+    }
+
+    // 4. A mai nap – csak nyitott ügynél, viszonyítási pontnak
+    if (!c.closedAt) {
+      pontok.push({ kind: 'ma', date: maIso, computed: false, label: 'Ma' });
+    }
+
+    // Időrend; azonos napon az esemény előbb, mint a számított pont
+    const rang = { esemeny: 0, ma: 1, hatarido: 2, ablak: 3 };
+    pontok.sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return (rang[a.kind] ?? 9) - (rang[b.kind] ?? 9);
+    });
+
+    for (const p of pontok) {
+      p.state = p.date < maIso ? 'mult' : (p.date === maIso ? 'ma' : 'jovo');
+    }
+    return pontok;
+  }
+
+  /**
+   * A benyújtási ablak összefoglalója – ez kerül a kártya tetejére.
+   * `null`, ha az ügytípusnak nincs ablaka vagy az engedély lejárata hiányzik.
+   */
+  function submissionStatus(caseOrId, employeeFields = {}, ma = null) {
+    const c = typeof caseOrId === 'string' ? get(caseOrId) : caseOrId;
+    if (!c) return null;
+    const ablak = CaseTypes.submissionWindow(c.type, employeeFields);
+    if (!ablak) return null;
+
+    const fazis = CaseTypes.windowPhase(ablak, ma);
+    const maIso = CaseTypes.isoDate(ma ? new Date(ma) : new Date());
+    const napokig = d => {
+      const a = new Date(maIso), b = new Date(d);
+      return Math.round((Date.UTC(b.getFullYear(), b.getMonth(), b.getDate()) -
+                         Date.UTC(a.getFullYear(), a.getMonth(), a.getDate())) / 86400000);
+    };
+
+    // Beadás után az ablaknak már nincs jelentősége
+    const beadva = c.events.some(e => e.status && e.status !== 'elokeszites');
+
+    const szoveg = {
+      korai:   () => `Még nem adható be – ${napokig(ablak.earliest)} nap múlva nyílik`,
+      idealis: () => `Beadható – ajánlott ${napokig(ablak.latest)} napon belül`,
+      siess:   () => `Sürgős: még ${napokig(ablak.final)} nap, utána nem adható be`,
+      lekesve: () => `A benyújtási határidő ${-napokig(ablak.final)} napja lejárt`,
+    }[fazis];
+
+    return {
+      window: ablak,
+      phase: fazis,
+      text: beadva ? 'Beadva – az ablak már nem releváns' : szoveg(),
+      done: beadva,
+    };
+  }
+
   // ── Módosítás ──────────────────────────────────────────────────────────────
 
   function validate(c) {
@@ -502,6 +624,20 @@ const CaseRepo = (() => {
       Object.assign({ filename: 'docgen-cases.json' }, opts));
   }
 
+  /** Tartalék háttér, ha nincs kiválasztott adatmappa (ez az indulási alapeset). */
+  function createIdbBackend(key = 'cases') {
+    return {
+      describe: () => 'böngésző tároló (IndexedDB)',
+      async load() {
+        try { return (await FsService.loadHandle('db_' + key)) || null; }
+        catch { return null; }
+      },
+      async save(data) {
+        await FsService.saveHandle('db_' + key, JSON.parse(JSON.stringify(data)));
+      },
+    };
+  }
+
   function createMemoryBackend(initial = null) {
     let store = initial;
     return {
@@ -513,9 +649,10 @@ const CaseRepo = (() => {
   }
 
   return {
-    useBackend, hasBackend, onChange, createFileBackend, createMemoryBackend,
+    useBackend, hasBackend, onChange, createFileBackend, createIdbBackend, createMemoryBackend,
     load, save, scheduleSave, flush,
     all, get, forEmployee, isOpen, daysLeft, urgency, isAdvisory, deadlineText, openCases, search,
+    timeline, submissionStatus,
     create, update, setStatus, addEvent, recordProducedIdentifier,
     destroy, destroyForEmployee, suggestRenewals,
     _validate: validate,

@@ -66,6 +66,29 @@ const DEFAULT_APPLICATION_DAYS = 70;
  */
 const DEADLINE_KIND = { AUTHORITY: 'hatosagi', ADVISORY: 'tajekoztato' };
 
+/**
+ * Benyújtási ablak – a 70 napos ügyintézési határidőtől FÜGGETLEN dolog.
+ *
+ *   70 nap            → mennyi idő alatt kell a hatóságnak döntenie
+ *   benyújtási ablak  → mikor nyújthatjuk be egyáltalán a kérelmet
+ *
+ * Ez az egyetlen határidő, amit a program KI TUD SZÁMOLNI, mert a meglévő
+ * engedély érvényességi ideje a nyilvántartásban van. Nem kell kézzel
+ * rögzíteni – de a felhasználó felül tudja írni.
+ *
+ * Meghosszabbításnál három mérföldkő van, mindegyik az engedély lejáratához
+ * képest:
+ *   legkorábbi  −90 nap  ennél előbb nem fogadják be
+ *   legkésőbbi  −40 nap  eddig érdemes beadni
+ *   legvégső    −10 nap  az utolsó nap, amikor még beadható
+ */
+const SUBMISSION_WINDOW_DEFAULT = {
+  field:       'expiration_of_rp',
+  earliestDays: -90,
+  latestDays:   -40,
+  finalDays:    -10,
+};
+
 /** Kérelmekre közös státuszsor – a kimenet a lezáráskor derül ki. */
 function applicationStatuses() {
   return [
@@ -109,6 +132,8 @@ const SEED_CASE_TYPES = {
       statuses: applicationStatuses(),
       defaultDurationDays: DEFAULT_APPLICATION_DAYS,
       deadlineKind: DEADLINE_KIND.AUTHORITY,
+      // A meglévő engedély lejáratából számolható – nem kell kézzel megadni
+      submissionWindow: SUBMISSION_WINDOW_DEFAULT,
       producesIdentifier: 'residence_permit',
       templates: [],
     },
@@ -241,6 +266,14 @@ const CaseTypes = (() => {
           : (t.deadlineKind === DEADLINE_KIND.AUTHORITY
               ? DEADLINE_KIND.AUTHORITY
               : (kind === 'bejelentes' ? DEADLINE_KIND.ADVISORY : DEADLINE_KIND.AUTHORITY)),
+        submissionWindow: (t.submissionWindow && t.submissionWindow.field)
+          ? {
+              field:        String(t.submissionWindow.field),
+              earliestDays: Number(t.submissionWindow.earliestDays) || 0,
+              latestDays:   Number(t.submissionWindow.latestDays)   || 0,
+              finalDays:    Number(t.submissionWindow.finalDays)    || 0,
+            }
+          : null,
         producesIdentifier: t.producesIdentifier || null,
         templates: Array.isArray(t.templates) ? t.templates.slice() : [],
       });
@@ -326,6 +359,56 @@ const CaseTypes = (() => {
   }
 
   /**
+   * Benyújtási ablak kiszámítása a dolgozó adataiból.
+   *
+   * Ez az egyetlen határidő, amit a program magától tud: a meglévő engedély
+   * érvényessége a nyilvántartásban van. Ha nincs kitöltve, `null` – nem
+   * találunk ki dátumot.
+   *
+   * @returns { basis, earliest, latest, final } vagy null
+   */
+  function submissionWindow(typeKey, employeeFields = {}) {
+    const t = byKey(typeKey);
+    if (!t || !t.submissionWindow) return null;
+
+    const alap = employeeFields[t.submissionWindow.field];
+    if (!alap) return null;
+    const d = new Date(alap);
+    if (isNaN(d.getTime())) return null;
+
+    const eltol = nap => {
+      const x = new Date(d);
+      x.setDate(x.getDate() + nap);
+      return isoDate(x);
+    };
+
+    return {
+      basis:    isoDate(d),                              // az engedély lejárata
+      earliest: eltol(t.submissionWindow.earliestDays),  // ennél előbb nem fogadják be
+      latest:   eltol(t.submissionWindow.latestDays),    // eddig érdemes beadni
+      final:    eltol(t.submissionWindow.finalDays),     // utolsó nap
+    };
+  }
+
+  /**
+   * Hol tartunk a benyújtási ablakban?
+   *
+   *   'korai'    – még nem fogadják be
+   *   'idealis'  – a legkorábbi és a legkésőbbi között: nyugodtan beadható
+   *   'siess'    – a legkésőbbi már elmúlt, de a legvégső még nem
+   *   'lekesve'  – a legvégső nap is elmúlt
+   */
+  function windowPhase(ablak, ma = null) {
+    if (!ablak) return null;
+    const m = (ma ? new Date(ma) : new Date());
+    const most = isoDate(m);
+    if (most < ablak.earliest) return 'korai';
+    if (most <= ablak.latest)  return 'idealis';
+    if (most <= ablak.final)   return 'siess';
+    return 'lekesve';
+  }
+
+  /**
    * Tájékoztató-e a határidő?
    *
    * Igen, ha külső, a program által nem ismert tényből számol. Ilyenkor a
@@ -352,5 +435,6 @@ const CaseTypes = (() => {
     statusesOf, statusLabel, isTerminal, firstStatus,
     outcomes, outcomeLabel,
     suggestDueDate, triggerLabel, isAdvisoryDeadline, isoDate,
+    submissionWindow, windowPhase, SUBMISSION_WINDOW_DEFAULT,
   };
 })();

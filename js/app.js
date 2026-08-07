@@ -6,7 +6,7 @@ BevLogger.init(currentUser);
 BevLogger.initGlobalHandlers();
 
 // ── Fülek ─────────────────────────────────────────────────────────────────
-const TABS = ['docgen', 'registry', 'settings'];
+const TABS = ['docgen', 'registry', 'cases', 'settings'];
 
 const tabBtns     = document.querySelectorAll('.tab-btn');
 const tabContents = document.querySelectorAll('.tab-content');
@@ -25,7 +25,7 @@ tabBtns.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab))
 
 document.addEventListener('keydown', e => {
   if (!e.altKey) return;
-  const idx = ['1', '2', '3'].indexOf(e.key);
+  const idx = ['1', '2', '3', '4'].indexOf(e.key);
   if (idx !== -1) { e.preventDefault(); switchTab(TABS[idx]); }
 });
 
@@ -125,4 +125,5 @@ switchTab(Settings.get('last_tab', 'docgen'));
 
 DocgenModule.init(document.getElementById('tab-docgen'));
 RegistryModule.init(document.getElementById('tab-registry'));
+CasesModule.init(document.getElementById('tab-cases'));
 SettingsModule.init(document.getElementById('tab-settings'));

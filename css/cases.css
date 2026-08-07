@@ -1,0 +1,222 @@
+/* ── Ügy-idővonal ────────────────────────────────────────────────────────── */
+
+.ct-head {
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--c-border);
+}
+.ct-title { font-size: 14px; font-weight: 600; color: var(--c-text); }
+.ct-sub   { font-size: 11px; color: var(--c-muted); margin-top: 2px; }
+
+.ct-empty {
+  padding: 18px 14px;
+  font-size: 12px;
+  color: var(--c-muted);
+  font-style: italic;
+}
+
+/* ── Benyújtási sáv ──────────────────────────────────────────────────────── */
+
+.ct-window {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-bg);
+}
+.ct-window--done { opacity: .6; }
+
+.ct-window__head {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 10px; flex-wrap: wrap;
+}
+.ct-window__badge {
+  color: #fff; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em;
+  padding: 2px 8px; border-radius: 10px; white-space: nowrap;
+}
+.ct-window__text { font-size: 12px; color: var(--c-text); }
+
+.ct-window__bar {
+  position: relative; height: 8px; border-radius: 4px;
+  background: var(--c-border); overflow: visible;
+}
+.ct-window__seg { position: absolute; top: 0; height: 8px; }
+.ct-window__seg--ok   { background: var(--c-green); border-radius: 4px 0 0 4px; }
+.ct-window__seg--warn { background: var(--c-amber); }
+.ct-window__seg--late { background: var(--c-red); border-radius: 0 4px 4px 0; }
+
+/* A mai nap jelölője: kilóg a sávból, hogy ne keveredjen a szakaszokkal */
+.ct-window__now {
+  position: absolute; top: -4px; width: 2px; height: 16px;
+  background: var(--c-text); transform: translateX(-1px);
+}
+.ct-window__now::after {
+  content: ''; position: absolute; left: -3px; top: -4px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--c-text);
+}
+/* Ha a mai nap a sávon kívülre esik, halványabb – nem pontos pozíció */
+.ct-window__now--out { opacity: .45; }
+
+.ct-window__marks {
+  display: flex; justify-content: space-between;
+  margin-top: 8px; font-size: 10px; color: var(--c-muted);
+  line-height: 1.35; gap: 4px;
+}
+.ct-window__marks span { flex: 1; }
+.ct-window__marks span:nth-child(2),
+.ct-window__marks span:nth-child(3) { text-align: center; }
+.ct-window__marks span:last-child   { text-align: right; }
+.ct-window__marks strong { color: var(--c-text); font-weight: 600; }
+
+/* ── Függőleges idővonal ─────────────────────────────────────────────────── */
+
+.ct-list {
+  list-style: none; margin: 0; padding: 10px 14px 14px;
+  position: relative;
+}
+/* A folytonos vonal a pontok mögött */
+.ct-list::before {
+  content: ''; position: absolute;
+  left: 20px; top: 14px; bottom: 18px;
+  width: 1px; background: var(--c-border);
+}
+
+.ct-item {
+  position: relative; display: flex; gap: 10px;
+  padding: 5px 0 5px 0;
+}
+.ct-dot {
+  flex: 0 0 13px; text-align: center; font-size: 11px;
+  line-height: 17px; z-index: 1;
+  background: var(--c-card);
+}
+.ct-body { min-width: 0; flex: 1; }
+
+.ct-line1 { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.ct-label { font-size: 12px; font-weight: 600; color: var(--c-text); }
+
+/* A számított pontok jelölése – nem tények, hanem következtetések */
+.ct-calc {
+  font-size: 9px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--c-muted); border: 1px solid var(--c-border);
+  border-radius: 3px; padding: 0 4px; white-space: nowrap;
+}
+
+.ct-line2 { display: flex; gap: 8px; font-size: 11px; margin-top: 1px; }
+.ct-date { color: var(--c-text); }
+.ct-rel  { color: var(--c-muted); }
+
+.ct-detail {
+  font-size: 11px; color: var(--c-muted);
+  margin-top: 3px; line-height: 1.45;
+}
+.ct-user { font-style: italic; }
+
+/* A múlt halványabb, a mai nap kiemelt */
+.ct-item--mult .ct-label,
+.ct-item--mult .ct-date { opacity: .75; }
+.ct-item--ma .ct-label  { color: var(--c-blue); }
+.ct-item--ma .ct-dot    { font-size: 13px; }
+
+/* A jövőbeli számított pontok szaggatottak – még nem történtek meg */
+.ct-item--jovo.ct-item--ablak .ct-label,
+.ct-item--jovo.ct-item--hatarido .ct-label { font-weight: 500; }
+
+@media (max-width: 700px) {
+  .ct-window__marks { font-size: 9px; }
+  .ct-window__marks span:nth-child(2) { text-align: left; }
+}
+
+/* ── Ügyek fül ───────────────────────────────────────────────────────────── */
+
+/* A .tab-content maga is flex-konténer, ezért a burkoló flex-ELEM: enélkül
+   a tartalmához zsugorodna, és a részletező panel elkeskenyedne. */
+.cv-wrap { display: flex; flex: 1; width: 100%; min-width: 0; height: 100%; min-height: 0; }
+
+.cv-side {
+  width: 380px; flex: 0 0 380px;
+  display: flex; flex-direction: column; min-height: 0;
+  border-right: 1px solid var(--c-border); background: var(--c-sidebar);
+}
+.cv-detail {
+  flex: 1; min-width: 0; overflow-y: auto; background: var(--c-card);
+}
+.cv-detail__person {
+  padding: 10px 14px 0; font-size: 12px; color: var(--c-muted); font-weight: 600;
+}
+
+.cv-notready { padding: 24px; font-size: 13px; color: var(--c-muted); }
+
+.cv-toolbar { padding: 10px 12px 8px; border-bottom: 1px solid var(--c-border); }
+.cv-filters { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+.cv-filter {
+  font-size: 11px; padding: 3px 9px; border-radius: 12px; cursor: pointer;
+  border: 1px solid var(--c-border); background: transparent; color: var(--c-muted);
+}
+.cv-filter.is-active { background: var(--c-teal); border-color: var(--c-teal); color: #fff; }
+
+.cv-list { flex: 1; overflow-y: auto; min-height: 0; }
+.cv-empty { padding: 20px 14px; font-size: 12px; color: var(--c-muted); font-style: italic; }
+
+.cv-row {
+  display: flex; align-items: flex-start; gap: 8px; width: 100%;
+  padding: 8px 12px; border: 0; border-bottom: 1px solid var(--c-border);
+  background: transparent; text-align: left; cursor: pointer;
+}
+.cv-row:hover { background: var(--c-bg); }
+.cv-row.is-selected { background: var(--c-bg); box-shadow: inset 3px 0 0 var(--c-teal); }
+
+.cv-row__dot { flex: 0 0 7px; width: 7px; height: 7px; border-radius: 50%; margin-top: 5px; }
+.cv-row__dot--lejart  { background: var(--c-red); }
+.cv-row__dot--surgos  { background: var(--c-amber); }
+.cv-row__dot--nyitott { background: var(--c-slate); }
+.cv-row__dot--lezart  { background: var(--c-border); }
+
+.cv-row__main { flex: 1; min-width: 0; }
+.cv-row__name { display: block; font-size: 12px; font-weight: 600; color: var(--c-text); }
+.cv-row__type { display: block; font-size: 11px; color: var(--c-muted); }
+.cv-row__meta { flex: 0 0 auto; text-align: right; }
+.cv-row__status { display: block; font-size: 11px; color: var(--c-text); }
+.cv-row__due    { display: block; font-size: 10px; color: var(--c-muted); }
+.cv-row--lejart .cv-row__due { color: var(--c-red); font-weight: 600; }
+.cv-row--surgos .cv-row__due { color: var(--c-amber); font-weight: 600; }
+
+.cv-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 12px; border-top: 1px solid var(--c-border);
+}
+.cv-count { font-size: 11px; color: var(--c-muted); }
+
+.cv-suggest { padding: 8px 12px; border-bottom: 1px solid var(--c-border); }
+.cv-suggest__title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--c-amber); margin-bottom: 5px;
+}
+.cv-suggest__item {
+  display: flex; justify-content: space-between; width: 100%;
+  font-size: 11px; padding: 3px 0; border: 0; background: transparent;
+  color: var(--c-text); cursor: pointer; text-align: left;
+}
+.cv-suggest__item:hover { text-decoration: underline; }
+.cv-suggest__days { color: var(--c-muted); }
+.cv-suggest__more { font-size: 10px; color: var(--c-muted); margin-top: 3px; }
+
+.cv-actions {
+  display: flex; gap: 8px; padding: 12px 14px;
+  border-top: 1px solid var(--c-border);
+}
+
+/* ── Ügy-űrlap ───────────────────────────────────────────────────────────── */
+
+.cf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.cf-field { display: flex; flex-direction: column; gap: 3px; }
+.cf-field--wide { grid-column: 1 / -1; }
+.cf-field > span { font-size: 11px; color: var(--c-muted); }
+.cf-field > small { font-size: 10px; color: var(--c-muted); }
+.cf-window:not(:empty) { margin-top: 12px; border: 1px solid var(--c-border); border-radius: 6px; }
+
+@media (max-width: 780px) {
+  .cv-wrap { flex-direction: column; }
+  .cv-side { width: auto; flex: 0 0 auto; max-height: 45%; border-right: 0;
+             border-bottom: 1px solid var(--c-border); }
+  .cf-grid { grid-template-columns: 1fr; }
+}
