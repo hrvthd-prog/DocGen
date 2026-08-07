@@ -210,11 +210,9 @@ const CaseRepo = (() => {
   /** Emberi szöveg a határidőhöz – a felület ezt írja ki. */
   function deadlineText(c, ma = null) {
     if (c.closedAt) return 'Lezárva';
-    if (!c.dueAt) {
-      return CaseTypes.needsTriggerDate(c.type)
-        ? 'Nincs határidő – add meg a tény napját'
-        : 'Nincs határidő';
-    }
+    // Határidő nélküli ügy nem hiányos: a kezdő nap csak akkor derül ki,
+    // amikor megjön az iktatószám, illetve amikor tudjuk a tény napját.
+    if (!c.dueAt) return `Nincs határidő – add meg: ${CaseTypes.triggerLabel(c.type)}`;
     const n = daysLeft(c, ma);
     const elozetes = isAdvisory(c) ? 'a megadott nap szerint ' : '';
     if (n === null)  return c.dueAt;
@@ -266,7 +264,7 @@ const CaseRepo = (() => {
    * (kérelmeknél alapból 70 nap), de a hívó felülírhatja.
    */
   function create({ employeeId, type, dueAt, ehNumber = '', fileNumber = '',
-                    note = '', employeeFields = {}, openedAt = null,
+                    note = '', openedAt = null,
                     triggerDate = null } = {}) {
     ensureLoaded();
     const indul = openedAt || today();
@@ -281,7 +279,7 @@ const CaseRepo = (() => {
       triggerDate: triggerDate || null,
       dueAt: dueAt !== undefined && dueAt !== null
         ? dueAt
-        : CaseTypes.suggestDueDate(type, employeeFields, indul, triggerDate),
+        : CaseTypes.suggestDueDate(type, triggerDate),
       closedAt: null,
       outcome: null,
       producedId: null,
@@ -322,9 +320,10 @@ const CaseRepo = (() => {
     const next = Object.assign({}, c);
     if (triggerDate !== undefined) {
       next.triggerDate = triggerDate || null;
-      if (dueAt === undefined && CaseTypes.needsTriggerDate(next.type)) {
-        next.dueAt = CaseTypes.suggestDueDate(
-          next.type, {}, next.openedAt, next.triggerDate);
+      // A kezdő nap rögzítésekor (pl. megjött az iktatószám) magától
+      // kiszámoljuk a határidőt – kivéve ha azt kézzel felülírták.
+      if (dueAt === undefined) {
+        next.dueAt = CaseTypes.suggestDueDate(next.type, next.triggerDate);
       }
     }
     if (dueAt !== undefined)      next.dueAt = dueAt || null;

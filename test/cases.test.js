@@ -70,34 +70,31 @@ atest('a kérelmek alapértelmezett határideje 70 nap', async () => {
   }
 });
 
-atest('a 70 nap valóban 70 nappal későbbi dátumot ad', async () => {
-  const d = CaseTypes.suggestDueDate('rp_elso', {}, '2026-01-01');
-  assertEq(d, '2026-03-12');   // 2026-01-01 + 70 nap
+atest('a 70 nap az OIF-érkeztetéstől számol', async () => {
+  // A határidő az érkeztetés napját KÖVETŐ naptól indul, ezért a hetvenedik
+  // nap pontosan az érkeztetés + 70.
+  assertEq(CaseTypes.suggestDueDate('rp_elso', '2026-01-01'), '2026-03-12');
+  assertEq(CaseTypes.suggestDueDate('rp_hosszabbitas', '2026-01-01'), '2026-03-12');
+  assertEq(CaseTypes.suggestDueDate('letelepedes', '2026-01-01'), '2026-03-12');
 });
 
-atest('a határidő a dolgozó adatából is számolható, ha az a jövőben van', async () => {
-  // A meghosszabbítást a lejárat előtt 30 nappal kell beadni
-  const d = CaseTypes.suggestDueDate('rp_hosszabbitas',
-    { expiration_of_rp: '2027-06-30' }, '2026-08-01');
-  assertEq(d, '2027-05-31');
-});
-
-atest('lejárt engedélynél nem ad múltbeli határidőt, hanem a 70 napot', async () => {
-  // Múltbeli határidő félrevezető lenne – „már rég lejárt" helyett kapjunk
-  // valós, teljesíthető dátumot.
-  const d = CaseTypes.suggestDueDate('rp_hosszabbitas',
-    { expiration_of_rp: '2020-01-01' }, '2026-08-01');
-  assertEq(d, '2026-10-10');   // 2026-08-01 + 70 nap
+atest('a kérelem kezdő napja az OIF-érkeztetés, nem az ügy megnyitása', async () => {
+  // A program nem tudja, mikor érkeztette az OIF a kérelmet – ezt kézzel
+  // kell rögzíteni, amikor megjön az iktatószám.
+  assert(/érkeztet/i.test(CaseTypes.triggerLabel('rp_elso')),
+    `nem az érkeztetést kéri: ${CaseTypes.triggerLabel('rp_elso')}`);
+  assert(/iktatószám/i.test(CaseTypes.triggerLabel('rp_elso')));
+  assert(/költözés/i.test(CaseTypes.triggerLabel('szallashely_valtozas')));
 });
 
 atest('a bejelentések határideje a TÉNY napjától fut, nem az ügy megnyitásától', async () => {
   // Szálláshely: költözéstől 3 nap
-  assertEq(CaseTypes.suggestDueDate('szallashely_valtozas', {}, '2026-08-20', '2026-08-10'),
+  assertEq(CaseTypes.suggestDueDate('szallashely_valtozas', '2026-08-10'),
     '2026-08-13', 'a szálláshely-bejelentés nem a költözéstől számol');
   // Munkaviszony megkezdése / megszűnése: a ténytől 5 nap
-  assertEq(CaseTypes.suggestDueDate('munkaviszony_bejelentes', {}, '2026-08-20', '2026-08-10'),
+  assertEq(CaseTypes.suggestDueDate('munkaviszony_bejelentes', '2026-08-10'),
     '2026-08-15');
-  assertEq(CaseTypes.suggestDueDate('munkaviszony_kijelentes', {}, '2026-08-20', '2026-08-10'),
+  assertEq(CaseTypes.suggestDueDate('munkaviszony_kijelentes', '2026-08-10'),
     '2026-08-15');
 });
 
@@ -139,11 +136,31 @@ atest('a kézzel megadott határidőt a kiváltó dátum nem írja felül', asyn
   assertEq(CaseRepo.get(ugy.id).dueAt, '2026-09-01');
 });
 
-atest('a kérelem határideje a megnyitástól fut, kiváltó dátum nem kell hozzá', async () => {
-  assertEq(CaseTypes.needsTriggerDate('rp_elso'), false);
-  assertEq(CaseTypes.needsTriggerDate('szallashely_valtozas'), true);
-  // Kérelemnél a triggerDate nem befolyásol
-  assertEq(CaseTypes.suggestDueDate('rp_elso', {}, '2026-01-01', '2025-01-01'), '2026-03-12');
+atest('a kérelemnek sincs határideje, amíg nem tudjuk az érkeztetés napját', async () => {
+  // Beadás után, de az iktatószám megérkezése előtt egyszerűen nem tudjuk,
+  // mikor jár le a 70 nap. Ilyenkor ne mutassunk kitalált dátumot.
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso' });
+
+  assertEq(ugy.dueAt, null, 'kitalált egy határidőt az érkeztetés ismerete nélkül');
+  assertEq(CaseRepo.urgency(ugy, '2026-08-07'), 'nyitott');
+  assert(/érkeztet/i.test(CaseRepo.deadlineText(ugy)),
+    `nem az érkeztetést kéri: ${CaseRepo.deadlineText(ugy)}`);
+});
+
+atest('az érkeztetés rögzítésekor magától megjelenik a határidő', async () => {
+  // Tipikus menet: beadjuk, majd megjön az iktatószám az érkeztetés napjával.
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso' });
+  assertEq(ugy.dueAt, null);
+
+  CaseRepo.update(ugy.id, { triggerDate: '2026-01-01', fileNumber: 'IKT-42/2026' });
+  const u = CaseRepo.get(ugy.id);
+  assertEq(u.dueAt, '2026-03-12', 'nem számolta ki a 70 napot');
+  assertEq(u.triggerDate, '2026-01-01');
+  assertEq(u.fileNumber, 'IKT-42/2026');
 });
 
 atest('a bejelentés határideje tájékoztató, a kérelemé nem', async () => {
@@ -155,24 +172,23 @@ atest('a bejelentés határideje tájékoztató, a kérelemé nem', async () => 
   assertEq(CaseTypes.isAdvisoryDeadline('rp_elso'), false);
 });
 
-atest('kiváltó dátum nélkül NINCS határidő – nem talál ki egyet', async () => {
-  // A megnyitás napjából számolni félrevezetés lenne: a program nem tudja,
-  // mikor költözött a dolgozó. Kitalált határidő rosszabb, mint a hiányzó.
-  assertEq(CaseTypes.suggestDueDate('szallashely_valtozas', {}, '2026-08-20', null), null);
-  assertEq(CaseTypes.suggestDueDate('munkaviszony_bejelentes', {}, '2026-08-20'), null);
-  // Kérelemnél viszont van határidő kiváltó dátum nélkül is
-  assertEq(CaseTypes.suggestDueDate('rp_elso', {}, '2026-01-01'), '2026-03-12');
+atest('kezdő dátum nélkül SEMMILYEN típusnál nincs határidő', async () => {
+  // Egyetlen határidő sincs, amit a program magától tudna – mindegyik egy
+  // kézzel rögzített naptól fut. Kitalált határidő rosszabb, mint a hiányzó.
+  for (const t of CaseTypes.all()) {
+    assertEq(CaseTypes.suggestDueDate(t.key, null), null, `${t.key}: kitalált egy határidőt`);
+  }
 });
 
-atest('határidő nélküli bejelentés nem számít hiányosnak', async () => {
+atest('határidő nélküli ügy nem számít hiányosnak', async () => {
   await tisztaAllapot();
   const emp = ujDolgozo();
   const ugy = CaseRepo.create({ employeeId: emp.id, type: 'szallashely_valtozas' });
 
   assertEq(ugy.dueAt, null, 'kitalált egy határidőt');
   assertEq(CaseRepo.urgency(ugy, '2026-08-07'), 'nyitott', 'lejártnak vagy sürgősnek jelöli');
-  assert(/add meg a tény napját/.test(CaseRepo.deadlineText(ugy)),
-    `félrevezető szöveg: ${CaseRepo.deadlineText(ugy)}`);
+  assert(/Költözés napja/.test(CaseRepo.deadlineText(ugy)),
+    `nem mondja meg, mit kell megadni: ${CaseRepo.deadlineText(ugy)}`);
 });
 
 atest('a tájékoztató határidő szövege nem állít mulasztást', async () => {
@@ -213,15 +229,24 @@ atest('minden ügytípusnak van záró státusza – különben lezárhatatlan l
 // ════════════════════════════════════════════════════════════════════════════
 asection('Ügy életciklusa');
 
-atest('új ügy a típus első státuszával és javasolt határidővel indul', async () => {
+atest('új ügy a típus első státuszával indul', async () => {
   await tisztaAllapot();
   const emp = ujDolgozo();
   const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', openedAt: '2026-01-01' });
 
   assertEq(ugy.status, 'elokeszites');
-  assertEq(ugy.dueAt, '2026-03-12');
   assertEq(ugy.closedAt, null);
   assertEq(ugy.events.length, 1, 'a megnyitás nem került a történetbe');
+});
+
+atest('megadott érkeztetéssel a határidő azonnal megvan', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({
+    employeeId: emp.id, type: 'rp_elso',
+    openedAt: '2026-01-05', triggerDate: '2026-01-01',
+  });
+  assertEq(ugy.dueAt, '2026-03-12', 'nem az érkeztetéstől számolt');
 });
 
 atest('a javasolt határidő kézzel felülírható', async () => {
