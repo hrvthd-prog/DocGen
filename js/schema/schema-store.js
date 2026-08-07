@@ -79,7 +79,10 @@ const SchemaStore = (() => {
         required: !!f.required,
         label:    { hu: (f.label && f.label.hu) || f.key, en: (f.label && f.label.en) || '' },
         tags:     Array.isArray(f.tags) ? f.tags.slice() : [],
-        note:     f.note || '',
+        // Kitöltési útmutató – az adatbekérő xlsx cellakommentjébe kerül.
+        // A táblázatot külföldi munkavállaló tölti ki, ezért az angol a fontos;
+        // a magyar változat opcionális.
+        hint:     { en: (f.hint && f.hint.en) || '', hu: (f.hint && f.hint.hu) || '' },
       };
       if (field.type === 'enum') {
         field.values = (f.values || []).map(v => ({

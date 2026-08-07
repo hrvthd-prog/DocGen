@@ -48,11 +48,52 @@ const XlsxWrite = (() => {
     writeValidations(ws, cols, profile, st);
     writeRows(ws, cols, profile, schema, employees);
 
+    // A védelem csak az ÜRES sablonra való (azt küldjük ki kitöltésre).
+    // A feltöltött exportot magunk dolgozzuk fel, ott csak útban lenne.
+    if (!employees.length) await protectSheet(ws, cols, profile);
+
     addGuideSheet(wb, schema, cols, profile);
     return wb;
   }
 
-  /** 1. sor: gépi kulcsok (kötelező = piros), 2. sor: angol címkék. */
+  /**
+   * Lapvédelem: a fejléc és a rejtett kulcssor ne legyen módosítható,
+   * a kitölthető sorok viszont igen.
+   *
+   * Fontos sorrend: védelem alatt MINDEN cella alapból zárolt, ezért előbb
+   * fel kell oldani az adatsorokat – különben a kitöltő egy karaktert sem
+   * tudna beírni. (Ezt géppel is ellenőrizzük a tesztekben.)
+   */
+  async function protectSheet(ws, cols, profile) {
+    const p = profile.protection;
+    if (!p || !p.enabled) return;
+
+    const elsoSor = profile.firstDataRow;
+    const utolsoSor = elsoSor + (p.fillableRows || 30) - 1;
+
+    for (let r = elsoSor; r <= utolsoSor; r++) {
+      const sor = ws.getRow(r);
+      for (let c = 1; c <= cols.length; c++) {
+        sor.getCell(c).protection = { locked: false };
+      }
+    }
+
+    // Az alapértelmezés minden szerkesztést tilt, a kijelölést engedi.
+    // A sorformázás tiltása az, ami miatt a rejtett kulcssor rejtve marad.
+    await ws.protect(p.password || '', {
+      selectLockedCells:   true,
+      selectUnlockedCells: true,
+      formatColumns:       true,   // oszlopszélesség állítható maradjon
+      formatRows:          false,  // ezzel nem fedhető fel az 1. sor
+    });
+  }
+
+  /**
+   * 1. sor: gépi kulcsok (kötelező = piros) – a programnak kell az importhoz,
+   *         ezért alapból REJTETT (profile.hideKeyRow).
+   * 2. sor: angol címkék – ez az, amit a kitöltő lát, ezért a kitöltést segítő
+   *         komment is IDE kerül, nem a rejtett sorba.
+   */
   function writeHeader(ws, cols, profile, st) {
     const keyRow   = ws.getRow(profile.keyRow);
     const labelRow = ws.getRow(profile.labelRow);
@@ -68,31 +109,68 @@ const XlsxWrite = (() => {
                   fgColor: argb(f.required ? st.requiredFill : st.optionalFill) };
       kc.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
       kc.border = { bottom: { style: 'thin' } };
-      kc.note = buildNote(f);
 
       const lc = labelRow.getCell(c);
       lc.value = f.label.en || f.label.hu;
       lc.font = { name: st.headerFont.name, size: st.headerFont.size,
                   bold: st.headerFont.bold, color: argb(st.headerFont.color) };
-      lc.fill = { type: 'pattern', pattern: 'solid', fgColor: argb(st.labelFill) };
+      lc.fill = { type: 'pattern', pattern: 'solid',
+                  fgColor: argb(f.required ? st.requiredFill : st.labelFill) };
       lc.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
       lc.border = { bottom: { style: 'medium' } };
+      lc.note = buildNote(f);
     });
 
     keyRow.height   = st.keyRowHeight;
     labelRow.height = st.labelRowHeight;
+
+    // A kulcssor a programé, nem a kitöltőé – ne kelljen ránéznie.
+    // (Rejtve is beolvasható importáláskor.)
+    if (profile.hideKeyRow) keyRow.hidden = true;
   }
 
-  /** Magyar magyarázat a fejléc-cellák kommentjében. */
+  /**
+   * A kitöltést segítő komment – ANGOLUL ELŐL.
+   *
+   * A táblázatot külföldi munkavállalók töltik ki, ezért az angol az elsődleges;
+   * a magyar megfelelő utána jön, hogy az ügyintéző is értse. A 2. sor
+   * celláira kerül, mert az 1. sor rejtett.
+   */
   function buildNote(f) {
-    const sorok = [f.label.hu];
-    if (f.required) sorok.push('KÖTELEZŐ – nem maradhat üres!');
-    if (f.type === 'date') sorok.push('DÁTUM: ÉÉÉÉ-HH-NN (pl. 1990-03-15)');
-    if (f.type === 'number') sorok.push('Szám');
-    if (f.type === 'enum') {
-      sorok.push('Lehetséges értékek: ' + f.values.map(v => v.id).join(', '));
-      sorok.push('Magyarul: ' + f.values.map(v => v.hu).join(', '));
+    const sorok = [];
+
+    sorok.push(f.label.en || f.label.hu);
+    if (f.label.hu && f.label.hu !== f.label.en) sorok.push(`(magyarul: ${f.label.hu})`);
+
+    sorok.push('');
+    sorok.push(f.required
+      ? 'REQUIRED — must not be left empty / KÖTELEZŐ'
+      : 'Optional / Nem kötelező');
+
+    // Ha van kézzel írt útmutató a sémában, az a mérvadó: pontosabb, mint amit
+    // a típusból ki lehet találni (példát ad, kivételeket említ). Ilyenkor a
+    // gépi formátum- és értékfelsorolás elmarad, mert az útmutató már tartalmazza.
+    const utmutato = f.hint && (f.hint.en || f.hint.hu);
+    if (utmutato) {
+      sorok.push('');
+      if (f.hint.en) sorok.push(f.hint.en);
+      if (f.hint.hu) sorok.push(f.hint.hu);
+    } else {
+      if (f.type === 'date') {
+        sorok.push('Format: YYYY-MM-DD (e.g. 1990-03-15)');
+        sorok.push('Formátum: ÉÉÉÉ-HH-NN');
+      }
+      if (f.type === 'number') {
+        sorok.push('Numbers only / Csak szám');
+      }
+      if (f.type === 'enum') {
+        sorok.push('Choose from the drop-down list:');
+        for (const v of f.values) {
+          sorok.push(`  ${v.id} = ${v.en || v.id}  (${v.hu})`);
+        }
+      }
     }
+
     return { texts: [{ text: sorok.join('\n') }] };
   }
 
@@ -242,10 +320,17 @@ const XlsxWrite = (() => {
     }
   }
 
+  /**
+   * Az ÜRES sablon neve fix: ezt küldjük ki kitöltésre, ott a dátumos-verziós
+   * név csak zavar. A FELTÖLTÖTT export viszont pillanatkép az adatokról,
+   * ahol a dátum hasznos – különben az egymás utáni mentések felülírnák egymást.
+   */
   function suggestFilename(profile, filled) {
+    const alap = (profile.fileName || profile.id || 'adatbekero')
+      .replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!filled) return `${alap}.xlsx`;
     const d = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-    const alap = (profile.id || 'export').replace(/[^a-zA-Z0-9_-]/g, '');
-    return `${alap}-${filled ? 'adatok' : 'sablon'}-${d}.xlsx`;
+    return `${alap}-adatok-${d}.xlsx`;
   }
 
   return { build, toBuffer, suggestFilename, _colLetter: colLetter };

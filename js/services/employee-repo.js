@@ -34,7 +34,7 @@ const EmployeeRepo = (() => {
   };
 
   // A természetes kulcs mezői – azonosító-egyezés hiányában ezekkel párosítunk.
-  // (A Horizontes útmutató is ezt a hármast használja duplikátumszűrésre.)
+  // (Az adatbekérő útmutatója is ezt a hármast használja duplikátumszűrésre.)
   const NATURAL_KEY_FIELDS = ['surname', 'forename', 'date_of_birth'];
 
   /**

@@ -5,24 +5,43 @@
  *
  * A profil köti össze a sémát a célformátummal: melyik oszlop hova kerül,
  * milyen kódolással megy ki egy választható érték, hogyan néz ki a fejléc.
- * Ha a Horizontes formátuma változik, ezt a profilt szerkesztjük – az
- * adatbázishoz nem kell hozzányúlni.
+ * Ha a célformátum változik, ezt a profilt szerkesztjük – az adatbázishoz nem
+ * kell hozzányúlni.
  *
  * A `columns: null` azt jelenti, hogy a séma mezősorrendje az irányadó. Így egy
  * új mező felvétele után az export magától követi, külön beállítás nélkül.
  */
 const DEFAULT_EXPORT_PROFILES = [
   {
-    id: 'horizontes',
-    label: 'Horizontes adatbekérő',
+    id: 'adatbekero',
+    label: 'Munkavállalói adatbekérő',
+    fileName: 'adatbekero',   // a letöltött üres sablon neve (.xlsx nélkül)
     sheetName: 'Data',
     guideSheetName: 'Útmutató',
-    keyRow: 1,          // gépi kulcsok sora
-    labelRow: 2,        // angol címkék sora
+    keyRow: 1,          // gépi kulcsok sora – a programnak kell, a kitöltőnek nem
+    hideKeyRow: true,   // ezért alapból rejtett
+    labelRow: 2,        // angol címkék sora – ide kerül a kitöltést segítő komment
     firstDataRow: 3,
     columns: null,      // null → a séma sorrendje
-    enumEncoding: 'id', // a Horizontes import a kanonikus értéket várja (male/female)
+    enumEncoding: 'id', // az import a kanonikus értéket várja (male/female)
     dateFormat: 'iso',  // ÉÉÉÉ-HH-NN szövegként
+
+    /**
+     * Lapvédelem az ÜRES sablonhoz.
+     *
+     * Nem biztonsági eszköz – az xlsx lapvédelem percek alatt megkerülhető.
+     * Egyetlen célja, hogy a kitöltő véletlenül se fedje fel a gépi kulcsok
+     * sorát, és ne írja át a fejlécet. A jelszó ezért nyugodtan cserélhető
+     * Excelben (Korrektúra → Lapvédelem feloldása).
+     *
+     * A `fillableRows` sor marad írhatóvá – védelem mellett a cellák
+     * alapból zároltak, e nélkül a táblázat kitölthetetlen lenne.
+     */
+    protection: {
+      enabled: true,
+      password: 'Aumovio2026',
+      fillableRows: 30,
+    },
     style: {
       headerFont:    { name: 'Arial', size: 10, bold: true, color: 'FFFFFFFF' },
       requiredFill:  'FFC00000',

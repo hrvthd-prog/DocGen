@@ -4,7 +4,7 @@
  * Érték-kódoló: a felsorolt (enum) mezők értékeinek oda-vissza fordítása.
  *
  * Miért kell?
- *   Ugyanaz a tartalom sokféle írásmóddal érkezhet: a Horizontes adatbekérő
+ *   Ugyanaz a tartalom sokféle írásmóddal érkezhet: az adatbekérő
  *   legördülője „male"/„female"-t ír, a cellakomment viszont „ffi"/„noeoe"-t
  *   említ, egy kézzel kitöltött táblázatban pedig „Férfi" szerepel. A tároló
  *   egyetlen kanonikus értéket ismer (`male`), a megjelenítés pedig nyelvenként
@@ -73,7 +73,7 @@ const ValueCodec = (() => {
 
   /**
    * Kanonikus érték → export-alak.
-   *   'id' → 'male'   (a Horizontes import ezt várja)
+   *   'id' → 'male'   (az import ezt várja)
    *   'hu' → 'Férfi'
    *   'en' → 'Male'
    */

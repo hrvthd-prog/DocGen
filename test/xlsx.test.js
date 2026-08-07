@@ -57,7 +57,7 @@ const { SchemaStore, SEED_SCHEMA, ExportProfiles, XlsxWrite, XlsxRead, EmployeeR
 
 SchemaStore.loadFrom(SEED_SCHEMA);
 ExportProfiles.loadFrom(null);
-const PROFILE = ExportProfiles.get('horizontes');
+const PROFILE = ExportProfiles.get('adatbekero');
 
 const EREDETI = path.join(__dirname, 'fixtures/adatbekero-minta.xlsx');
 
@@ -120,7 +120,21 @@ atest('a kötelező mezők piros, az opcionálisak kék fejlécet kapnak', async
   const fill = c => (c.fill && c.fill.fgColor && c.fill.fgColor.argb) || '';
   assertEq(fill(ws.getRow(1).getCell(2)), 'FFC00000', 'surname nem piros');   // kötelező
   assertEq(fill(ws.getRow(1).getCell(1)), 'FF1F3864', 'törzsszám nem kék');   // opcionális
-  assertEq(fill(ws.getRow(2).getCell(2)), 'FF1F3864', 'a címkesor nem kék');
+});
+
+atest('a kötelezőség a LÁTHATÓ soron is látszik', async () => {
+  // Az 1. sor rejtett, ezért ha csak ott lenne piros a kötelező mező, a
+  // kitöltő semmilyen jelzést nem kapna arról, mit nem hagyhat üresen.
+  const ws = G.wb.getWorksheet('Data');
+  const fill = c => (c.fill && c.fill.fgColor && c.fill.fgColor.argb) || '';
+  assertEq(fill(ws.getRow(2).getCell(2)), 'FFC00000', 'a kötelező surname nem piros a 2. sorban');
+  assertEq(fill(ws.getRow(2).getCell(1)), 'FF1F3864', 'az opcionális törzsszám nem kék a 2. sorban');
+});
+
+atest('a gépi kulcsok sora rejtett – a kitöltőnek nem kell látnia', async () => {
+  const ws = G.wb.getWorksheet('Data');
+  assertEq(ws.getRow(1).hidden, true, 'az 1. sor nincs elrejtve');
+  assertEq(!!ws.getRow(2).hidden, false, 'a 2. sor nem lehet rejtett');
 });
 
 atest('a fejlécsor rögzítve van, hogy görgetéskor látszódjon', async () => {
@@ -130,12 +144,128 @@ atest('a fejlécsor rögzítve van, hogy görgetéskor látszódjon', async () =
   assertEq(v && v.ySplit, 2);
 });
 
-atest('a fejléc-cellákban magyar magyarázó komment van', async () => {
+function noteSzoveg(cell) {
+  const note = cell.note;
+  if (!note) return '';
+  return typeof note === 'string' ? note : (note.texts || []).map(t => t.text).join('');
+}
+
+atest('a kitöltést segítő komment a LÁTHATÓ 2. soron van', async () => {
+  // Korábban az 1. sorra került – ami rejtett, tehát a kitöltő sosem látta.
   const ws = G.wb.getWorksheet('Data');
-  const note = ws.getRow(1).getCell(2).note;
-  const szoveg = typeof note === 'string' ? note : (note.texts || []).map(t => t.text).join('');
-  assert(szoveg.includes('Vezetéknév'), 'nincs magyar jelentés a kommentben');
-  assert(szoveg.includes('KÖTELEZŐ'), 'a kötelezőség nincs jelezve');
+  assert(noteSzoveg(ws.getRow(2).getCell(2)), 'nincs komment a 2. sor cellájában');
+});
+
+atest('a komment angolul is eligazít – külföldi tölti ki', async () => {
+  const ws = G.wb.getWorksheet('Data');
+  const sz = noteSzoveg(ws.getRow(2).getCell(2));   // surname, kötelező
+  assert(/REQUIRED/.test(sz), 'a kötelezőség nincs angolul jelezve');
+  assert(/KÖTELEZŐ/.test(sz), 'a kötelezőség nincs magyarul jelezve');
+  assert(/Vezetéknév/.test(sz), 'nincs magyar jelentés');
+});
+
+atest('a dátummezőnél a formátum angolul is szerepel', async () => {
+  const ws = G.wb.getWorksheet('Data');
+  const kulcsok = [];
+  ws.getRow(1).eachCell({ includeEmpty: false }, c => kulcsok.push(String(c.value)));
+  const oszlop = kulcsok.indexOf('date_of_birth') + 1;
+  assert(oszlop > 0, 'nincs date_of_birth oszlop');
+  const sz = noteSzoveg(ws.getRow(2).getCell(oszlop));
+  assert(/YYYY-MM-DD/.test(sz), `nincs angol dátumformátum: ${sz.slice(0, 80)}`);
+});
+
+atest('a választható mezőnél a komment a legördülőre utal és felsorolja az értékeket', async () => {
+  const ws = G.wb.getWorksheet('Data');
+  const sz = noteSzoveg(ws.getRow(2).getCell(6));   // sex
+  assert(/drop-down/i.test(sz), 'nem utal a legördülőre');
+  assert(/male/.test(sz) && /female/.test(sz), `hiányos értékfelsorolás: ${sz.slice(0, 120)}`);
+});
+
+atest('útmutató nélküli mezőnél a gépi felsorolás ugrik be', async () => {
+  // Ha valaki új választható mezőt vesz fel a séma-szerkesztőben és nem ír
+  // hozzá útmutatót, a komment akkor se maradjon üres.
+  const mezo = {
+    key: 'proba', group: 'egyeb', type: 'enum', required: true,
+    label: { hu: 'Próba', en: 'Test' }, tags: [], hint: { en: '', hu: '' },
+    values: [{ id: 'a', hu: 'Alma', en: 'Apple', accepts: [] }],
+  };
+  const sema = JSON.parse(JSON.stringify(SEED_SCHEMA));
+  sema.fields = [mezo];
+  SchemaStore.loadFrom(sema);
+  const buf = await XlsxWrite.toBuffer({
+    schema: SchemaStore.get(), profile: PROFILE, employees: [],
+  });
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const sz = noteSzoveg(wb.getWorksheet('Data').getRow(2).getCell(1));
+  SchemaStore.loadFrom(SEED_SCHEMA);          // visszaállítás a többi teszthez
+
+  assert(/REQUIRED/.test(sz), 'nincs kötelezőség-jelzés');
+  assert(/a = Apple/.test(sz) && /Alma/.test(sz), `nincs gépi értékfelsorolás: ${sz}`);
+});
+
+atest('minden mező útmutatója a HELYES mezőn van', async () => {
+  // A séma útmutatóit egy szkript vitte be a valódi adatbekérőből, és a
+  // beszúrás egyszer el is csúszott egy mezővel (a 'door' szövege a
+  // 'position'-re került). Ezért mezőnként, géppel vetjük össze.
+  const vart = JSON.parse(fs.readFileSync(
+    path.join(__dirname, 'fixtures/adatbekero-hints.json'), 'utf8'));
+  const ws = G.wb.getWorksheet('Data');
+
+  const kulcsok = [];
+  ws.getRow(1).eachCell({ includeEmpty: false }, c => kulcsok.push(String(c.value)));
+
+  const rossz = [];
+  kulcsok.forEach((kulcs, i) => {
+    const elvart = vart[kulcs];
+    if (!elvart) { rossz.push(`${kulcs}: nincs elvárt útmutató a fixture-ben`); return; }
+    const kapott = noteSzoveg(ws.getRow(2).getCell(i + 1));
+    if (!kapott.includes(elvart)) {
+      rossz.push(`${kulcs}: az útmutató hiányzik vagy más mezőé`);
+    }
+  });
+
+  assertEq(kulcsok.length, 44, 'nem 44 oszlop');
+  assert(rossz.length === 0, `${rossz.length} hibás mező:\n      ` + rossz.slice(0, 8).join('\n      '));
+});
+
+atest('az üres sablon védett – a rejtett kulcssor nem fedhető fel', async () => {
+  const ws = G.wb.getWorksheet('Data');
+  assert(ws.protect || ws.sheetProtection, 'nincs lapvédelem');
+  const sp = ws.sheetProtection || {};
+  assertEq(sp.sheet, true, 'a lap nincs védve');
+  // A sorformázás tiltása az, ami a rejtett 1. sort rejtve tartja
+  assertEq(sp.formatRows === false || sp.formatRows === undefined, true,
+    'a sorformázás engedélyezett – az 1. sor felfedhető lenne');
+});
+
+atest('védelem mellett is KITÖLTHETŐ marad – ez a védelem buktatója', async () => {
+  // Lapvédelem alatt minden cella alapból zárolt. Ha az adatsorokat nem
+  // oldjuk fel, a kitöltő egyetlen karaktert sem tud beírni – a sablon
+  // használhatatlan lenne, ráadásul némán.
+  const ws = G.wb.getWorksheet('Data');
+  const zarolt = c => c.protection && c.protection.locked === false ? false : true;
+
+  assertEq(zarolt(ws.getRow(3).getCell(2)), false,  'az első adatsor zárolt – nem lehet kitölteni');
+  assertEq(zarolt(ws.getRow(32).getCell(2)), false, 'az utolsó adatsor zárolt');
+  assertEq(zarolt(ws.getRow(2).getCell(2)), true,   'a címkesor nincs zárolva');
+});
+
+atest('a feltöltött export NEM védett – azt magunk dolgozzuk fel', async () => {
+  const { wb } = await generalt([{
+    id: 'x', identifiers: [], fields: { surname: 'Teszt', forename: 'Elek' },
+  }]);
+  const sp = wb.getWorksheet('Data').sheetProtection || {};
+  assert(!sp.sheet, 'a feltöltött export is védett lett');
+});
+
+atest('az üres sablon neve adatbekero.xlsx – se dátum, se cégnév', async () => {
+  assertEq(XlsxWrite.suggestFilename(PROFILE, false), 'adatbekero.xlsx');
+});
+
+atest('a feltöltött export neve megkülönböztethető és dátumos', async () => {
+  const nev = XlsxWrite.suggestFilename(PROFILE, true);
+  assert(/^adatbekero-adatok-\d{8}\.xlsx$/.test(nev), `váratlan fájlnév: ${nev}`);
 });
 
 atest('a választható mezőkre legördülő kerül a helyes értékkészlettel', async () => {
@@ -201,7 +331,7 @@ atest('a rekordok adatai a helyes oszlopokba kerülnek', async () => {
   assertEq(String(r.getCell(4).value), '1990-03-15');
 });
 
-atest('a választható értékek a Horizontes által várt kanonikus alakban mennek ki', async () => {
+atest('a választható értékek az import által várt kanonikus alakban mennek ki', async () => {
   const emp = [{ fields: { surname: 'K', forename: 'A', sex: 'male', marital_status: 'married',
                            educational_attainment: 'tertiary', speaks_hungarian: 'yes' } }];
   const { wb } = await generalt(emp);
@@ -426,7 +556,7 @@ atest('a beragadt kiírás hibává alakul, nem néma fagyássá', async () => {
   const kezdet = Date.now();
   let hiba = null;
   try {
-    await sb.XlsxWrite.toBuffer({ schema: sb.SchemaStore.get(), profile: sb.ExportProfiles.get('horizontes'), employees: [] });
+    await sb.XlsxWrite.toBuffer({ schema: sb.SchemaStore.get(), profile: sb.ExportProfiles.get('adatbekero'), employees: [] });
   } catch (e) { hiba = e; }
 
   assert(hiba, 'nem dobott hibát — a felület némán fagyna');
@@ -437,7 +567,7 @@ atest('a beragadt kiírás hibává alakul, nem néma fagyássá', async () => {
 
 atest('a normál kiírást az őr nem zavarja', async () => {
   const sb = xlsxWriteRovidHataridovel(() => Promise.resolve(Buffer.from('xlsx-adat')));
-  const buf = await sb.XlsxWrite.toBuffer({ schema: sb.SchemaStore.get(), profile: sb.ExportProfiles.get('horizontes'), employees: [] });
+  const buf = await sb.XlsxWrite.toBuffer({ schema: sb.SchemaStore.get(), profile: sb.ExportProfiles.get('adatbekero'), employees: [] });
   assert(buf && Buffer.from(buf).toString() === 'xlsx-adat', 'nem a várt puffert adta vissza');
 });
 

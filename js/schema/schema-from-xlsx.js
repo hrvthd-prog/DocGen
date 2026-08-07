@@ -3,7 +3,7 @@
 /**
  * Séma-javaslat egy adatbekérő xlsx-ből.
  *
- * Ha a Horizontes új sablonverziót küld, ez olvassa be és veti össze az élő
+ * Ha új sablonverzió érkezik, ez olvassa be és veti össze az élő
  * sémával: mi az új mező, mi tűnt el, változott-e valamelyik legördülő. A
  * felhasználó dönti el, mit fogad el – az app magától semmit nem ír át.
  *
