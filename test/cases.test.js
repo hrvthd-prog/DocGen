@@ -90,6 +90,112 @@ atest('lejárt engedélynél nem ad múltbeli határidőt, hanem a 70 napot', as
   assertEq(d, '2026-10-10');   // 2026-08-01 + 70 nap
 });
 
+atest('a bejelentések határideje a TÉNY napjától fut, nem az ügy megnyitásától', async () => {
+  // Szálláshely: költözéstől 3 nap
+  assertEq(CaseTypes.suggestDueDate('szallashely_valtozas', {}, '2026-08-20', '2026-08-10'),
+    '2026-08-13', 'a szálláshely-bejelentés nem a költözéstől számol');
+  // Munkaviszony megkezdése / megszűnése: a ténytől 5 nap
+  assertEq(CaseTypes.suggestDueDate('munkaviszony_bejelentes', {}, '2026-08-20', '2026-08-10'),
+    '2026-08-15');
+  assertEq(CaseTypes.suggestDueDate('munkaviszony_kijelentes', {}, '2026-08-20', '2026-08-10'),
+    '2026-08-15');
+});
+
+atest('két hete megtörtént költözésnél a határidő MÁR LEJÁRT', async () => {
+  // Ha a megnyitástól számolnánk, a program azt mutatná, hogy még van időnk –
+  // pedig a bejelentés elmulasztása jogszabálysértés.
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const MA = '2026-08-24';
+  const ugy = CaseRepo.create({
+    employeeId: emp.id, type: 'szallashely_valtozas',
+    openedAt: MA, triggerDate: '2026-08-10',
+  });
+  assertEq(ugy.dueAt, '2026-08-13');
+  assertEq(CaseRepo.urgency(ugy, MA), 'lejart', 'nem jelzi lejártnak');
+  assertEq(CaseRepo.daysLeft(ugy, MA), -11);
+});
+
+atest('a kiváltó dátum javítása újraszámolja a határidőt', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({
+    employeeId: emp.id, type: 'szallashely_valtozas', triggerDate: '2026-08-10',
+  });
+  assertEq(ugy.dueAt, '2026-08-13');
+
+  // Elgépelt költözési dátum javítása
+  CaseRepo.update(ugy.id, { triggerDate: '2026-08-18' });
+  assertEq(CaseRepo.get(ugy.id).dueAt, '2026-08-21', 'a határidő a régi értéken maradt');
+});
+
+atest('a kézzel megadott határidőt a kiváltó dátum nem írja felül', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({
+    employeeId: emp.id, type: 'szallashely_valtozas', triggerDate: '2026-08-10',
+  });
+  CaseRepo.update(ugy.id, { triggerDate: '2026-08-18', dueAt: '2026-09-01' });
+  assertEq(CaseRepo.get(ugy.id).dueAt, '2026-09-01');
+});
+
+atest('a kérelem határideje a megnyitástól fut, kiváltó dátum nem kell hozzá', async () => {
+  assertEq(CaseTypes.needsTriggerDate('rp_elso'), false);
+  assertEq(CaseTypes.needsTriggerDate('szallashely_valtozas'), true);
+  // Kérelemnél a triggerDate nem befolyásol
+  assertEq(CaseTypes.suggestDueDate('rp_elso', {}, '2026-01-01', '2025-01-01'), '2026-03-12');
+});
+
+atest('a bejelentés határideje tájékoztató, a kérelemé nem', async () => {
+  // A bejelentés határideje egy külső tényből számol, amit a program nem
+  // ismer és nem tud ellenőrizni – annyit ér, amennyit a beírt dátum.
+  // A kérelem 70 napja az ügy megnyitásából számol, amit a program maga tud.
+  assertEq(CaseTypes.isAdvisoryDeadline('szallashely_valtozas'), true);
+  assertEq(CaseTypes.isAdvisoryDeadline('munkaviszony_kijelentes'), true);
+  assertEq(CaseTypes.isAdvisoryDeadline('rp_elso'), false);
+});
+
+atest('kiváltó dátum nélkül NINCS határidő – nem talál ki egyet', async () => {
+  // A megnyitás napjából számolni félrevezetés lenne: a program nem tudja,
+  // mikor költözött a dolgozó. Kitalált határidő rosszabb, mint a hiányzó.
+  assertEq(CaseTypes.suggestDueDate('szallashely_valtozas', {}, '2026-08-20', null), null);
+  assertEq(CaseTypes.suggestDueDate('munkaviszony_bejelentes', {}, '2026-08-20'), null);
+  // Kérelemnél viszont van határidő kiváltó dátum nélkül is
+  assertEq(CaseTypes.suggestDueDate('rp_elso', {}, '2026-01-01'), '2026-03-12');
+});
+
+atest('határidő nélküli bejelentés nem számít hiányosnak', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'szallashely_valtozas' });
+
+  assertEq(ugy.dueAt, null, 'kitalált egy határidőt');
+  assertEq(CaseRepo.urgency(ugy, '2026-08-07'), 'nyitott', 'lejártnak vagy sürgősnek jelöli');
+  assert(/add meg a tény napját/.test(CaseRepo.deadlineText(ugy)),
+    `félrevezető szöveg: ${CaseRepo.deadlineText(ugy)}`);
+});
+
+atest('a tájékoztató határidő szövege nem állít mulasztást', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const MA = '2026-08-24';
+
+  const bejelentes = CaseRepo.create({
+    employeeId: emp.id, type: 'szallashely_valtozas', triggerDate: '2026-08-10',
+  });
+  const kerelem = CaseRepo.create({
+    employeeId: emp.id, type: 'rp_elso', dueAt: '2026-08-13',
+  });
+
+  const bSzoveg = CaseRepo.deadlineText(bejelentes, MA);
+  const kSzoveg = CaseRepo.deadlineText(kerelem, MA);
+
+  assert(/megadott nap szerint/.test(bSzoveg), `nem jelzi tájékoztatónak: ${bSzoveg}`);
+  assert(!/megadott nap szerint/.test(kSzoveg), `a kérelmet is tájékoztatónak jelzi: ${kSzoveg}`);
+  assert(/11 napja lejárt/.test(bSzoveg) && /11 napja lejárt/.test(kSzoveg),
+    'a napszám hibás');
+});
+
 atest('mind a négy elutasítás-fajta rögzíthető', async () => {
   const kulcsok = CaseTypes.outcomes().map(o => o.key);
   for (const k of ['megadva', 'elutasitva', 'megszuntetve', 'elutasitva_ervn', 'visszavonva']) {

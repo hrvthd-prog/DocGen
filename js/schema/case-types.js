@@ -25,11 +25,45 @@ const CASE_OUTCOMES = [
 ];
 
 /**
- * Kérelmek alapértelmezett ügyintézési határideje.
- * Ez csak KIINDULÓ érték: minden ügynél kézzel felülírható, mert a hatóság
- * felfüggesztheti vagy meghosszabbíthatja az eljárást.
+ * Kérelmek ügyintézési határideje: az összevont kérelmezési eljárásban
+ * előterjesztett kérelmekben az idegenrendészeti hatóságnak 70 napon belül
+ * kell döntést hoznia.
+ *
+ * Kiinduló érték: ügyenként felülírható, mert a hatóság az eljárást
+ * felfüggesztheti vagy meghosszabbíthatja.
  */
 const DEFAULT_APPLICATION_DAYS = 70;
+
+/**
+ * Honnan fut a határidő:
+ *   'opened'  – az ügy megnyitásától (kérelmeknél: a beadástól számít a
+ *               hatósági ügyintézési idő)
+ *   'trigger' – a tény bekövetkezésétől (bejelentéseknél: a költözés vagy a
+ *               munkaviszony megkezdése/megszűnése napjától)
+ *
+ * Ez nem formaság: egy két hete megtörtént költözésnél a bejelentési határidő
+ * MÁR LEJÁRT, akkor is, ha az ügyet ma nyitjuk meg. Ha a megnyitástól
+ * számolnánk, a program azt mutatná, hogy még van időnk.
+ */
+const DEADLINE_FROM = { OPENED: 'opened', TRIGGER: 'trigger' };
+
+/**
+ * Mennyire megbízható a határidő:
+ *
+ *   'hatosagi'   – az ügy megnyitásából számol, amit a program maga ismer.
+ *                  A 70 napos ügyintézési határidő ilyen: erre lehet építeni.
+ *
+ *   'tajekoztato' – egy KÜLSŐ tényből számol, amit csak a felhasználó tud
+ *                  megadni (mikor költözött, mikor kezdődött a munkaviszony).
+ *                  A program ezt nem tudja ellenőrizni, ezért az eredmény
+ *                  annyit ér, amennyit a beírt dátum – tájékoztató, nem
+ *                  hivatkozási alap. Nem szabad úgy jeleznie, mintha a
+ *                  program tudná, hogy mulasztás történt.
+ *
+ * Ebből következik a legfontosabb szabály: kiváltó dátum nélkül NINCS
+ * határidő. Kitalálni egyet a megnyitás napjából félrevezetés lenne.
+ */
+const DEADLINE_KIND = { AUTHORITY: 'hatosagi', ADVISORY: 'tajekoztato' };
 
 /** Kérelmekre közös státuszsor – a kimenet a lezáráskor derül ki. */
 function applicationStatuses() {
@@ -87,36 +121,51 @@ const SEED_CASE_TYPES = {
     },
 
     // ── Bejelentések ────────────────────────────────────────────────────────
+    // A határidő a TÉNY BEKÖVETKEZÉSÉTŐL fut, nem az ügy megnyitásától.
     {
       key: 'szallashely_valtozas',
       kind: 'bejelentes',
       label: { hu: 'Szálláshely-változás bejelentése', en: 'Change of accommodation' },
+      triggerLabel: 'Költözés napja',
       statuses: notificationStatuses(),
       defaultDurationDays: 3,
+      deadlineFrom: DEADLINE_FROM.TRIGGER,
+      deadlineKind: DEADLINE_KIND.ADVISORY,
       templates: [],
     },
     {
       key: 'munkaviszony_bejelentes',
       kind: 'bejelentes',
-      label: { hu: 'Munkaviszony bejelentése', en: 'Registration of employment' },
+      label: { hu: 'Munkaviszony megkezdésének bejelentése', en: 'Registration of employment' },
+      triggerLabel: 'Munkaviszony kezdete',
       statuses: notificationStatuses(),
-      defaultDurationDays: 15,
+      defaultDurationDays: 5,
+      deadlineFrom: DEADLINE_FROM.TRIGGER,
+      deadlineKind: DEADLINE_KIND.ADVISORY,
       templates: [],
     },
     {
       key: 'munkaviszony_kijelentes',
       kind: 'bejelentes',
       label: { hu: 'Munkaviszony megszűnésének bejelentése', en: 'Deregistration of employment' },
+      triggerLabel: 'Munkaviszony megszűnése',
       statuses: notificationStatuses(),
-      defaultDurationDays: 15,
+      defaultDurationDays: 5,
+      deadlineFrom: DEADLINE_FROM.TRIGGER,
+      deadlineKind: DEADLINE_KIND.ADVISORY,
       templates: [],
     },
     {
       key: 'adatvaltozas',
       kind: 'bejelentes',
       label: { hu: 'Adatváltozás bejelentése', en: 'Notification of data change' },
+      triggerLabel: 'Változás napja',
       statuses: notificationStatuses(),
-      defaultDurationDays: 15,
+      // FIGYELEM: ez a nap-szám nincs megerősítve jogszabállyal – a 3 és az 5
+      // napot igen. A Beállításokban átírható, ha kiderül a pontos érték.
+      defaultDurationDays: 5,
+      deadlineFrom: DEADLINE_FROM.TRIGGER,
+      deadlineKind: DEADLINE_KIND.ADVISORY,
       templates: [],
     },
   ],
@@ -173,15 +222,31 @@ const CaseTypes = (() => {
       // Záró státusz nélkül az ügy sosem lenne lezárható – az utolsót tesszük azzá.
       if (!statuses.some(s => s.terminal)) statuses[statuses.length - 1].terminal = true;
 
+      // Bejelentésnél a határidő alapból a tény bekövetkezésétől fut,
+      // kérelemnél a megnyitástól – ez a két eljárás lényegi különbsége.
+      const deadlineFrom = t.deadlineFrom === DEADLINE_FROM.TRIGGER
+        ? DEADLINE_FROM.TRIGGER
+        : (t.deadlineFrom === DEADLINE_FROM.OPENED
+            ? DEADLINE_FROM.OPENED
+            : (kind === 'bejelentes' ? DEADLINE_FROM.TRIGGER : DEADLINE_FROM.OPENED));
+
       out.types.push({
         key:   String(t.key),
         kind,
         label: { hu: (t.label && t.label.hu) || String(t.key),
                  en: (t.label && t.label.en) || '' },
+        // Mit kérdezzen a felület a kiváltó dátumnál („Költözés napja")
+        triggerLabel: t.triggerLabel || 'A tény bekövetkezésének napja',
         statuses,
         defaultDurationDays: Number(t.defaultDurationDays) > 0
           ? Number(t.defaultDurationDays)
-          : (kind === 'kerelem' ? DEFAULT_APPLICATION_DAYS : 15),
+          : (kind === 'kerelem' ? DEFAULT_APPLICATION_DAYS : 5),
+        deadlineFrom,
+        deadlineKind: t.deadlineKind === DEADLINE_KIND.ADVISORY
+          ? DEADLINE_KIND.ADVISORY
+          : (t.deadlineKind === DEADLINE_KIND.AUTHORITY
+              ? DEADLINE_KIND.AUTHORITY
+              : (kind === 'bejelentes' ? DEADLINE_KIND.ADVISORY : DEADLINE_KIND.AUTHORITY)),
         dueFrom: (t.dueFrom && t.dueFrom.field)
           ? { field: String(t.dueFrom.field), offsetDays: Number(t.dueFrom.offsetDays) || 0 }
           : null,
@@ -232,21 +297,37 @@ const CaseTypes = (() => {
   /**
    * Javasolt határidő egy új ügyhöz.
    *
-   * Két forrás lehet, ebben a sorrendben:
-   *   1. dueFrom – a dolgozó egy mezőjéből számol (pl. az engedély lejárata
-   *      előtt 30 nappal). Csak akkor, ha a mező ki van töltve ÉS a kapott
-   *      dátum még nem múlt el – lejárt engedélynél a múltbeli határidő
-   *      félrevezető lenne.
-   *   2. defaultDurationDays – az indulástól számított nap (kérelmeknél 70).
+   * Bejelentésnél (deadlineFrom = 'trigger') a KIVÁLTÓ TÉNY napjától számol:
+   * a költözéstől 3 nap, a munkaviszony megkezdésétől/megszűnésétől 5 nap.
+   * Ha a tény két hete történt, a határidő már lejárt – a program ezt mutassa
+   * is, ne azt, hogy még van időnk.
    *
-   * A visszaadott érték JAVASLAT: az ügy létrehozásakor felülírható, mert a
-   * hatóság az eljárást felfüggesztheti vagy meghosszabbíthatja.
+   * Kérelemnél a megnyitástól számol (70 nap), illetve ha a típus `dueFrom`-ot
+   * ad meg, a dolgozó egy mezőjéből (engedély lejárata − 30 nap). Ez utóbbi
+   * csak akkor, ha a kapott dátum még nem múlt el.
+   *
+   * A visszaadott érték JAVASLAT: az ügynél felülírható.
    */
-  function suggestDueDate(typeKey, employeeFields = {}, fromDate = null) {
+  function suggestDueDate(typeKey, employeeFields = {}, fromDate = null, triggerDate = null) {
     const t = byKey(typeKey);
     if (!t) return null;
     const kezdet = fromDate ? new Date(fromDate) : new Date();
 
+    // 1. Bejelentés: kizárólag a tény bekövetkezésétől.
+    //
+    // Ha nincs megadva a kiváltó dátum, NINCS határidő. A megnyitás napjából
+    // számolni félrevezetés lenne: a program nem tudja, mikor költözött vagy
+    // mikor lépett munkába a dolgozó – ezt csak a felhasználó tudja.
+    // Kitalált határidő rosszabb, mint a hiányzó.
+    if (t.deadlineFrom === DEADLINE_FROM.TRIGGER) {
+      if (!triggerDate) return null;
+      const d = new Date(triggerDate);
+      if (isNaN(d.getTime())) return null;
+      d.setDate(d.getDate() + t.defaultDurationDays);
+      return isoDate(d);
+    }
+
+    // 2. Kérelem, a dolgozó adatából számítva (pl. lejárat előtt 30 nappal)
     if (t.dueFrom) {
       const alap = employeeFields[t.dueFrom.field];
       if (alap) {
@@ -258,9 +339,28 @@ const CaseTypes = (() => {
       }
     }
 
+    // 3. Alapeset: az indulástól számított nap
     const d = new Date(kezdet);
     d.setDate(d.getDate() + t.defaultDurationDays);
     return isoDate(d);
+  }
+
+  /** Kell-e kiváltó dátumot kérni ennél a típusnál? */
+  function needsTriggerDate(typeKey) {
+    const t = byKey(typeKey);
+    return !!(t && t.deadlineFrom === DEADLINE_FROM.TRIGGER);
+  }
+
+  /**
+   * Tájékoztató-e a határidő?
+   *
+   * Igen, ha külső, a program által nem ismert tényből számol. Ilyenkor a
+   * felület nem állíthatja, hogy mulasztás történt – csak annyit mutathat,
+   * hogy a megadott dátum alapján ennyi idő van hátra.
+   */
+  function isAdvisoryDeadline(typeKey) {
+    const t = byKey(typeKey);
+    return !!(t && t.deadlineKind === DEADLINE_KIND.ADVISORY);
   }
 
   function isoDate(d) {
@@ -272,11 +372,11 @@ const CaseTypes = (() => {
 
   return {
     SEED: SEED_CASE_TYPES,
-    DEFAULT_APPLICATION_DAYS,
+    DEFAULT_APPLICATION_DAYS, DEADLINE_FROM, DEADLINE_KIND,
     useBackend, load, loadFrom, save, get,
     all, version, byKey, label,
     statusesOf, statusLabel, isTerminal, firstStatus,
     outcomes, outcomeLabel,
-    suggestDueDate, isoDate,
+    suggestDueDate, needsTriggerDate, isAdvisoryDeadline, isoDate,
   };
 })();

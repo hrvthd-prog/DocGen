@@ -12,6 +12,8 @@
  *     ehNumber     EH szám (hatósági ügyszám)
  *     fileNumber   iktatószám
  *     openedAt     indulás (ISO dátum)
+ *     triggerDate  a kiváltó tény napja (költözés, munkaviszony kezdete) – ebből
+ *                  fut a bejelentési határidő
  *     dueAt        határidő (ISO dátum) – javasolt, de kézzel felülírható
  *     closedAt     lezárás ideje, amíg nyitott: null
  *     outcome      a lezárás eredménye (CaseTypes.outcomes())
@@ -92,6 +94,7 @@ const CaseRepo = (() => {
     o.ehNumber   = o.ehNumber   || '';
     o.fileNumber = o.fileNumber || '';
     o.openedAt   = o.openedAt || today();
+    o.triggerDate = o.triggerDate || null;
     o.dueAt      = o.dueAt    || null;
     o.closedAt   = o.closedAt || null;
     o.outcome    = o.outcome  || null;
@@ -173,7 +176,13 @@ const CaseRepo = (() => {
     return Math.round((b - a) / 86400000);
   }
 
-  /** Sürgősségi besorolás – ez rendezi az Ügyek fül listáját. */
+  /**
+   * Sürgősségi besorolás – ez rendezi az Ügyek fül listáját.
+   *
+   * Határidő nélküli ügy is teljesen rendben van: bejelentésnél a határidő
+   * csak akkor számolható, ha meg van adva a kiváltó tény napja, amit egyedül
+   * a felhasználó tud. Ilyenkor 'nyitott' – nem hiányosság, nem hiba.
+   */
   function urgency(c, ma = null, surgosNap = 14) {
     if (c.closedAt) return 'lezart';
     const n = daysLeft(c, ma);
@@ -181,6 +190,37 @@ const CaseRepo = (() => {
     if (n < 0) return 'lejart';
     if (n <= surgosNap) return 'surgos';
     return 'nyitott';
+  }
+
+  /**
+   * Tájékoztató-e ennek az ügynek a határideje?
+   *
+   * A bejelentések határideje egy külső tényből számol (költözés, munkakezdés),
+   * amit a program nem ismer és nem tud ellenőrizni – annyit ér, amennyit a
+   * beírt dátum. A felület ezért nem állíthatja, hogy mulasztás történt: csak
+   * annyit mutathat, hogy a megadott nap szerint ennyi idő van hátra.
+   *
+   * A kérelmek 70 napos határideje ezzel szemben az ügy megnyitásából számol,
+   * amit a program maga tud – arra lehet hivatkozni.
+   */
+  function isAdvisory(c) {
+    return CaseTypes.isAdvisoryDeadline(c.type);
+  }
+
+  /** Emberi szöveg a határidőhöz – a felület ezt írja ki. */
+  function deadlineText(c, ma = null) {
+    if (c.closedAt) return 'Lezárva';
+    if (!c.dueAt) {
+      return CaseTypes.needsTriggerDate(c.type)
+        ? 'Nincs határidő – add meg a tény napját'
+        : 'Nincs határidő';
+    }
+    const n = daysLeft(c, ma);
+    const elozetes = isAdvisory(c) ? 'a megadott nap szerint ' : '';
+    if (n === null)  return c.dueAt;
+    if (n < 0)       return `${elozetes}${-n} napja lejárt`;
+    if (n === 0)     return `${elozetes}ma jár le`;
+    return `${elozetes}${n} nap van hátra`;
   }
 
   /** Nyitott ügyek sürgősség szerint, a legégetőbb elöl. */
@@ -226,7 +266,8 @@ const CaseRepo = (() => {
    * (kérelmeknél alapból 70 nap), de a hívó felülírhatja.
    */
   function create({ employeeId, type, dueAt, ehNumber = '', fileNumber = '',
-                    note = '', employeeFields = {}, openedAt = null } = {}) {
+                    note = '', employeeFields = {}, openedAt = null,
+                    triggerDate = null } = {}) {
     ensureLoaded();
     const indul = openedAt || today();
     const c = {
@@ -237,9 +278,10 @@ const CaseRepo = (() => {
       ehNumber: String(ehNumber || '').trim(),
       fileNumber: String(fileNumber || '').trim(),
       openedAt: indul,
+      triggerDate: triggerDate || null,
       dueAt: dueAt !== undefined && dueAt !== null
         ? dueAt
-        : CaseTypes.suggestDueDate(type, employeeFields, indul),
+        : CaseTypes.suggestDueDate(type, employeeFields, indul, triggerDate),
       closedAt: null,
       outcome: null,
       producedId: null,
@@ -264,13 +306,27 @@ const CaseRepo = (() => {
     return c;
   }
 
-  /** Az ügy törzsadatainak módosítása (határidő, EH szám, iktatószám, megjegyzés). */
-  function update(id, { dueAt, ehNumber, fileNumber, note, type } = {}) {
+  /**
+   * Az ügy törzsadatainak módosítása (határidő, EH szám, iktatószám, megjegyzés,
+   * kiváltó dátum).
+   *
+   * Ha a kiváltó dátum változik és a határidőt nem írták felül kézzel, a
+   * határidő magától újraszámolódik – különben egy elgépelt költözési dátum
+   * javítása után a határidő a régi, hibás értéken maradna.
+   */
+  function update(id, { dueAt, ehNumber, fileNumber, note, type, triggerDate } = {}) {
     ensureLoaded();
     const c = get(id);
     if (!c) throw new Error('Nincs ilyen ügy.');
 
     const next = Object.assign({}, c);
+    if (triggerDate !== undefined) {
+      next.triggerDate = triggerDate || null;
+      if (dueAt === undefined && CaseTypes.needsTriggerDate(next.type)) {
+        next.dueAt = CaseTypes.suggestDueDate(
+          next.type, {}, next.openedAt, next.triggerDate);
+      }
+    }
     if (dueAt !== undefined)      next.dueAt = dueAt || null;
     if (ehNumber !== undefined)   next.ehNumber = String(ehNumber || '').trim();
     if (fileNumber !== undefined) next.fileNumber = String(fileNumber || '').trim();
@@ -460,7 +516,7 @@ const CaseRepo = (() => {
   return {
     useBackend, hasBackend, onChange, createFileBackend, createMemoryBackend,
     load, save, scheduleSave, flush,
-    all, get, forEmployee, isOpen, daysLeft, urgency, openCases, search,
+    all, get, forEmployee, isOpen, daysLeft, urgency, isAdvisory, deadlineText, openCases, search,
     create, update, setStatus, addEvent, recordProducedIdentifier,
     destroy, destroyForEmployee, suggestRenewals,
     _validate: validate,
