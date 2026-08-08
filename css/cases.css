@@ -220,3 +220,24 @@
              border-bottom: 1px solid var(--c-border); }
   .cf-grid { grid-template-columns: 1fr; }
 }
+
+/* Utólag felvitt bejegyzés – a rögzítés napja is látszik */
+.ct-backdated {
+  font-size: 10px; color: var(--c-muted); font-style: italic;
+}
+.ct-edit {
+  font-size: 10px; color: var(--c-muted); background: transparent;
+  border: 0; padding: 0 2px; cursor: pointer; text-decoration: underline;
+  opacity: 0; transition: opacity .12s;
+}
+.ct-item:hover .ct-edit,
+.ct-edit:focus { opacity: 1; }
+.ct-edit:hover { color: var(--c-teal); }
+
+/* Fül-jelző: hány ügy lejárt */
+.tab-btn__badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 17px; height: 17px; padding: 0 5px; margin-left: 6px;
+  border-radius: 9px; background: var(--c-red); color: #fff;
+  font-size: 10px; font-weight: 700; line-height: 1;
+}

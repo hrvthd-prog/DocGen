@@ -132,6 +132,19 @@ const CaseTimeline = (() => {
     if (p.ehNumber)    reszletek.push(`EH: ${escHtml(p.ehNumber)}`);
     if (p.user)        reszletek.push(`<span class="ct-user">${escHtml(p.user)}</span>`);
 
+    // Utólag felvitt bejegyzésnél kiírjuk a rögzítés napját is: enélkül úgy
+    // tűnne, mintha aznap dolgoztuk volna fel, ami hatósági ügyben téves kép.
+    const utolagos = p.kind === 'esemeny' && p.backdated
+      ? `<span class="ct-backdated" title="A történés és a rögzítés napja eltér">
+           utólag rögzítve: ${escHtml(huDatum(p.recordedAt))}</span>`
+      : '';
+
+    // Csak a rögzített eseményeket lehet javítani – a számított pontokat nem
+    const szerkeszt = p.kind === 'esemeny'
+      ? `<button class="ct-edit" data-event-index="${p.eventIndex}"
+                 title="Dátum vagy megjegyzés javítása">javít</button>`
+      : '';
+
     return `
       <li class="ct-item ct-item--${p.state} ct-item--${p.kind}">
         <span class="ct-dot" style="color:${pontSzin(p)}">${pontIkon(p)}</span>
@@ -139,10 +152,12 @@ const CaseTimeline = (() => {
           <div class="ct-line1">
             <span class="ct-label">${escHtml(p.label)}</span>
             ${p.computed ? '<span class="ct-calc" title="Számított érték, nem rögzített tény">számított</span>' : ''}
+            ${szerkeszt}
           </div>
           <div class="ct-line2">
             <span class="ct-date">${escHtml(huDatum(p.date))}</span>
             <span class="ct-rel">${escHtml(napSzoveg(p.date, maIso))}</span>
+            ${utolagos}
           </div>
           ${reszletek.length ? `<div class="ct-detail">${reszletek.join(' · ')}</div>` : ''}
         </div>

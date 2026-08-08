@@ -28,11 +28,38 @@ const CasesModule = (() => {
   function init(el) {
     container = el;
     render();
+    frissitJelzo();
     window.addEventListener('docgenTabActivated', e => {
       if (e.detail === 'cases') render();
     });
-    CaseRepo.onChange(render);
-    EmployeeRepo.onChange(render);
+    CaseRepo.onChange(() => { render(); frissitJelzo(); });
+    EmployeeRepo.onChange(() => { render(); frissitJelzo(); });
+  }
+
+  /**
+   * Lejárt ügyek száma a fül címkéjén.
+   *
+   * Csak a LEJÁRT ügyek kapnak jelzést. Ha minden számot kiírnánk, a jelzés
+   * állandóan ott lenne, és pár nap alatt megszoknánk – így viszont a piros
+   * pötty megjelenése tényleg jelent valamit.
+   */
+  function frissitJelzo() {
+    const gomb = document.querySelector('.tab-btn[data-tab="cases"]');
+    if (!gomb) return;
+
+    let db = 0;
+    try { db = CaseRepo.summary().lejart; } catch { db = 0; }
+
+    let jelzo = gomb.querySelector('.tab-btn__badge');
+    if (!db) { if (jelzo) jelzo.remove(); return; }
+
+    if (!jelzo) {
+      jelzo = document.createElement('span');
+      jelzo.className = 'tab-btn__badge';
+      gomb.appendChild(jelzo);
+    }
+    jelzo.textContent = db > 99 ? '99+' : String(db);
+    jelzo.title = `${db} lejárt határidejű ügy`;
   }
 
   function keszAll() {
@@ -231,7 +258,16 @@ const CasesModule = (() => {
     if (lep) lep.addEventListener('click', () => CaseForm.openStatus({
       caseId: state.kivalasztott, onSaved: () => render(),
     }));
+
+    // Idővonal-bejegyzés javítása (elgépelt dátum, megjegyzés)
+    container.querySelectorAll('.ct-edit').forEach(b => {
+      b.addEventListener('click', () => CaseForm.openEvent({
+        caseId: state.kivalasztott,
+        index: Number(b.dataset.eventIndex),
+        onSaved: () => render(),
+      }));
+    });
   }
 
-  return { init, _render: render };
+  return { init, _render: render, _badge: frissitJelzo };
 })();

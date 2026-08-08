@@ -179,11 +179,19 @@ const CaseForm = (() => {
       title: `Státusz rögzítése — ${CaseTypes.label(c.type)}`,
       body: `
         <div class="cf-grid">
-          <label class="cf-field cf-field--wide">
+          <label class="cf-field">
             <span>Új státusz</span>
             <select id="cs-status" class="field-input">
               ${statuszok.map(s => `<option value="${escHtml(s.key)}" ${s.key === kovetkezo.key ? 'selected' : ''}>${escHtml(s.label)}${s.terminal ? ' (lezárás)' : ''}</option>`).join('')}
             </select>
+          </label>
+
+          <label class="cf-field">
+            <span>Mikor történt?</span>
+            <input type="date" id="cs-occurred" class="field-input"
+                   max="${escHtml(CaseTypes.isoDate(new Date()))}"
+                   value="${escHtml(CaseTypes.isoDate(new Date()))}">
+            <small>Ha napokkal később viszed fel, állítsd a tényleges napra.</small>
           </label>
 
           <label class="cf-field cf-field--wide" id="cs-outcome-wrap" style="display:none">
@@ -234,6 +242,7 @@ const CaseForm = (() => {
           outcome:    q('cs-outcome').value || null,
           ehNumber:   q('cs-eh').value,
           fileNumber: q('cs-file').value,
+          occurredAt: q('cs-occurred').value || null,
         });
         closeDialog();
         toast('✓ Státusz rögzítve', 'success');
@@ -263,10 +272,17 @@ const CaseForm = (() => {
           Az ügy megadással zárult. Írd be az új számot – a korábbi automatikusan
           lezárul, és az adatbekérő is ezt fogja tartalmazni.
         </p>
-        <label class="cf-field cf-field--wide">
-          <span>${escHtml(EmployeeRepo.idTypeLabel(t.producesIdentifier))}</span>
-          <input type="text" id="ci-value" class="field-input" autofocus>
-        </label>`,
+        <div class="cf-grid">
+          <label class="cf-field">
+            <span>${escHtml(EmployeeRepo.idTypeLabel(t.producesIdentifier))}</span>
+            <input type="text" id="ci-value" class="field-input" autofocus>
+          </label>
+          <label class="cf-field">
+            <span>Meddig érvényes?</span>
+            <input type="date" id="ci-expires" class="field-input">
+            <small>Ebből számoljuk a következő benyújtási ablakot.</small>
+          </label>
+        </div>`,
       footer: `
         <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Később</button>
         <button class="btn btn-primary btn-sm" id="ci-save">Rögzítés</button>`,
@@ -274,14 +290,111 @@ const CaseForm = (() => {
 
     document.getElementById('ci-save').addEventListener('click', () => {
       const ertek = document.getElementById('ci-value').value.trim();
+      const lejar = document.getElementById('ci-expires').value || null;
       if (!ertek) { toast('Az azonosító nem lehet üres', 'warn'); return; }
       try {
-        CaseRepo.recordProducedIdentifier(caseId, { value: ertek });
+        CaseRepo.recordProducedIdentifier(caseId, { value: ertek, expiresAt: lejar });
         closeDialog();
         toast('✓ Azonosító rögzítve', 'success');
+        if (lejar) ajanljKovetkezot(caseId);
       } catch (e) { toast(e.message, 'error'); }
     });
   }
 
-  return { open, openStatus };
+  /**
+   * A meghosszabbítás nem egyszeri esemény, hanem ciklus: amint megvan az új
+   * engedély lejárata, azonnal tudható, mikor nyílik a következő ablak.
+   * Egy kattintással láncba fűzhető, hogy ne kelljen évek múlva emlékezni rá.
+   */
+  function ajanljKovetkezot(caseId) {
+    const c = CaseRepo.get(caseId);
+    if (!c) return;
+    const emp = EmployeeRepo.get(c.employeeId);
+    if (!emp) return;
+
+    if (CaseRepo.hasOpenCaseOfType(emp.id, 'rp_hosszabbitas')) return;   // már van
+    const ablak = CaseTypes.submissionWindow('rp_hosszabbitas', emp.fields);
+    if (!ablak) return;
+
+    showDialog({
+      title: 'Következő meghosszabbítás előjegyzése',
+      body: `
+        <p style="font-size:12px;color:var(--c-text);margin-bottom:10px">
+          Az új engedély <strong>${escHtml(CaseTimeline.huDatum(ablak.basis))}</strong>-ig érvényes.
+          A következő meghosszabbítási kérelem benyújtási ablaka:
+        </p>
+        <div style="border:1px solid var(--c-border);border-radius:6px">
+          ${CaseTimeline.renderWindowBar(
+            { window: ablak, phase: CaseTypes.windowPhase(ablak),
+              text: 'A következő ciklus ablaka', done: false },
+            CaseTypes.isoDate(new Date()))}
+        </div>
+        <p style="font-size:11px;color:var(--c-muted);margin-top:10px">
+          Előjegyezve az ügy már most megjelenik az Ügyek listában, és időben
+          figyelmeztet. Bármikor törölhető.
+        </p>`,
+      footer: `
+        <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Most nem</button>
+        <button class="btn btn-primary btn-sm" id="cn-save">Előjegyzem</button>`,
+    });
+
+    document.getElementById('cn-save').addEventListener('click', () => {
+      try {
+        CaseRepo.openNextCase(caseId);
+        closeDialog();
+        toast('✓ Következő meghosszabbítás előjegyezve', 'success');
+      } catch (e) { toast(e.message, 'error'); }
+    });
+  }
+
+  // ── Bejegyzés utólagos javítása ────────────────────────────────────────────
+
+  /** Elgépelt dátum vagy megjegyzés javítása egy meglévő idővonal-bejegyzésen. */
+  function openEvent({ caseId, index, onSaved = null } = {}) {
+    const c = CaseRepo.get(caseId);
+    if (!c || !c.events[index]) { toast('A bejegyzés nem található', 'error'); return; }
+    const e = c.events[index];
+
+    showDialog({
+      title: 'Bejegyzés javítása',
+      body: `
+        <div class="cf-grid">
+          <label class="cf-field">
+            <span>Mikor történt?</span>
+            <input type="date" id="ce-occurred" class="field-input"
+                   max="${escHtml(CaseTypes.isoDate(new Date()))}"
+                   value="${escHtml(e.occurredAt || '')}">
+          </label>
+          <div class="cf-field">
+            <span>Rögzítve</span>
+            <div style="font-size:12px;padding-top:6px;color:var(--c-muted)">
+              ${escHtml(CaseTimeline.huDatum(String(e.at).slice(0, 10)))}
+              ${e.user ? ` · ${escHtml(e.user)}` : ''}
+            </div>
+            <small>Ez az audit-nyom, nem módosítható.</small>
+          </div>
+          <label class="cf-field cf-field--wide">
+            <span>Megjegyzés</span>
+            <textarea id="ce-note" class="field-input" rows="2">${escHtml(e.note || '')}</textarea>
+          </label>
+        </div>`,
+      footer: `
+        <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Mégse</button>
+        <button class="btn btn-primary btn-sm" id="ce-save">Mentés</button>`,
+    });
+
+    document.getElementById('ce-save').addEventListener('click', () => {
+      try {
+        CaseRepo.updateEvent(caseId, index, {
+          occurredAt: document.getElementById('ce-occurred').value,
+          note:       document.getElementById('ce-note').value,
+        });
+        closeDialog();
+        toast('✓ Bejegyzés javítva', 'success');
+        if (onSaved) onSaved();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+  }
+
+  return { open, openStatus, openEvent };
 })();

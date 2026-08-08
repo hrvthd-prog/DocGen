@@ -19,7 +19,8 @@
  *     outcome      a lezárás eredménye (CaseTypes.outcomes())
  *     producedId   ha az ügy azonosítót hozott: { type, value }
  *     note         szabad szöveg
- *     events[]     { at, status, outcome, note, user, ehNumber, fileNumber }
+ *     events[]     { at, occurredAt, status, outcome, note, user, ehNumber, fileNumber }
+ *                  at = mikor rögzítettük (audit), occurredAt = mikor történt
  *     createdAt / updatedAt / updatedBy
  *   }
  *
@@ -32,6 +33,18 @@
  * utólag is meg kell tudni mondani, mikor mi történt és ki rögzítette.
  */
 const CaseRepo = (() => {
+
+  /**
+   * Azonosító-típus → az a séma-mező, ami az érvényességét tárolja.
+   *
+   * Az EmployeeRepo.IDENTIFIER_FIELD_MAP a SZÁMOT tükrözi a mezőbe; ez a
+   * lejáratot. A kettő külön oszlop az adatbekérőben, és a benyújtási ablak
+   * ez utóbbiból számol.
+   */
+  const EXPIRY_FIELD_MAP = {
+    residence_permit: 'expiration_of_rp',
+    passport:         'pp_validity',
+  };
 
   let backend = null;
   let cache   = null;          // { version, savedAt, cases: [] }
@@ -107,9 +120,24 @@ const CaseRepo = (() => {
     return o;
   }
 
+  /**
+   * Két időpont, és ez nem szőrszálhasogatás:
+   *
+   *   at         – mikor RÖGZÍTETTÜK. Audit-adat: sosem írjuk felül, ebből
+   *                derül ki, hogy egy bejegyzés utólag került-e be.
+   *   occurredAt – mikor TÖRTÉNT. Ezt adja meg a felhasználó, és az idővonal
+   *                ez szerint rendez.
+   *
+   * A kettő gyakran eltér: a hiánypótlási felhívás múlt kedden érkezett, de
+   * csak ma jutunk hozzá, hogy felvigyük. Ha csak a rögzítés ideje lenne meg,
+   * az idővonal a gépelés sorrendjét mutatná a történések helyett – vagyis
+   * pont azt nem tudná, amiért az egészet építjük.
+   */
   function normalizeEvent(e) {
+    const at = e.at || nowIso();
     return {
-      at:         e.at || nowIso(),
+      at,
+      occurredAt: (e.occurredAt || at).slice(0, 10),
       status:     e.status || '',
       outcome:    e.outcome || null,
       note:       e.note || '',
@@ -117,6 +145,11 @@ const CaseRepo = (() => {
       ehNumber:   e.ehNumber   || '',
       fileNumber: e.fileNumber || '',
     };
+  }
+
+  /** Utólag rögzített-e a bejegyzés? (a történés és a rögzítés napja eltér) */
+  function isBackdated(e) {
+    return !!(e.occurredAt && e.at && e.occurredAt !== String(e.at).slice(0, 10));
   }
 
   async function save() {
@@ -271,11 +304,14 @@ const CaseRepo = (() => {
 
     // 1. Ami megtörtént
     for (const e of c.events) {
-      const nap = String(e.at).slice(0, 10);
+      const nap = e.occurredAt || String(e.at).slice(0, 10);
       pontok.push({
         kind: 'esemeny',
         date: nap,
         at: e.at,
+        recordedAt: String(e.at).slice(0, 10),
+        backdated: isBackdated(e),
+        eventIndex: c.events.indexOf(e),
         label: CaseTypes.statusLabel(c.type, e.status) || e.status,
         note: e.note || '',
         user: e.user || '',
@@ -416,7 +452,7 @@ const CaseRepo = (() => {
     if (gondok.length) throw new Error(gondok.join(' '));
 
     c.events.push(normalizeEvent({
-      at: nowIso(), status: c.status, note: 'Ügy megnyitva',
+      at: nowIso(), occurredAt: indul, status: c.status, note: 'Ügy megnyitva',
       user: c.updatedBy, ehNumber: c.ehNumber, fileNumber: c.fileNumber,
     }));
 
@@ -477,10 +513,13 @@ const CaseRepo = (() => {
    * ügyintézésnél pont ez a legfontosabb adat.
    */
   function setStatus(id, status, { note = '', outcome = null,
-                                   ehNumber, fileNumber } = {}) {
+                                   ehNumber, fileNumber, occurredAt = null } = {}) {
     ensureLoaded();
     const c = get(id);
     if (!c) throw new Error('Nincs ilyen ügy.');
+    if (occurredAt && occurredAt > today()) {
+      throw new Error('A történés napja nem lehet a jövőben.');
+    }
 
     const megengedett = CaseTypes.statusesOf(c.type).map(s => s.key);
     if (!megengedett.includes(status)) {
@@ -500,12 +539,14 @@ const CaseRepo = (() => {
 
     c.status   = status;
     c.outcome  = zaro ? outcome : null;
-    c.closedAt = zaro ? nowIso() : null;
+    // A lezárás dátuma is a TÖRTÉNÉS napja: ha a döntés múlt héten érkezett,
+    // az ügy akkor zárult le, nem ma.
+    c.closedAt = zaro ? (occurredAt || today()) : null;
     c.updatedAt = nowIso();
     c.updatedBy = currentUserName();
 
     c.events.push(normalizeEvent({
-      at: nowIso(), status, outcome: c.outcome, note,
+      at: nowIso(), occurredAt, status, outcome: c.outcome, note,
       user: c.updatedBy, ehNumber: c.ehNumber, fileNumber: c.fileNumber,
     }));
 
@@ -515,20 +556,53 @@ const CaseRepo = (() => {
   }
 
   /** Esemény rögzítése státuszváltás nélkül (pl. „telefonon érdeklődtem"). */
-  function addEvent(id, { note = '', ehNumber, fileNumber } = {}) {
+  function addEvent(id, { note = '', ehNumber, fileNumber, occurredAt = null } = {}) {
     ensureLoaded();
     const c = get(id);
     if (!c) throw new Error('Nincs ilyen ügy.');
     if (!String(note).trim() && ehNumber === undefined && fileNumber === undefined) {
       throw new Error('Üres eseményt nem rögzítünk.');
     }
+    if (occurredAt && occurredAt > today()) {
+      throw new Error('A történés napja nem lehet a jövőben.');
+    }
     if (ehNumber !== undefined)   c.ehNumber = String(ehNumber || '').trim();
     if (fileNumber !== undefined) c.fileNumber = String(fileNumber || '').trim();
 
     c.events.push(normalizeEvent({
-      at: nowIso(), status: c.status, note,
+      at: nowIso(), occurredAt, status: c.status, note,
       user: currentUserName(), ehNumber: c.ehNumber, fileNumber: c.fileNumber,
     }));
+    c.updatedAt = nowIso();
+    c.updatedBy = currentUserName();
+    scheduleSave();
+    emit();
+    return c;
+  }
+
+  /**
+   * Meglévő bejegyzés javítása – elgépelt dátum vagy megjegyzés.
+   *
+   * A rögzítés ideje (`at`) és a rögzítő szándékosan NEM módosítható: az az
+   * audit-nyom. Csak azt írjuk át, amit a felhasználó eredetileg is megadott.
+   */
+  function updateEvent(id, index, { occurredAt, note } = {}) {
+    ensureLoaded();
+    const c = get(id);
+    if (!c) throw new Error('Nincs ilyen ügy.');
+    const e = c.events[index];
+    if (!e) throw new Error('Nincs ilyen bejegyzés.');
+
+    if (occurredAt !== undefined) {
+      const nap = String(occurredAt || '').slice(0, 10);
+      if (!nap) throw new Error('A történés napja nem lehet üres.');
+      if (nap > today()) throw new Error('A történés napja nem lehet a jövőben.');
+      e.occurredAt = nap;
+      // Ha a lezáró bejegyzést javítjuk, a lezárás dátuma is követi
+      if (e.outcome && c.closedAt) c.closedAt = nap;
+    }
+    if (note !== undefined) e.note = String(note || '');
+
     c.updatedAt = nowIso();
     c.updatedBy = currentUserName();
     scheduleSave();
@@ -543,7 +617,8 @@ const CaseRepo = (() => {
    * dolgozóhoz (a régi automatikusan lezárul), az ügy pedig megjegyzi, hogy ő
    * hozta. Így utólag megválaszolható, melyik kérelemből származik egy szám.
    */
-  function recordProducedIdentifier(id, { type, value, validFrom = null } = {}) {
+  function recordProducedIdentifier(id, { type, value, validFrom = null,
+                                          expiresAt = null } = {}) {
     ensureLoaded();
     const c = get(id);
     if (!c) throw new Error('Nincs ilyen ügy.');
@@ -554,20 +629,84 @@ const CaseRepo = (() => {
     if (!tipus) throw new Error('Ez az ügytípus nem hoz azonosítót.');
 
     EmployeeRepo.addIdentifier(c.employeeId, {
-      type: tipus, value: ertek, validFrom: validFrom || today(), current: true,
+      type: tipus, value: ertek, validFrom: validFrom || today(),
+      validTo: expiresAt || null, current: true,
     });
 
-    c.producedId = { type: tipus, value: ertek };
+    // Az ÚJ engedély lejárata a dolgozó adatai közé is bekerül – enélkül a
+    // következő meghosszabbítás benyújtási ablaka a RÉGI, már lejárt engedély
+    // dátumából számolna, és azonnal „lekésve" állapotot mutatna.
+    if (expiresAt && EXPIRY_FIELD_MAP[tipus]) {
+      EmployeeRepo.update(c.employeeId, {
+        fields: { [EXPIRY_FIELD_MAP[tipus]]: expiresAt },
+      });
+    }
+
+    c.producedId = { type: tipus, value: ertek, expiresAt: expiresAt || null };
     c.updatedAt  = nowIso();
     c.updatedBy  = currentUserName();
     c.events.push(normalizeEvent({
-      at: nowIso(), status: c.status,
-      note: `Új azonosító rögzítve: ${ertek}`,
+      at: nowIso(), occurredAt: validFrom || today(), status: c.status,
+      note: `Új azonosító rögzítve: ${ertek}` + (expiresAt ? ` (érvényes: ${expiresAt})` : ''),
       user: c.updatedBy, ehNumber: c.ehNumber, fileNumber: c.fileNumber,
     }));
     scheduleSave();
     emit();
     return c;
+  }
+
+  /**
+   * A következő ügy előjegyzése a most lezárult alapján.
+   *
+   * A meghosszabbítás nem egyszeri esemény, hanem ciklus: amint megvan az új
+   * engedély, azonnal ismert, mikor nyílik a következő benyújtási ablak.
+   * Ezt egy kattintással láncba fűzzük, hogy ne kelljen évek múlva emlékezni rá.
+   *
+   * Az új ügy `openedAt`-je a következő ablak legkorábbi napja – nem a mai –,
+   * mert az ügy valójában akkor kezdődik.
+   */
+  function openNextCase(id, { type = 'rp_hosszabbitas' } = {}) {
+    ensureLoaded();
+    const c = get(id);
+    if (!c) throw new Error('Nincs ilyen ügy.');
+
+    const mezok = (EmployeeRepo.get(c.employeeId) || {}).fields || {};
+    const ablak = CaseTypes.submissionWindow(type, mezok);
+    if (!ablak) {
+      throw new Error('Nem ismert az új engedély lejárata – előbb rögzítsd azt.');
+    }
+
+    const uj = create({
+      employeeId: c.employeeId,
+      type,
+      openedAt: ablak.earliest,
+      note: `Előjegyezve a(z) ${CaseTypes.label(c.type)} lezárása után.`,
+    });
+    return uj;
+  }
+
+  /**
+   * Napi összefoglaló – ez kerül a fül címkéjére.
+   *
+   * Csak a lejárt ügyek számítanak jelzésnek: ha minden számot kiírnánk, a
+   * jelzés zajjá válna, és pár nap alatt megszoknánk, hogy mindig ott van.
+   */
+  function summary(ma = null) {
+    ensureLoaded();
+    let lejart = 0, surgos = 0, nyitott = 0;
+    for (const c of cache.cases) {
+      const s = urgency(c, ma);
+      if (s === 'lejart')  lejart++;
+      if (s === 'surgos')  surgos++;
+      if (s !== 'lezart')  nyitott++;
+    }
+    return { lejart, surgos, nyitott };
+  }
+
+  /** Van-e már előjegyezve következő ügy ehhez a dolgozóhoz? */
+  function hasOpenCaseOfType(employeeId, type) {
+    ensureLoaded();
+    return cache.cases.some(c => c.employeeId === employeeId && c.type === type && !c.closedAt);
   }
 
   function destroy(id) {
@@ -653,7 +792,8 @@ const CaseRepo = (() => {
     load, save, scheduleSave, flush,
     all, get, forEmployee, isOpen, daysLeft, urgency, isAdvisory, deadlineText, openCases, search,
     timeline, submissionStatus,
-    create, update, setStatus, addEvent, recordProducedIdentifier,
+    create, update, setStatus, addEvent, updateEvent, recordProducedIdentifier,
+    openNextCase, hasOpenCaseOfType, isBackdated, summary, EXPIRY_FIELD_MAP,
     destroy, destroyForEmployee, suggestRenewals,
     _validate: validate,
   };
