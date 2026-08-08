@@ -207,7 +207,7 @@ valóban megtörtént, órákat vitt el, mire kiderült.
 node test/run-all.js
 ```
 
-Kilenc tesztcsomag, 227 teszt. Böngészőt nem igényel.
+Tíz tesztcsomag, 247 teszt. Böngészőt nem igényel.
 
 | Csomag | Mit őriz |
 |---|---|
@@ -220,6 +220,35 @@ Kilenc tesztcsomag, 227 teszt. Böngészőt nem igényel.
 | `logger.test.js` | a napló nem hagyhatja el a gépet |
 | `vbs-encoding.test.js` | a `.vbs` UTF-16 LE marad |
 | `cases.test.js` | határidők, kimenetelek, idővonal, láncolás |
+| `e2e.test.js` | **körbe-teszt:** táblázat → nyilvántartás → export |
+
+### Próbaanyag
+
+A `test/fixtures/` mappában kitalált emberekkel dolgozó próbafájlok vannak:
+
+- **`proba-import.xlsx`** — 7 sor, mindegyik más esetet állít: kanonikus
+  értékek, szinonimák (`ffi`, `Hajadon`, `Igen`), vegyes dátumalakok, lejárt
+  azonosítós visszatérő, fájlon belüli duplikátum, hiányzó kötelező mező,
+  kétértelmű dátum
+- **`sablonok/`** — négy `.docx` próbasablon minden jelölő-fajtára
+
+A negyedik sablon (`04-tordelt-jelolok.docx`) magyarázatra szorul: benne a
+jelölők **több futamra vannak szétvágva**, ahogy a Word teszi gépelés közben
+(`{{` + `Ne` + `me` + `}}`). Ez a leggyakoribb valós hiba dokumentumsablonoknál.
+
+Újragenerálás a séma változása után:
+
+```bash
+node tools/tesztanyag-keszito.js
+```
+
+### Dokumentum-renderelés tesztje
+
+A docxtemplater `DOMParser`-t igényel, ami Node-ban nincs — ezért a
+dokumentumok tényleges kitöltése böngészőben fut. Indíts egy kiszolgálót,
+nyisd meg az appot, majd a konzolba illeszd be a `test/e2e-browser.js`
+tartalmát. 24 ellenőrzés fut le: számított mezők, kétnyelvű párok,
+jelölőnégyzetek, tördelt jelölők, hiányzó-adat napló.
 
 Nincs build-lépés és nincs csomagkezelő: a `js/` fájljai közvetlenül töltődnek
 be, a sorrendjük az `index.html`-ben számít. Új modul a saját rétegének végére
@@ -239,3 +268,4 @@ változik, azokat módosítjuk, nem a JavaScriptet.
 
 - [TERV.md](TERV.md) — az alapok: nyilvántartás, séma, xlsx, docgen, PDF
 - [TERV-esemenyek.md](TERV-esemenyek.md) — ügykövetés és státusz-betekintő
+- [TERV-tesztanyag.md](TERV-tesztanyag.md) — próbasablonok és körbe-teszt

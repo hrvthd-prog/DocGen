@@ -21,6 +21,13 @@ Kész fájlok/
 logs/
 *.log
 
+# Tesztanyag – KIVÉTEL a fenti kizárások alól.
+# Kitalált emberekkel dolgozik, valós személyes adat nincs benne. Enélkül a
+# tesztek friss klónban nem futnak le, mert a fixture-ök hiányoznak – ezt
+# lemértem, három teszt bukott el ENOENT-tel.
+!test/fixtures/
+!test/fixtures/**
+
 # Szerkesztő / ágens metaadat
 .claude/
 .cursor/
