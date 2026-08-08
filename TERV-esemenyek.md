@@ -1,5 +1,25 @@
 # Ügykövetés és státusz-betekintő — terv
 
+> **Állapot: az 1–5. fázis elkészült, a 6–7. hátravan.**
+>
+> | # | Fázis | Állapot |
+> |---|---|---|
+> | 1 | Ügytípusok mint adat | ✅ `js/schema/case-types.js` |
+> | 2 | Adatmodell | ✅ `js/services/case-repo.js` |
+> | 3 | Idővonal | ✅ `js/modules/cases/case-timeline.js` |
+> | 4 | Ügyek fül | ✅ `js/modules/cases/cases-view.js` |
+> | 5 | Azonosító-kötés | ✅ lezáráskor, a lejárattal együtt |
+> | 6 | **Státusz-HTML** | ⬜ hátravan |
+> | 7 | **Dokumentum-kötés** | ⬜ hátravan |
+>
+> **Három alapfeltevés dőlt meg menet közben.** A szöveg ezeket **JAVÍTVA**
+> jelöléssel mondja el, mert a tévedés indoklása többet ér, mint egy utólag
+> simára írt terv.
+>
+> Megvalósult, de a tervben nem szerepelt: visszamenőleges rögzítés
+> (történés vs. rögzítés napja), ügy-láncolás a következő ciklusra, és a
+> lejárt ügyek jelzője a fül címkéjén.
+
 ## 1. A probléma
 
 A nyilvántartás ma **egy pillanatképet** tárol: milyen most a dolgozó adata.
@@ -37,18 +57,44 @@ case {
   employeeId    ← melyik dolgozóhoz tartozik
   type          ← ügytípus kulcsa (adat, lásd 4.)
   status        ← az ügytípus által megengedett státuszok egyike
+  ehNumber      ← EH szám
+  fileNumber    ← iktatószám
   openedAt      ← mikor indult
-  dueAt         ← határidő (számítható is, lásd 4.)
-  closedAt      ← lezárás ideje (null, amíg nyitott)
-  outcome       ← 'megadva' | 'elutasítva' | 'visszavonva' | null
-  producedId    ← ha az ügy új azonosítót hozott: { type, value } (lásd 5.)
-  events[]      ← { at, status, note, user }
+  triggerDate   ← a határidő kezdő napja – KÉZZEL rögzítve (OIF-érkeztetés
+                  vagy a tény napja). Enélkül nincs határidő.
+  dueAt         ← határidő; a triggerDate-ből számol, de felülírható
+  closedAt      ← a lezárás napja (a döntés napja, nem a rögzítésé)
+  outcome       ← megadva | elutasitva | megszuntetve | elutasitva_ervn
+                  | visszavonva | null
+  producedId    ← ha az ügy azonosítót hozott: { type, value, expiresAt }
+  events[]      ← { at, occurredAt, status, outcome, note, user,
+                    ehNumber, fileNumber }
   createdAt / updatedAt / updatedBy
 }
 ```
 
 Az `events[]` a **teljes állapotváltozás-történet**. Ebből visszakereshető, mikor
 mi történt, és ki rögzítette — ez hatósági ügyintézésnél nem luxus.
+
+> **JAVÍTVA — két időpont kell, nem egy.** Eredetileg csak `at` volt: a
+> rögzítés pillanata. Csakhogy a valóságban napokkal később visszük fel, hogy
+> „múlt kedden megjött a hiánypótlási felhívás" — így az idővonal a **gépelés**
+> sorrendjét mutatta volna a történések helyett, vagyis pont azt nem tudta
+> volna, amiért az egészet építjük.
+>
+> - **`at`** — mikor rögzítettük. **Audit-nyom, sosem írjuk felül.**
+> - **`occurredAt`** — mikor történt. Ezt adja meg a felhasználó, és az
+>   idővonal e szerint rendez.
+>
+> Az utólag felvitt bejegyzések az idővonalon kiírják a rögzítés napját is.
+> Meglévő bejegyzés dátuma és megjegyzése javítható (`updateEvent`), a rögzítés
+> ideje és a rögzítő nem.
+>
+> **Kimenetelek:** a terv háromról tudott. A valóságban öt van, és a
+> „megszüntetve" meg az „elutasítva **érdemi vizsgálat nélkül**" nem
+> keverhető össze: az utóbbi formai bukás, általában ismételten benyújtható.
+> Lezáráshoz kötelező megadni — enélkül maradnának „lezárva, de senki nem
+> tudja, mi lett" ügyek.
 
 **Tárolás:** `data/docgen-cases.json`, ugyanazzal a repository-mintával és
 biztonsági mentéssel, mint az `employee-repo`. Külön fájlban, nem a dolgozó
@@ -70,7 +116,11 @@ Ugyanaz az elv, mint a sémánál: a típusokat **nem kódba drótozzuk**.
     { "key": "elbiralas",   "label": "Elbírálás alatt" },
     { "key": "lezarva",     "label": "Lezárva", "terminal": true }
   ],
-  "dueFrom":   { "field": "expiration_of_rp", "offsetDays": -30 },
+  "triggerLabel": "OIF érkeztetés napja (iktatószám megkapása)",
+  "defaultDurationDays": 70,
+  "deadlineKind": "hatosagi",
+  "submissionWindow": { "field": "expiration_of_rp",
+                        "earliestDays": -90, "latestDays": -40, "finalDays": -10 },
   "producesIdentifier": "residence_permit",
   "templates": ["Meghosszabbítási kérelem.docx", "Munkáltatói igazolás.docx"]
 }
@@ -79,28 +129,82 @@ Ugyanaz az elv, mint a sémánál: a típusokat **nem kódba drótozzuk**.
 Amit ez egy definícióval megold:
 
 1. **Státuszok és sorrendjük** — a UI ebből építi a léptető gombokat
-2. **Határidő automatikusan** — `dueFrom` a dolgozó egy mezőjéből számol
-   (engedély lejárata mínusz 30 nap), tehát nem kézzel kell beírni
-3. **Kapcsolat az azonosítókkal** — `producesIdentifier` (lásd 5.)
-4. **Kapcsolat a dokumentumgenerálással** — `templates`: az ügy megnyitásakor
-   egy kattintással generálható a hozzá tartozó iratcsomag
-5. **Figyelmeztetés** — az `alert: true` státusz kiemelten jelenik meg
+2. **Határidő** — `defaultDurationDays` a `triggerLabel` szerinti naptól
+3. **Benyújtási ablak** — a dolgozó adataiból számítva (lásd lentebb)
+4. **Kapcsolat az azonosítókkal** — `producesIdentifier` (lásd 5.)
+5. **Kapcsolat a dokumentumgenerálással** — `templates`: az ügy megnyitásakor
+   egy kattintással generálható a hozzá tartozó iratcsomag *(7. fázis, hátravan)*
+6. **Figyelmeztetés** — az `alert: true` státusz kiemelten jelenik meg
 
 **Kiinduló típusok** (seed adatként, szerkeszthetően): tartózkodási engedély
-igénylés / meghosszabbítás, szálláshely-változás bejelentése, munkaviszony
-bejelentése, munkaviszony kijelentése, adatváltozás bejelentése.
+igénylés / meghosszabbítás / letelepedés, szálláshely-változás bejelentése,
+munkaviszony be- és kijelentése, adatváltozás bejelentése.
 
-A pontos listát és a valós határidőket **veled kell véglegesíteni** — ezeket
-nem találom ki helyesen a kódból.
+### JAVÍTVA — a határidőkről szinte minden feltevésem hibás volt
+
+**(a) A `dueFrom` (lejárat − 30 nap) kikerült.** Két különböző dolgot mostam
+össze benne: azt, hogy *mikor kell beadnunk*, és azt, hogy *mikor kell a
+hatóságnak döntenie*. Ez a kettő független:
+
+| | Honnan fut | Mennyi |
+|---|---|---|
+| Ügyintézési határidő | OIF-érkeztetés napja | 70 nap |
+| Benyújtási ablak | a meglévő engedély lejárata | −90 / −40 / −10 nap |
+
+**(b) A 70 nap nem az ügy megnyitásától fut**, hanem az OIF általi érkeztetés
+napjától — amikor az iktatószám megérkezik. A határidő az érkeztetést *követő*
+naptól indul, ezért a hetvenedik nap pontosan az érkeztetés + 70.
+
+**(c) Egyetlen határidőt sem tud a program magától.** Sem azt, mikor
+érkeztették a kérelmet, sem azt, mikor költözött a dolgozó. Ebből az
+következik, hogy **kezdő dátum nélkül nincs határidő** — és ez nem hiányosság.
+A korábbi kódom ilyenkor visszaesett a megnyitás + N napra, vagyis **kitalált
+egy határidőt, aminek semmi köze nem volt a valósághoz**. Kitalált határidő
+rosszabb, mint a hiányzó.
+
+Ezért van kétféle megbízhatóság (`deadlineKind`):
+
+- **`hatosagi`** — dokumentált naptól fut (az érkeztetés iktatószámmal
+  igazolható). Erre lehet hivatkozni.
+- **`tajekoztato`** — olyan tényből, amit sem a program, sem irat nem igazol
+  (mikor költözött a dolgozó). A felület ezért **nem állíthatja, hogy mulasztás
+  történt**, csak azt, hogy „a megadott nap szerint" mennyi van hátra.
+
+**A valós határidők** (megerősítve):
+
+| Ügy | Határidő | Mitől fut |
+|---|---|---|
+| Kérelmek | 70 nap | OIF-érkeztetés |
+| Szálláshely-változás | 3 nap | költözés napja |
+| Munkaviszony megkezdése / megszűnése | 5 nap | a tény napja |
+| Adatváltozás | 5 nap | *(nincs jogszabállyal megerősítve)* |
+
+### Benyújtási ablak — az egyetlen számítható határidő
+
+A meglévő engedély érvényessége a nyilvántartásban van, ezért ez az egy dolog
+kiszámolható. Négy szakasz: **korai** (−90 előtt) · **ideális** (−90…−40) ·
+**siess** (−40…−10) · **lekésve** (−10 után).
 
 ## 5. Kapcsolat az azonosító-történettel
 
 Itt zárul be a kör a meglévő modellel. Ha egy `producesIdentifier`-t deklaráló
 ügy sikeresen lezárul:
 
-1. az app rákérdez az új azonosító számára
+1. az app rákérdez az új azonosító számára **és a lejáratára**
 2. `EmployeeRepo.addIdentifier()` — az új lesz az aktuális, **a régi lezárul**
 3. az ügy `producedId` mezője megőrzi, melyik ügy hozta
+
+> **JAVÍTVA — a lejáratot is kérni kell.** Eredetileg csak a számot kértük.
+> Csakhogy a következő meghosszabbítás benyújtási ablaka az engedély
+> lejáratából számol: ha az nem frissül, a **régi, már lejárt** dátumból
+> számolna, és azonnal „lekésve" állapotot mutatna. Csendben rossz adatot.
+> A lejárat ezért a dolgozó `expiration_of_rp` mezőjébe is bekerül
+> (`EXPIRY_FIELD_MAP`).
+>
+> **Ügy-láncolás** (a tervben nem szerepelt): a meghosszabbítás nem egyszeri
+> esemény, hanem ciklus. Amint megvan az új lejárat, azonnal tudható, mikor
+> nyílik a következő ablak — egy kattintással előjegyezhető. Az új ügy
+> `openedAt`-je az ablak nyitónapja, nem a mai: az ügy valójában akkor kezdődik.
 
 Így utólag megválaszolható: *„ez az engedélyszám melyik kérelemből származik?"* —
 ma ez sehol nincs rögzítve.
@@ -182,28 +286,52 @@ Nincs benne szerkesztés, nincs benne link a nyilvántartásra. Mobilon is olvas
 
 ## 8. Fázisok
 
-| # | Fázis | Kimenet | Ellenőrzés |
+| # | Fázis | Kimenet | Állapot |
 |---|---|---|---|
-| 1 | Ügytípusok mint adat | seed típusok, szerkesztő a Beállításokban | a típus szerkesztése után a UI követi |
-| 2 | Adatmodell | `case-repo.js` + mentés + biztonsági másolat | tesztek: életciklus, státuszváltás, esemény-történet |
-| 3 | Idővonal | a dolgozó adatlapján az ügyei | ügy nyitása → esemény → lezárás végigjátszva |
-| 4 | Ügyek fül | szűrhető lista, határidő szerint | lejárt/sürgős besorolás tesztje |
-| 5 | Azonosító-kötés | lezáráskor új azonosító | teszt: a régi lezárul, a `producedId` rögzül |
-| 6 | Státusz-HTML | `statusz.html` + megosztási profil + előnézet | teszt: érzékeny mező nem szivárog ki |
-| 7 | Dokumentum-kötés | ügytípus → sablonok, egykattintásos generálás | végigpróbálás valós sablonnal |
+| 1 | Ügytípusok mint adat | `case-types.js`, seed típusok | ✅ |
+| 2 | Adatmodell | `case-repo.js` + mentés + biztonsági másolat | ✅ |
+| 3 | Idővonal | `case-timeline.js` – események + mérföldkövek | ✅ |
+| 4 | Ügyek fül | szűrhető lista, benyújtási sáv, fül-jelző | ✅ |
+| 5 | Azonosító-kötés | lezáráskor új azonosító **+ lejárat + láncolás** | ✅ |
+| 6 | Státusz-HTML | `statusz.html` + megosztási profil + előnézet | ⬜ |
+| 7 | Dokumentum-kötés | ügytípus → sablonok, egykattintásos generálás | ⬜ |
 
-Az 1–4. fázis önmagában használható terméket ad; a 6. az, amit külön kértél,
-és a 3. fázis után bármikor előrehozható.
+**Ami a tervhez képest többletként elkészült:**
 
-## 9. Amit előbb el kell dönteni
+- **Visszamenőleges rögzítés** — a történés napja külön a rögzítésétől (3. pont)
+- **Ügy-láncolás** — a lezárt meghosszabbítás után a következő ciklus
+  előjegyzése egy kattintással (5. pont)
+- **Fül-jelző** — a lejárt ügyek száma piros pöttyben. Csak a lejártak kapnak
+  jelzést: ha minden szám ott lenne, pár nap alatt megszoknánk, és a jelzés
+  semmit nem jelentene.
 
-Ezek nem blokkolják az 1–2. fázist, de a 3. előtt kellenek:
+**Ami nyitva maradt** (a felvetéseim közül, amit még nem kértél):
+a hiánypótlás **felfüggeszti** az eljárást — a 70 nap nem telik közben.
+Az idővonal ezt ma nem tudja, tehát a valóságnál korábbi határidőt mutat.
+Az `occurredAt` bevezetése óta ez könnyebb: a felfüggesztett napok
+számításához a felhívás és a pótlás napja kell, és mindkettő rögzíthető.
 
-1. **Milyen ügytípusok vannak pontosan, és mik a valós határidőik?**
-   A seed listát megírom javaslatként, de a jogszabályi határidőket neked kell
-   megerősítened — rossz határidő rosszabb, mint semmilyen.
-2. **Ki állítja be a státuszt?** Egyfelhasználós marad, vagy több ügyintéző?
-   Ez eldönti, kell-e zárolás és „ki módosította" megjelenítés.
-3. **Hova kerül a `statusz.html`?** Ez dönti el, kell-e jelszavas titkosítás.
-4. **Kell-e csatolmány-nyilvántartás** (melyik irat mikor ment be)? Ha igen, az
+**Tesztlefedettség:** `test/cases.test.js` — 58 teszt (határidők, kimenetelek,
+EH szám és iktatószám, azonosító-kötés, idővonal, visszamenőleges rögzítés,
+láncolás, napi összefoglaló).
+
+## 9. Nyitott kérdések
+
+**Megválaszolva:**
+
+1. ~~Milyen ügytípusok vannak, és mik a valós határidőik?~~ → Kérelmek 70 nap
+   az OIF-érkeztetéstől; szálláshely-változás 3 nap a költözéstől; munkaviszony
+   be- és kijelentés 5 nap a ténytől. A benyújtási ablak −90 / −40 / −10 nap
+   az engedély lejáratához képest.
+
+**Még nyitott:**
+
+2. **Az `adatvaltozas` határideje** — a seedben 5 nap, de ez az egyetlen, amit
+   nem erősítettél meg. A Beállításokban átírható.
+3. **Ki állítja be a státuszt?** Egyfelhasználós marad, vagy több ügyintéző?
+   Ez dönti el, kell-e zárolás. A „ki rögzítette" már most minden bejegyzésen
+   ott van.
+4. **Hova kerül a `statusz.html`?** Ez dönti el, kell-e jelszavas titkosítás
+   (WebCrypto, külső könyvtár nélkül megoldható).
+5. **Kell-e csatolmány-nyilvántartás** (melyik irat mikor ment be)? Ha igen, az
    csak fájlnév-hivatkozás legyen, nem maga a fájl — az adatbázist felfújná.

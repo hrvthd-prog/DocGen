@@ -1,4 +1,13 @@
-# Aumovio DocGen — terv (v2)
+# Aumovio DocGen — alapterv (v2)
+
+> **Állapot: mind a 10 fázis megvalósult.** Ez a dokumentum a döntések
+> indoklását őrzi — miért így épült fel az app, és mit vetettünk el útközben.
+> A használathoz a [README.md](README.md) kell, a folytatáshoz a
+> [TERV-esemenyek.md](TERV-esemenyek.md).
+>
+> Ahol a megvalósítás eltért a tervtől, azt a szöveg **ELTÉRÉS** jelöléssel
+> mondja el — nem írtam át a tervet utólag olyanra, mintha mindent eltaláltam
+> volna.
 
 ## 0. Mi változott a visszajelzésed után
 
@@ -18,7 +27,7 @@ Az app **kiegészíti az SAP-t**: a vállalat nem vált SAP-ról, de az SAP nem 
 
 **Marad:** dokumentumgenerálás + a HU/EN érték-fordító logika.
 **Kikerül:** Data-sheet importáló, EH-nyomtatvány, fejlesztői panel, PDF-szerver.
-**Új:** munkavállalói nyilvántartás, adat-vezérelt sémával, amiből bármikor előáll a Horizontes adatbekérő xlsx.
+**Új:** munkavállalói nyilvántartás, adat-vezérelt sémával, amiből bármikor előáll a munkavállalói adatbekérő xlsx.
 
 A felderítés két kulcs-megállapítása:
 
@@ -43,6 +52,8 @@ A felderítés két kulcs-megállapítása:
 Fehérlistával másolunk, nem mappamásolással.
 
 **Átmásolandó (~2,8 MB, javarészt vendor):** `vendor/*`; `js/services/{docx,fs,settings,excel}-service.js`; `js/{utils,logger,app}.js`; `js/modules/docgen.js` (szétbontásra); `css/{tokens,app}.css`; `app.html`, `print.html`.
+*(Az `app.html` a BEVapp neve volt; itt `index.html` lett belőle, mert a
+bejelentkező képernyő elmaradt.)*
 
 **Kifejezetten NEM másolandó:**
 
@@ -89,6 +100,36 @@ DocGen/
 
 Fülek: **Dokumentumok** · **Nyilvántartás** · **Beállítások** (ezen belül: séma, export profilok, PDF).
 
+> **A megvalósult szerkezet** (az ügykövetéssel együtt, lásd
+> [TERV-esemenyek.md](TERV-esemenyek.md)):
+>
+> ```
+> DocGen/
+>   index.html  print.html
+>   css/            tokens.css  app.css  registry.css  cases.css
+>   js/
+>     app.js  utils.js  logger.js
+>     schema/       value-codec  seed-schema  schema-store
+>                   schema-from-xlsx  export-profiles  case-types
+>     services/     settings  fs  docx  employee-repo  case-repo
+>                   xlsx-read (SheetJS)  xlsx-write (ExcelJS)
+>     modules/
+>       docgen.js + docgen/   missing-log  naming  merge  groups
+>       registry/             registry-view  employee-form  xlsx-io
+>       cases/                cases-view  case-form  case-timeline
+>       settings/             settings-view
+>   tools/          docx-pdf.vbs  pdf-proba/
+>   data/           (gitignore-olt)
+>   test/           9 tesztcsomag
+> ```
+>
+> Fülek: **Dokumentumok · Nyilvántartás · Ügyek · Beállítások** — az Ügyek a
+> tervhez képest új, a 12. pont 4. kérdéséből nőtt ki.
+>
+> Két fájl kikerült: a `schema-editor.js` nem lett önálló (a `settings-view`
+> tartalmazza), az `excel-service.js` pedig törlődött — a 7. fázisban a
+> nyilvántartás váltotta le, de a fájl bent maradt hívó nélkül.
+
 ## 5. Azonosítás — a SAP-szám problémája
 
 A SAP-azonosító **minden új tartózkodási engedéllyel változik**, és a régit nem adja ki újra. Így önmagában nem lehet kulcs, viszont a *történet* értékes: régi dokumentumok, hatósági ügyek a régi számra hivatkoznak.
@@ -110,7 +151,7 @@ Ebből következik:
 
 - **Keresés bármelyik azonosítóra** — a két éve lejárt engedélyszámra is megtalálható az ember.
 - **Import-párosítás:** ha az érkező azonosító egyezik *bármelyik* korábbival → ugyanaz a személy, az új azonosító `current`-té válik, a régi `validTo`-t kap. Nem keletkezik duplikátum.
-- **Tartalék párosítás,** ha nincs azonosító-egyezés: vezetéknév + keresztnév + születési dátum (a Horizontes útmutató is ezt a hármast használja duplikátumszűrésre).
+- **Tartalék párosítás,** ha nincs azonosító-egyezés: vezetéknév + keresztnév + születési dátum (az adatbekérő útmutatója is ezt a hármast használja duplikátumszűrésre).
 - Új engedély rögzítése a UI-ban egy lépés: „Új azonosító" → a régi automatikusan lezárul.
 
 Ez egyben javítja a mai app valódi hibáját is: ott a kiválasztás kulcsa a *„Vezetéknév Keresztnév" szöveg*, így két azonos nevű dolgozó egybeolvad, és az egyikük dokumentuma nem készül el.
@@ -135,7 +176,7 @@ Ez az egy definíció szolgálja ki:
 
 1. **A nyilvántartás űrlapját** — csoportosított, típushelyes mezők, enumból legördülő, kötelezőség-ellenőrzés.
 2. **Az xlsx exportot** — oszlopsorrend, fejléckulcsok, enum-kódolás, dátumformátum (export profilon keresztül).
-3. **Az xlsx importot** — az `accepts` lista miatt bármelyik írásmód felismerhető. *(A valódi Horizontes fájl önmagával sincs szinkronban: a cellakomment `ffi`/`noeoe`-t ír, a tényleges legördülő `male`/`female`-t. Az `accepts` ezt lekezeli.)*
+3. **Az xlsx importot** — az `accepts` lista miatt bármelyik írásmód felismerhető. *(A valódi adatbekérő fájl önmagával sincs szinkronban: a cellakomment `ffi`/`noeoe`-t ír, a tényleges legördülő `male`/`female`-t. Az `accepts` ezt lekezeli.)*
 4. **A dokumentum-jelölőket, kétnyelvűen** — a sablonok jelentős része HU-ENG kétnyelvű, ezért `{{Neme}}` → „Férfi", `{{Neme_EN}}` → „Male" ugyanabból a mezőből.
 5. **A számított mezőket** — a mai `enrichClientRow` négy összefűzött mezője (`Anyja neve`, `Születési helye`, `Szállás cím`, `Állandó lakcím`) sémabeli `computed` mezővé válik, nem marad kódba drótozva.
 
@@ -167,13 +208,13 @@ Egyfelhasználós indulás, bejelentkező képernyő nélkül. A `Settings` per-
 
 ### 7.3 „Mindig legyen belőle kiváló xlsx"
 
-**Technikai buktató, amit előre tisztázok:** a SheetJS ingyenes kiadása **nem tud** cellastílust, kitöltőszínt, adatérvényesítést (legördülőt) és cellakommentet **írni**. Márpedig a Horizontes sablon minősége pont ezeken áll.
+**Technikai buktató, amit előre tisztázok:** a SheetJS ingyenes kiadása **nem tud** cellastílust, kitöltőszínt, adatérvényesítést (legördülőt) és cellakommentet **írni**. Márpedig az adatbekérő minősége pont ezeken áll.
 
 **Megoldás: ExcelJS** a vendor mappába (MIT, egyetlen böngészős JS-fájl, telepítés nélkül). Ezzel az export nem „egy tábla adat", hanem **teljes értékű adatbekérő sablon** — színezett fejléc, legördülők, magyar magyarázó kommentek, rögzített fejlécsor.
 
 Két üzemmód: **üres sablon** (kitöltésre kiküldhető) és **feltöltött export** (a nyilvántartás szűrt tartalmával, importra kész).
 
-Az **export profil** köti össze a sémát a célformátummal, és maga is adat — ha a Horizontes formátum változik, profilt szerkesztünk, nem adatbázist.
+Az **export profil** köti össze a sémát a célformátummal, és maga is adat — ha a célformátum változik, profilt szerkesztünk, nem adatbázist.
 
 ## 8. Docgen refaktor
 
@@ -187,6 +228,25 @@ Az **export profil** köti össze a sémát a célformátummal, és maga is adat
 | `docgen/ui.js` | 503–1143 | oldalsáv/munkaterület render és eseménykötés |
 
 Innen törlendő: PDF-szerver kliens (207–262); az automatikus PDF-összefűzés (2142–2494) önálló segédeszközzé alakul (9.).
+
+> **ELTÉRÉS — négy egység lett hat helyett.** Végrehajtás előtt megmértem a
+> csatolást (kimenő hívások és state-hivatkozások száma):
+>
+> | egység | sor | külső hívás | state |
+> |---|---|---|---|
+> | napló | 96 | 0 | 0 |
+> | fájlnév | 155 | 1 | 2 |
+> | csoportok | 204 | 3 | 9 |
+> | összefűzés | 343 | 4 | 33 |
+> | **sablonok** | 284 | **16** | 36 |
+>
+> Az első négy kikerült (`missing-log`, `naming`, `merge`, `groups` — 823 sor).
+> A sablon-szkennelés a magban maradt: 16 kimenő hívása van a render/bind/state
+> felé, kiemelése oda-vissza hivatkozó modulokat adott volna — az rosszabb, mint
+> egy összefüggő fájl. `docgen.js`: 3124 → 2097 sor.
+>
+> A `Settings.isAdmin()` bedrótozott neve kikerült; egyfelhasználós üzemben
+> mindig `true`, és ez a jogosultság-ellenőrzés belépési pontja marad.
 
 **Kötelező apró javítások** (a felderítés találta):
 - `app.js` a mentett `last_tab`-ot ellenőrzés nélkül állítja vissza → régi `"import"` érték esetén **üres képernyő**.
@@ -226,6 +286,22 @@ A mai megoldás azért szerver, mert böngészőből nem lehet Wordöt vezéreln
 | 10 | Zárás | `TERV.md`, rövid használati útmutató, végső tesztfutás |
 
 Fázisonként megállok és mutatom az eredményt — az 1. fázis végén már fut az app, nem egy nagy dobásban készül el.
+
+> **Mind a 10 fázis elkészült.** A környezet-próba mind a négy pontja sikeres
+> lett az Aumovio-s gépen, ezért a **T1 sáv** épült be: `tools/docx-pdf.vbs`
+> duplakattintásra PDF-esíti a mappát és almappáit, Word COM-mal, teljes
+> hűséggel. Részletek: [`tools/pdf-proba/EREDMENY.md`](tools/pdf-proba/EREDMENY.md).
+>
+> A próba egy hibát is felszínre hozott: a `.vbs` fájlokat a Windows Script Host
+> ANSI-ként olvassa, ha nem UTF-16 LE BOM-mal kezdődnek — ettől minden ékezet
+> elromlott, a párbeszédablakokban és a kész PDF-ben egyaránt (egy gyökér, két
+> tünet). Azóta minden `.vbs` UTF-16 LE, és a `test/vbs-encoding.test.js` őrzi.
+>
+> A 9. pont szerinti önálló összefűző is elkészült, de másképp, mint terveztük:
+> az eredeti kód egy memóriabeli PDF-térképből dolgozott, amit csak egy soha
+> el nem érhető böngészős konverzió töltött volna fel — vagyis **halott kód
+> volt**. Most a kimeneti mappa PDF-jeit olvassa, külön gombbal, a generálástól
+> függetlenül.
 
 ## 11. Verifikáció
 

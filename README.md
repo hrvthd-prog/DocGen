@@ -17,13 +17,18 @@ A `file://` protokollról a mappaválasztás és a helyi tárolás is működik 
 ez le van mérve, nem feltételezés. Firefox és Safari **nem alkalmas**: nem
 ismerik a mappaválasztó API-t, ami a sablonok beolvasásához kell.
 
-## A három fül
+## A négy fül
 
 | Fül | Mire való |
 |---|---|
 | **Dokumentumok** | Sablon kiválasztása, személyek kijelölése, generálás |
 | **Nyilvántartás** | Személyek felvitele, keresés, xlsx be- és kivitel |
+| **Ügyek** | Kérelmek és bejelentések követése, határidők, idővonal |
 | **Beállítások** | Séma szerkesztése, export profilok, napló |
+
+Az **Ügyek** fül címkéjén piros pötty jelzi, hány ügy határideje járt le.
+Csak a lejártak kapnak jelzést — ha minden szám ott lenne, pár nap alatt
+megszoknánk, és a jelzés semmit nem jelentene.
 
 ### Első használat
 
@@ -56,7 +61,9 @@ Minden adat a **te gépeden marad**, semmi nem megy ki hálózatra.
 
 ```
 data/docgen-employees.json   ← a személyek (érzékeny adat!)
-data/docgen-config.json      ← séma és beállítások (személyes adat nélkül)
+data/docgen-cases.json       ← az ügyek és eseménytörténetük (érzékeny adat!)
+data/docgen-config.json      ← séma, export profilok, ügytípusok
+                               (személyes adat nélkül)
 data/backup/                 ← időbélyeges mentések, utolsó 20
 ```
 
@@ -79,6 +86,90 @@ Ennek a gyakorlati haszna: a két éve lejárt engedélyszámra is megtalálod a
 embert, és az ismételt import nem hoz létre duplikátumot.
 
 Új engedély rögzítése egy lépés: *Új azonosító* — a régi automatikusan lezárul.
+
+## Az adatbekérő táblázat
+
+A **Nyilvántartás** fülön két xlsx tölthető le:
+
+- **üres sablon** → `adatbekero.xlsx` — ezt küldöd ki kitöltésre
+- **feltöltött export** → `adatbekero-adatok-ÉÉÉÉHHNN.xlsx` — pillanatkép az adatokról
+
+Az üres sablonban az **1. sor rejtett**: az a gépi kulcsokat tartalmazza, ami az
+importhoz kell, a kitöltőnek nem. A kitöltő a **2. sort** látja, angol
+címkékkel, és mind a 44 cellán ott a kitöltést segítő komment — angolul, példákkal.
+
+A lap **jelszóval védett**, hogy a rejtett sor véletlenül se kerüljön elő:
+
+> **Jelszó: `Aumovio2026`** — Excelben: *Korrektúra → Lapvédelem feloldása*.
+> A `js/schema/export-profiles.js`-ben (`protection.password`) átírható.
+>
+> Ez **nem biztonsági eszköz** — az xlsx-lapvédelem percek alatt megkerülhető.
+> Egyetlen célja, hogy a kitöltő ne bolygassa meg a fejlécet.
+
+A kitölthető sorok száma 30. A védelem tiltja a sorbeszúrást, ezért ennél több
+munkavállaló nem fér bele egy fájlba — a `protection.fillableRows` állítja.
+
+## Ügyek és határidők
+
+Az idegenrendészeti ügyintézés nem állapot, hanem folyamat: a kérelmek egymás
+után következnek, és közben be- meg kijelentéseket is határidőre kell tenni.
+Az **Ügyek** fül ezt követi.
+
+### Kétféle határidő, és egyik sem magától értetődő
+
+| | Honnan fut | Mennyi | Ki adja meg |
+|---|---|---|---|
+| **Ügyintézési határidő** | OIF-érkeztetés napja | 70 nap | te, az iktatószámmal együtt |
+| **Bejelentési határidő** | a tény bekövetkezése | 3 vagy 5 nap | te |
+
+**Egyetlen határidőt sem tud a program magától.** Az érkeztetés napját az
+iktatószámmal kapod meg; a költözés vagy a munkakezdés napját szintén csak te
+tudod. Ezért amíg nincs megadva a kezdő nap, **nincs határidő** — és ez nem
+hiányosság. Kitalálni egyet félrevezetés lenne.
+
+A bejelentési határidők **tájékoztató** jelöléssel jelennek meg (*„a megadott
+nap szerint 3 napja lejárt"*), mert egy be nem írt vagy elgépelt dátum esetén
+a program téved, nem te. Az érkeztetéstől futó 70 nap ezzel szemben
+iktatószámmal igazolható — arra lehet hivatkozni.
+
+| Bejelentés | Határidő |
+|---|---|
+| Szálláshely-változás | a költözéstől 3 nap |
+| Munkaviszony megkezdése | a ténytől 5 nap |
+| Munkaviszony megszűnése | a ténytől 5 nap |
+
+### Benyújtási ablak
+
+Ez az **egyetlen** dolog, amit a program ki tud számolni — a meglévő engedély
+lejárata a nyilvántartásban van. Meghosszabbításnál három mérföldkő:
+
+```
+─────●━━━━━━━━━━━●━━━━━━━●───────●
+   −90         −40     −10    lejárat
+  korai      ideális  siess  lekésve
+```
+
+Ez **nem** a 70 nap: az a hatóság döntési ideje, ez a mi benyújtási ablakunk.
+A kettő külön ponton jelenik meg az idővonalon.
+
+### Idővonal
+
+Minden ügynek van idővonala: a megtörtént események, a számított mérföldkövek,
+a határidő és a mai nap. A **számított** pontok láthatóan el vannak különítve
+a rögzített tényektől — az egyik következtetés, a másik megtörtént dolog.
+
+**Utólag is rögzíthetsz.** Ha ma viszed fel a múlt keddi hiánypótlási
+felhívást, állítsd a *Mikor történt?* mezőt a valós napra — az idővonal a
+történés szerint rendez, nem a gépelés szerint. A rögzítés ideje külön
+megmarad audit-nyomnak, és **nem módosítható**; az utólag felvitt bejegyzések
+ezt ki is írják.
+
+### A ciklus zárása
+
+Ha egy meghosszabbítás megadással zárul, az app bekéri az új engedélyszámot
+**és a lejáratát**. A lejárat a dolgozó adatai közé is bekerül — enélkül a
+következő ablak a régi, már lejárt engedélyből számolna. Utána egy kattintással
+előjegyezhető a következő ciklus, a saját ablakával.
 
 ## PDF
 
@@ -116,11 +207,35 @@ valóban megtörtént, órákat vitt el, mire kiderült.
 node test/run-all.js
 ```
 
-Nyolc tesztcsomag, 152 teszt — séma, azonosító-történet, xlsx oda-vissza,
-jelölőfeloldás, naplózás, szkript-kódolás. Böngészőt nem igényel.
+Kilenc tesztcsomag, 227 teszt. Böngészőt nem igényel.
+
+| Csomag | Mit őriz |
+|---|---|
+| `auto-tests.js` | fájlnév-minták, naplózó API, docgen-szerkezet |
+| `employee-repo.test.js` | azonosító-történet, tükrözés a mezőkbe |
+| `schema.test.js` | séma mint adat, migráció, átnevezés |
+| `schema-from-xlsx.test.js` | séma-javaslat új sablonból |
+| `xlsx.test.js` | adatbekérő oda-vissza, lapvédelem, kiírás-időkorlát |
+| `docgen-resolve.test.js` | kétnyelvű jelölők, számított mezők |
+| `logger.test.js` | a napló nem hagyhatja el a gépet |
+| `vbs-encoding.test.js` | a `.vbs` UTF-16 LE marad |
+| `cases.test.js` | határidők, kimenetelek, idővonal, láncolás |
 
 Nincs build-lépés és nincs csomagkezelő: a `js/` fájljai közvetlenül töltődnek
 be, a sorrendjük az `index.html`-ben számít. Új modul a saját rétegének végére
 kerül (service → séma → modul).
 
-A tervet és az architektúra indoklását a [TERV.md](TERV.md) tartalmazza.
+```
+js/services/   tárolók és fájlműveletek (employee-repo, case-repo, xlsx, docx)
+js/schema/     séma, ügytípusok, export profilok – mind ADAT, nem kód
+js/modules/    felület: docgen/, registry/, cases/, settings/
+```
+
+**Ami adat, azt ne kódba írd.** A mezőséma, az ügytípusok, a státuszok, a
+határidők és az export profilok mind szerkeszthető adatok — ha egy eljárás
+változik, azokat módosítjuk, nem a JavaScriptet.
+
+## Tervek
+
+- [TERV.md](TERV.md) — az alapok: nyilvántartás, séma, xlsx, docgen, PDF
+- [TERV-esemenyek.md](TERV-esemenyek.md) — ügykövetés és státusz-betekintő

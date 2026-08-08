@@ -1,8 +1,16 @@
 # PDF környezet-próba
 
-Ez a csomag azt méri fel, hogy az **Aumovio-s gépen** melyik módon lehet a
-legenerált Word-dokumentumokból PDF-et készíteni. A böngésző önmagában nem tud
-Wordöt vezérelni, ezért kell valamilyen külső út — de a régi megoldás (helyi
+> **Ez a mérés lezárult** — 2026-08-06, az Aumovio-s munkaállomáson. Mind a négy
+> próba sikeres lett, ezért a **T1 sáv** épült be: `tools/docx-pdf.vbs`.
+> Az eredmény: [EREDMENY.md](EREDMENY.md).
+>
+> A csomag azért marad meg, mert **másik gépen újra kell mérni**: ha az app
+> más munkaállomásra kerül, ott nem biztos, hogy ugyanaz működik. Ilyenkor
+> kattintsd végig, és töltsd ki az eredménylapot.
+
+Ez a csomag azt méri fel, hogy egy adott gépen melyik módon lehet a legenerált
+Word-dokumentumokból PDF-et készíteni. A böngésző önmagában nem tud Wordöt
+vezérelni, ezért kell valamilyen külső út — de a régi megoldás (helyi
 PDF-kiszolgáló) itt nem járható.
 
 **Nem kell hozzá telepítés és rendszergazdai jog.** A próba semmit nem módosít a
