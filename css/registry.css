@@ -264,3 +264,26 @@
 .xio-upd { color: var(--c-blue);  font-weight: 600; }
 .xio-dup { color: var(--c-muted); font-weight: 600; }
 .data-table i { color: var(--c-muted); font-size: 11px; }
+
+/* ── Sérült adatfájl és visszaállítás ────────────────────────────────────── */
+
+.rg-error {
+  background: var(--c-red); color: #fff;
+  font-weight: 600; border-radius: 4px;
+}
+.rg-corrupt {
+  font-size: 11px; line-height: 1.5; color: var(--c-text);
+  background: var(--c-bg); border: 1px solid var(--c-red);
+  border-radius: 4px; padding: 8px 10px; margin: 6px 0 8px;
+}
+
+.rg-backups { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
+.rg-backup {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 8px; border-radius: 4px; cursor: pointer; font-size: 12px;
+}
+.rg-backup:hover { background: var(--c-bg); }
+.rg-backup__when  { flex: 1; font-family: Consolas, monospace; }
+.rg-backup__count { color: var(--c-muted); white-space: nowrap; }
+.rg-backup.is-broken { opacity: .55; cursor: not-allowed; }
+.rg-backup.is-broken .rg-backup__count { color: var(--c-red); }

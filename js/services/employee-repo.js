@@ -53,6 +53,24 @@ const EmployeeRepo = (() => {
     taj:              'TAJ',
   };
 
+  /**
+   * Sérült adatfájl jelzése.
+   *
+   * Külön hibafajta, hogy a felület fel tudja ismerni és visszaállítást
+   * ajánlhasson – ne egy általános „valami hiba" üzenetbe olvadjon bele.
+   */
+  function makeCorruptError(filename, ok) {
+    const e = new Error(
+      `A(z) „${filename}" adatfájl nem olvasható (${ok}). ` +
+      'A tartalma megvan, csak sérült – NE módosíts semmit, amíg vissza nem állítottad ' +
+      'egy biztonsági másolatból.');
+    e.code = 'ADATFAJL_SERULT';
+    e.filename = filename;
+    return e;
+  }
+
+  function isCorruptError(e) { return !!(e && e.code === 'ADATFAJL_SERULT'); }
+
   /** Az aktuális azonosítók bemásolása a hozzájuk tartozó mezőkbe. */
   function applyIdentifiersToFields(identifiers = [], fields = {}) {
     const out = Object.assign({}, fields);
@@ -473,12 +491,33 @@ const EmployeeRepo = (() => {
     return {
       describe: () => `fájl: ${dirHandle.name}/${filename}`,
 
+      /**
+       * Két gyökeresen különböző eset, amit NEM szabad összemosni:
+       *
+       *   a fájl nincs   → jogos, üres nyilvántartással indulunk (első használat)
+       *   a fájl van, de olvashatatlan → NEM jogos: van adat, csak nem férünk hozzá
+       *
+       * Korábban mindkettő `null`-t adott, ezért egy sérült fájl (félbeszakadt
+       * mentés, lemezhiba) után az app ÜRESEN indult, minden jelzés nélkül – és
+       * az első módosítás felülírta a még részben menthető tartalmat.
+       * A sérülést ezért hibaként dobjuk: a hívó dolga eldönteni, mi legyen.
+       */
       async load() {
+        let text;
         try {
-          const text = await FsService.readTextFromDir(dirHandle, filename);
-          return JSON.parse(text);
+          text = await FsService.readTextFromDir(dirHandle, filename);
         } catch {
-          return null;   // még nincs adatfájl – üres nyilvántartással indulunk
+          return null;                       // nincs még adatfájl
+        }
+
+        // Az üres fájl is sérülés: félbeszakadt írás után keletkezik
+        if (!String(text).trim()) {
+          throw makeCorruptError(filename, 'a fájl üres');
+        }
+        try {
+          return JSON.parse(text);
+        } catch (e) {
+          throw makeCorruptError(filename, e.message);
         }
       },
 
@@ -502,7 +541,69 @@ const EmployeeRepo = (() => {
         }
         await FsService.writeTextToDir(dirHandle, filename, JSON.stringify(data, null, 2));
       },
+
+      /**
+       * A meglévő biztonsági másolatok, legfrissebb elöl.
+       *
+       * Mindegyiknél kiolvassuk, hány rekordot tartalmaz – választáskor ez a
+       * fontos, nem a fájlnév. Az olvashatatlan másolat is a listában marad,
+       * `serult: true` jelzéssel: hadd lássa a felhasználó, hogy létezik.
+       */
+      async listBackups() {
+        const bdir = await FsService.getSubDir(dirHandle, backupDir, false);
+        if (!bdir) return [];
+        const nevek = await FsService.listFiles(bdir, n => n.endsWith(filename));
+
+        const out = [];
+        for (const nev of nevek) {
+          const tetel = { name: nev, when: backupIdopont(nev), count: null, serult: false };
+          try {
+            const t = await FsService.readTextFromDir(bdir, nev);
+            const d = JSON.parse(t);
+            tetel.count = Array.isArray(d.employees) ? d.employees.length
+                        : Array.isArray(d.cases)     ? d.cases.length : 0;
+          } catch { tetel.serult = true; }
+          out.push(tetel);
+        }
+        return out.reverse();   // a listFiles növekvő, nekünk a legfrissebb kell elöl
+      },
+
+      /**
+       * Visszaállítás: a másolat tartalma a fő fájlba kerül.
+       *
+       * A jelenlegi állapotról előbb mentés készül – akkor is, ha az sérült.
+       * Így egy elhamarkodott visszaállítás sem visszafordíthatatlan.
+       */
+      async restoreBackup(nev) {
+        const bdir = await FsService.getSubDir(dirHandle, backupDir, false);
+        if (!bdir) throw new Error('Nincs biztonsági mentés mappa.');
+
+        const tartalom = await FsService.readTextFromDir(bdir, nev);
+        JSON.parse(tartalom);   // ha ez dob, nem írunk semmit
+
+        try {
+          if (await FsService.fileExists(dirHandle, filename)) {
+            const jelenlegi = await FsService.readTextFromDir(dirHandle, filename);
+            const stamp = nowIso().replace(/[:.]/g, '-').slice(0, 19);
+            await FsService.writeTextToDir(bdir, `${stamp}-visszaallitas-elott-${filename}`, jelenlegi);
+          }
+        } catch (e) {
+          if (typeof BevLogger !== 'undefined') {
+            BevLogger.warn('REPO_RESTORE', 'A visszaállítás előtti mentés nem sikerült', e.message, '');
+          }
+        }
+
+        await FsService.writeTextToDir(dirHandle, filename, tartalom);
+        return true;
+      },
     };
+
+    /** „2026-08-08T10-15-30-docgen-employees.json" → olvasható időpont */
+    function backupIdopont(nev) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})/.exec(nev);
+      if (!m) return nev;
+      return `${m[1]}. ${m[2]}. ${m[3]}.  ${m[4]}:${m[5]}`;
+    }
 
     async function pruneBackups(bdir) {
       const names = await FsService.listFiles(bdir, n => n.endsWith(filename));
@@ -538,6 +639,7 @@ const EmployeeRepo = (() => {
 
   return {
     ID_TYPES, NATURAL_KEY_FIELDS, IDENTIFIER_FIELD_MAP, applyIdentifiersToFields,
+    isCorruptError,
     // tároló
     useBackend, hasBackend, describeBackend, onChange,
     createFileBackend, createIdbBackend, createMemoryBackend,

@@ -328,6 +328,99 @@ atest('azonosító törlése NEM üríti a mezőt – kézi adat nem veszhet el'
   assertEq(Repo.get(e.id).fields.TAJ, '123456789', 'a mező kiürült');
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+// Sérült adatfájl
+//
+// A tároló korábban összemosta a „nincs még fájl" és a „van fájl, de
+// olvashatatlan" esetet: mindkettő üres nyilvántartással indult. Egy sérült
+// fájl (félbeszakadt mentés, lemezhiba) után az app tehát ÜRESEN indult,
+// minden jelzés nélkül – és az első módosítás felülírta a még menthető
+// tartalmat. Ezt a különbségtételt őrzik az alábbi tesztek.
+asection('Sérült adatfájl felismerése');
+
+/**
+ * A VALÓDI createFileBackend-et hívjuk, hamis fájlrendszerrel.
+ *
+ * Kézzel írt mock-backend csak a mock-ot mérné; itt viszont az éles kódút fut,
+ * beleértve a hiányzó/sérült megkülönböztetést.
+ */
+function ujRepoFajlrendszerrel(fajlok) {
+  let code = fs.readFileSync(path.join(__dirname, '../js/services/employee-repo.js'), 'utf8');
+  code += '\nglobalThis.EmployeeRepo = EmployeeRepo;';
+
+  const FsService = {
+    async readTextFromDir(dir, nev) {
+      if (!(nev in fajlok)) throw new Error('nincs ilyen fájl');
+      return fajlok[nev];
+    },
+    async writeTextToDir(dir, nev, szoveg) { fajlok[nev] = szoveg; },
+    async fileExists(dir, nev) { return nev in fajlok; },
+    async getSubDir() { return null; },
+    async listFiles() { return []; },
+    async deleteFromDir() { return true; },
+  };
+
+  const sandbox = {
+    console, Date, Math, JSON, Set, Map, Object, Array, String, Number, Boolean,
+    Error, RegExp, Promise, setTimeout, clearTimeout, crypto, FsService,
+  };
+  sandbox.globalThis = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(code, sandbox);
+
+  const R = sandbox.EmployeeRepo;
+  R.useBackend(R.createFileBackend({ name: 'proba' }));
+  return R;
+}
+
+const FAJLNEV = 'docgen-employees.json';
+
+atest('hiányzó fájl → üres nyilvántartás, ez rendben van', async () => {
+  const R = ujRepoFajlrendszerrel({});           // egyáltalán nincs fájl
+  assertEq(await R.load(), 0);
+});
+
+atest('ép fájl → betölt', async () => {
+  const R = ujRepoFajlrendszerrel({
+    [FAJLNEV]: JSON.stringify({ version: 1, employees: [{ id: 'a', fields: { surname: 'Ép' } }] }),
+  });
+  assertEq(await R.load(), 1);
+});
+
+atest('sérült fájl → HIBA, nem üres indulás', async () => {
+  // Félbeszakadt írás: a JSON csonka
+  const R = ujRepoFajlrendszerrel({
+    [FAJLNEV]: '{"version":1,"employees":[{"id":"a","fields":{"surna',
+  });
+  let dobott = null;
+  try { await R.load(); } catch (e) { dobott = e; }
+  assert(dobott, 'némán üresen indult – a sérült adat felülíródna');
+  assert(R.isCorruptError(dobott), `nem sérülés-hibát dobott: ${dobott.message}`);
+  assert(/nem olvasható/.test(dobott.message), `érthetetlen üzenet: ${dobott.message}`);
+});
+
+atest('üres fájl is sérülésnek számít', async () => {
+  // Nem ugyanaz, mint a hiányzó fájl: itt VOLT adat, csak elveszett
+  const R = ujRepoFajlrendszerrel({ [FAJLNEV]: '   ' });
+  let dobott = null;
+  try { await R.load(); } catch (e) { dobott = e; }
+  assert(dobott && R.isCorruptError(dobott), 'az üres fájlt jó adatnak vette');
+});
+
+atest('sérülés után a tároló NEM használható – nincs mit felülírni', async () => {
+  const R = ujRepoFajlrendszerrel({ [FAJLNEV]: '{csonka' });
+  try { await R.load(); } catch {}
+  // A cache üresen maradt, ezért minden művelet leáll – nem tud menteni
+  let hiba = null;
+  try { R.create({ fields: { surname: 'Új' } }); } catch (e) { hiba = e; }
+  assert(hiba, 'sérült betöltés után is engedett módosítást');
+});
+
+atest('a sérülés-hiba megkülönböztethető a többitől', async () => {
+  assertEq(Repo.isCorruptError(new Error('valami más')), false);
+  assertEq(Repo.isCorruptError(null), false);
+});
+
 (async () => {
   for (const item of queue) {
     if (item.section) { console.log(`

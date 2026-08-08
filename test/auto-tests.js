@@ -57,7 +57,11 @@ function loadInSandbox(filePath, extraGlobals = {}) {
   if (exposeCode) code += '\n\n// AUTO-EXPOSE FOR TESTS\n' + exposeCode + '\n';
 
   const sandbox = Object.assign({
-    console,
+    // Néma konzol: a naplózó a konzolra ír, és a truncate-teszt több ezer
+    // karakteres próbaszöveggel dolgozik – az elárasztaná a tesztkimenetet,
+    // és a valódi eredmény elveszne benne. A bejegyzések a BevLogger.dump()-ból
+    // így is ellenőrizhetők.
+    console: { log() {}, warn() {}, error() {}, info() {}, debug() {} },
     Date, Math, JSON, Set, Map, Object, Array, String, Number, Boolean,
     Error, RegExp, Symbol, Promise,
     setTimeout, clearTimeout, setInterval, clearInterval,

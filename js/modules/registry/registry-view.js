@@ -19,6 +19,8 @@ const RegistryModule = (() => {
     query:           '',
     showArchived:    false,
     selectedId:      null,
+    // Sérült adatfájl esetén ide kerül a hiba – ilyenkor NEM indulunk üresen
+    corruptError:    null,
   };
 
   // ── Indítás ────────────────────────────────────────────────────────────────
@@ -66,8 +68,30 @@ const RegistryModule = (() => {
     await SchemaStore.load();
     await ExportProfiles.load();
     await CaseTypes.load();
-    await EmployeeRepo.load();
-    await CaseRepo.load();
+
+    /**
+     * Sérült adatfájlnál NEM indulunk el üresen.
+     *
+     * Ha üres nyilvántartással indulnánk, a felhasználó azt látná, hogy „nincs
+     * adat" – és az első módosítás felülírná a még menthető tartalmat. Ehelyett
+     * megállunk, kimondjuk, mi történt, és felajánljuk a visszaállítást.
+     */
+    try {
+      await EmployeeRepo.load();
+      await CaseRepo.load();
+    } catch (e) {
+      if (EmployeeRepo.isCorruptError(e)) {
+        state.ready = false;
+        state.corruptError = e;
+        BevLogger.error('ADATFAJL_SERULT', 'Sérült adatfájl', e.message, `fajl=${e.filename}`);
+        renderSidebar();
+        renderList();
+        return;
+      }
+      throw e;
+    }
+
+    state.corruptError = null;
     state.ready = true;
     renderSidebar();
     renderList();
@@ -167,7 +191,15 @@ const RegistryModule = (() => {
     if (!sb) return;
 
     let tarolo;
-    if (!state.ready && state.dirHandle) {
+    if (state.corruptError) {
+      tarolo = `
+        <div class="info-row rg-error">Az adatfájl sérült</div>
+        <div class="rg-corrupt">
+          ${escHtml(state.corruptError.message)}
+        </div>
+        <button class="sidebar-btn sidebar-btn--primary" id="rg-restore">Visszaállítás mentésből</button>
+        <button class="sidebar-btn" id="rg-pick-dir">Másik adatmappa</button>`;
+    } else if (!state.ready && state.dirHandle) {
       tarolo = `
         <div class="info-row rg-warn">Az adatmappa engedélyre vár: ${escHtml(state.dirHandle.name)}</div>
         <button class="sidebar-btn" id="rg-grant">Hozzáférés megadása</button>`;
@@ -199,6 +231,7 @@ const RegistryModule = (() => {
 
     document.getElementById('rg-pick-dir')?.addEventListener('click', pickDataDir);
     document.getElementById('rg-grant')?.addEventListener('click', grantAccess);
+    document.getElementById('rg-restore')?.addEventListener('click', openRestoreDialog);
     refreshStats();
   }
 
@@ -362,6 +395,78 @@ const RegistryModule = (() => {
     await EmployeeRepo.flush();
     if (atvive) toast(`${atvive} korábbi rekord átvéve az adatmappába`, 'success');
     renderList();
+  }
+
+  /**
+   * Visszaállítás biztonsági másolatból.
+   *
+   * Húsz mentés készül automatikusan, de eddig egyiket sem lehetett
+   * visszatölteni – egy mentés, amit nem tudsz visszatenni, nem mentés.
+   *
+   * A listában a rekordszám a fontos, nem a fájlnév: abból lehet eldönteni,
+   * melyik állapotra érdemes visszaállni.
+   */
+  async function openRestoreDialog() {
+    if (!state.dirHandle) { toast('Nincs kiválasztott adatmappa', 'warn'); return; }
+
+    const backend = EmployeeRepo.createFileBackend(state.dirHandle);
+    let mentesek = [];
+    try { mentesek = await backend.listBackups(); }
+    catch (e) { toast(`A mentések nem olvashatók: ${e.message}`, 'error'); return; }
+
+    if (!mentesek.length) {
+      showDialog({
+        title: 'Visszaállítás mentésből',
+        body: `<p style="font-size:12px;color:var(--c-muted)">
+                 Nincs biztonsági mentés ebben az adatmappában.<br><br>
+                 Mentés minden módosításkor készül, a <code>backup</code> almappába.
+                 Ha most először használod az appot ezzel a mappával, még nincs mit visszaállítani.
+               </p>`,
+        footer: '<button class="btn btn-ghost btn-sm" onclick="closeDialog()">Bezárás</button>',
+      });
+      return;
+    }
+
+    const sorok = mentesek.map((m, i) => `
+      <label class="rg-backup ${m.serult ? 'is-broken' : ''}">
+        <input type="radio" name="rg-bk" value="${escHtml(m.name)}" ${i === 0 && !m.serult ? 'checked' : ''}
+               ${m.serult ? 'disabled' : ''}>
+        <span class="rg-backup__when">${escHtml(m.when)}</span>
+        <span class="rg-backup__count">${
+          m.serult ? '<em>olvashatatlan</em>' : `${m.count} személy`
+        }</span>
+      </label>`).join('');
+
+    showDialog({
+      title: 'Visszaállítás mentésből',
+      body: `
+        <p style="font-size:12px;color:var(--c-text);margin-bottom:10px">
+          Válaszd ki, melyik állapotra állunk vissza. A <strong>jelenlegi</strong>
+          tartalomról előbb mentés készül, tehát a lépés visszafordítható.
+        </p>
+        <div class="rg-backups">${sorok}</div>
+        <p style="font-size:11px;color:var(--c-muted);margin-top:10px">
+          A visszaállítás után az azóta rögzített változások eltűnnek.
+        </p>`,
+      footer: `
+        <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Mégse</button>
+        <button class="btn btn-primary btn-sm" id="rg-do-restore">Visszaállítás</button>`,
+    });
+
+    document.getElementById('rg-do-restore').addEventListener('click', async () => {
+      const valasztott = document.querySelector('input[name="rg-bk"]:checked');
+      if (!valasztott) { toast('Válassz egy mentést', 'warn'); return; }
+      try {
+        await backend.restoreBackup(valasztott.value);
+        closeDialog();
+        toast('✓ Visszaállítva – újratöltés…', 'success');
+        BevLogger.info('REPO_RESTORE', `Visszaállítás mentésből: ${valasztott.value}`, '', '');
+        state.corruptError = null;
+        await useFileBackend(state.dirHandle);
+      } catch (e) {
+        toast(`A visszaállítás nem sikerült: ${e.message}`, 'error');
+      }
+    });
   }
 
   async function grantAccess() {

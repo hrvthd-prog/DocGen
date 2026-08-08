@@ -194,12 +194,37 @@ az eredménye: [`EREDMENY.md`](tools/pdf-proba/EREDMENY.md).
 
 ## Frissítés
 
-Másold felül a fájlokat, **majd az `index.html`-ben növeld a verziószámot**:
-csere `?v=1` → `?v=2`.
+```bash
+node tools/kiadas.js
+```
 
-Ez nem formalitás. Enélkül a böngésző a gyorsítótárból veszi a régi JS-t, és a
-felhasználók a frissítés után is a régi kódot futtatják — ez a fejlesztés során
-valóban megtörtént, órákat vitt el, mire kiderült.
+Lefuttatja a teszteket, ellenőrzi, hogy a repó önmagában is teljes, majd lépteti
+a gyorsítótár-verziót. Ha bármi bukik, **megáll** — hibás kódot nem ad ki.
+Utána már csak a fájlokat kell átmásolni a megosztott mappába.
+
+A verziólépés nem formalitás: enélkül a böngésző a gyorsítótárból veszi a régi
+JS-t, és a felhasználók a frissítés után is a régi kódot futtatják — ez a
+fejlesztés során **háromszor** megtörtént.
+
+Csak nézni, változtatás nélkül: `node tools/kiadas.js --csak-ellenoriz`
+
+## Ha megsérül az adatfájl
+
+Az app ilyenkor **nem indul el üresen** — kiírja, mi történt, és felajánlja a
+visszaállítást.
+
+Ez korábban másképp volt: a program összemosta a „még nincs adatfájl" és a
+„van fájl, de olvashatatlan" esetet, ezért egy sérült fájl után üresen indult,
+minden jelzés nélkül. A felhasználó azt látta, hogy nincs adat — és az első
+módosítás felülírta a még menthető tartalmat.
+
+A `data/backup/` mappában az utolsó 20 mentés van. A visszaállító párbeszéd
+mindegyiknél kiírja, **hány személyt tartalmaz** — ez alapján lehet választani,
+nem a fájlnév alapján. A lépés **visszafordítható**: a jelenlegi (akár sérült)
+állapotról is mentés készül előtte.
+
+> A böngésző tárolójával — adatmappa kiválasztása nélkül — **nincs mentés**.
+> Éles adathoz mindig válassz adatmappát a Nyilvántartás fülön.
 
 ## Fejlesztés
 
@@ -207,7 +232,7 @@ valóban megtörtént, órákat vitt el, mire kiderült.
 node test/run-all.js
 ```
 
-Tíz tesztcsomag, 247 teszt. Böngészőt nem igényel.
+Tíz tesztcsomag, 251 teszt. Böngészőt nem igényel.
 
 | Csomag | Mit őriz |
 |---|---|
@@ -269,3 +294,4 @@ változik, azokat módosítjuk, nem a JavaScriptet.
 - [TERV.md](TERV.md) — az alapok: nyilvántartás, séma, xlsx, docgen, PDF
 - [TERV-esemenyek.md](TERV-esemenyek.md) — ügykövetés és státusz-betekintő
 - [TERV-tesztanyag.md](TERV-tesztanyag.md) — próbasablonok és körbe-teszt
+- [TERV-adatbiztonsag.md](TERV-adatbiztonsag.md) — sérült fájl, visszaállítás, kiadás
