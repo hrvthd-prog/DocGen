@@ -49,7 +49,7 @@ section('Kiinduló séma épsége');
 // hogy a bővülés szándékos maradjon: aki új mezőt vesz fel, ide is beírja.
 const FORMANYOMTATVANY_MEZOK = [
   'pp_issuance_place', 'stairway', 'topographical_number',
-  'other_accommodation', 'occupation_before_arrival', 'transport_type',
+  'other_accommodation', 'occupation_before_arrival',
 ];
 
 test('az eredeti 44 mező megvan, a formanyomtatvány hatával kiegészítve', () => {
@@ -260,6 +260,38 @@ test('szabad szöveges mezőn ékezet- és kisbetű-tűrő az egyezés', () => {
 
 test('ismeretlen jelölőre null – a hívó eshet vissza másra', () => {
   assertEq(SchemaStore.tagEquals('nincs_ilyen_mezo', 'x', {}), null);
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+section('Szabály szerint származtatott mező');
+// A hazautazás módját nem a kitöltő adja meg: az állampolgárságból következik.
+
+test('szomszédos országból busz, távolabbról repülő', () => {
+  SchemaStore.setDictionary([{ en: 'bus', hu: 'busz' }, { en: 'airplane', hu: 'repülő' }]);
+  const mod = a => SchemaStore.renderTag('transport_type', { citizenship: a });
+
+  for (const a of ['Szerbia', 'Ukrajna', 'Románia', 'Ausztria', 'Horvátország']) {
+    assertEq(mod(a), 'busz', `${a} nem busz`);
+  }
+  for (const a of ['Fülöp-szigetek', 'Mexikó', 'Brazília', 'Vietnám']) {
+    assertEq(mod(a), 'repülő', `${a} nem repülő`);
+  }
+});
+
+test('a felismerés ékezet- és kisbetű-tűrő', () => {
+  assertEq(SchemaStore.renderTag('transport_type', { citizenship: 'szerbia' }), 'busz');
+  assertEq(SchemaStore.renderTag('transport_type', { citizenship: 'UKRAJNA' }), 'busz');
+});
+
+test('állampolgárság nélkül üres marad – nem találgatunk', () => {
+  assertEq(SchemaStore.renderTag('transport_type', {}), '');
+  assertEq(SchemaStore.renderTag('transport_type', { citizenship: '  ' }), '');
+  SchemaStore.setDictionary([]);
+});
+
+test('a származtatott mező NEM kerül ki az adatbekérőbe', () => {
+  // Számított mező: nincs értelme megkérdezni, amit ki tudunk számolni.
+  assertEq(SchemaStore.storedFields().some(f => f.key === 'transport_type'), false);
 });
 
 // ════════════════════════════════════════════════════════════════════════════

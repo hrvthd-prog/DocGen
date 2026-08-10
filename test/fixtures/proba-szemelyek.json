@@ -48,8 +48,7 @@
     "speaks_hungarian": "no",
     "previous_country": "Serbia",
     "previous_town": "Subotica",
-    "previous_street": "Trg Slobode 4",
-    "transport_type": "bus"
+    "previous_street": "Trg Slobode 4"
   },
   {
     "personnel_reg_number": "SAP-100235",
@@ -100,8 +99,7 @@
     "speaks_hungarian": "yes",
     "previous_country": "Ukraine",
     "previous_town": "Lviv",
-    "previous_street": "Shevchenka Street 21",
-    "transport_type": "bus"
+    "previous_street": "Shevchenka Street 21"
   },
   {
     "personnel_reg_number": "SAP-100236",
@@ -152,7 +150,6 @@
     "speaks_hungarian": "no",
     "previous_country": "Philippines",
     "previous_town": "Cebu",
-    "previous_street": "Osmena Boulevard 118",
-    "transport_type": "airplane"
+    "previous_street": "Osmena Boulevard 118"
   }
 ]

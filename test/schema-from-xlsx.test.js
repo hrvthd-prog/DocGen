@@ -115,7 +115,7 @@ section('Összevetés a kiinduló sémával');
 // se kevesebbet – így a teszt továbbra is kiszúrja a véletlen eltérést.
 const FORMANYOMTATVANY_MEZOK = [
   'occupation_before_arrival', 'other_accommodation', 'pp_issuance_place',
-  'stairway', 'topographical_number', 'transport_type',
+  'stairway', 'topographical_number',
 ];
 
 test('a kiinduló séma megegyezik a fájllal – csak a formanyomtatvány-mezők újak', () => {
