@@ -45,6 +45,7 @@ const XlsxWrite = (() => {
     }));
 
     writeHeader(ws, cols, profile, st);
+    writeDateFormats(ws, cols, profile);
     writeValidations(ws, cols, profile, st);
     writeRows(ws, cols, profile, schema, employees);
 
@@ -172,6 +173,26 @@ const XlsxWrite = (() => {
     }
 
     return { texts: [{ text: sorok.join('\n') }] };
+  }
+
+  /**
+   * Dátumoszlopok megjelenítési formátuma.
+   *
+   * Formátum nélkül az Excel a beírt „1990-03-15"-öt valódi dátummá alakítja,
+   * és a KITÖLTŐ GÉPÉNEK területi beállítása szerint mutatja: angol
+   * rendszeren „3/15/1990" lesz belőle. Az útmutató ÉÉÉÉ-HH-NN alakot kér,
+   * a kitöltő viszont mást lát, mint amit beírt – ezért azt hiszi, elrontotta,
+   * és átírja. (A beolvasás ettől függetlenül helyes: a tárolt sorszámot
+   * olvassuk, nem a megjelenített szöveget.)
+   *
+   * A formátum az EGÉSZ oszlopra megy, nem csak a kitölthető sorokra: aki
+   * beszúr egy sort, annak is ÉÉÉÉ-HH-NN-t mutasson.
+   */
+  function writeDateFormats(ws, cols, profile) {
+    cols.forEach((f, i) => {
+      if (f.type !== 'date') return;
+      ws.getColumn(i + 1).numFmt = 'yyyy-mm-dd';
+    });
   }
 
   /** Legördülők a választható mezőkre. */

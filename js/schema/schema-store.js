@@ -95,10 +95,20 @@ const SchemaStore = (() => {
         }));
       }
       if (field.type === 'computed') {
+        const c = f.computed || {};
         field.computed = {
-          from: (f.computed && Array.isArray(f.computed.from)) ? f.computed.from.slice() : [],
-          sep:  (f.computed && f.computed.sep != null) ? f.computed.sep : ' ',
+          from: Array.isArray(c.from) ? c.from.slice() : [],
+          sep:  c.sep != null ? c.sep : ' ',
         };
+        // Szabály szerinti származtatás (lásd computeLookup). Csak akkor
+        // kerül be, ha tényleg van szabály – enélkül az összefűzés marad.
+        if (c.lookup && typeof c.lookup === 'object') {
+          field.computed.lookup = {};
+          for (const [ertek, lista] of Object.entries(c.lookup)) {
+            field.computed.lookup[ertek] = Array.isArray(lista) ? lista.slice() : [];
+          }
+          field.computed.default = c.default != null ? String(c.default) : '';
+        }
       }
       out.fields.push(field);
     }
@@ -312,8 +322,21 @@ const SchemaStore = (() => {
 
   // ── Számított mezők ────────────────────────────────────────────────────────
 
-  /** Egy számított mező értéke a tárolt mezőkből. */
+  /**
+   * Egy számított mező értéke a tárolt mezőkből.
+   *
+   * Kétféle szabály, mindkettő ADAT a sémában, nem kód:
+   *   sep    – a forrásmezők összefűzése („Anyja neve" két mezőből)
+   *   lookup – az első forrásmező értéke DÖNT egy előre megadott kimenetről
+   *
+   * A `lookup` azért kell, mert van adat, amit nem a kitöltőtől kérdezünk meg,
+   * mert az állampolgárságból következik. Ilyen a hazautazás módja: szomszédos
+   * országból busszal, távolabbról repülővel megy haza az ember. Ha ezt a
+   * kitöltőre bíznánk, három ember háromfélét írna ugyanarra.
+   */
   function computeField(f, values, lang = 'hu') {
+    if (f.computed.lookup) return computeLookup(f, values, lang);
+
     const parts = (f.computed.from || [])
       .map(k => {
         const src = field(k);
@@ -322,6 +345,24 @@ const SchemaStore = (() => {
       .map(s => s.trim())
       .filter(Boolean);
     return parts.join(f.computed.sep);
+  }
+
+  /**
+   * Szabály szerinti származtatás: melyik kimenet listájában szerepel a
+   * forrásérték. Ismeretlen forrásra a `default` jön — de ÜRES forrásra üres,
+   * mert adat híján nem találgatunk (ugyanaz az elv, mint a dátum-részeknél).
+   */
+  function computeLookup(f, values, lang = 'hu') {
+    const c = f.computed;
+    const forras = ValueCodec.normalize(values[(c.from || [])[0]]);
+    if (!forras) return '';
+
+    let kimenet = c.default || '';
+    for (const [ertek, lista] of Object.entries(c.lookup)) {
+      if ((lista || []).some(x => ValueCodec.normalize(x) === forras)) { kimenet = ertek; break; }
+    }
+    // A kimenet a szótáron megy át, mint bármelyik szabad szöveg
+    return kimenet ? (translate(kimenet, lang) || kimenet) : '';
   }
 
   /**

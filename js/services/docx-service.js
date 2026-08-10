@@ -156,7 +156,10 @@ const DocxService = (() => {
 
     doc.render();
 
-    const filled = doc.getZip().generate({ type: 'uint8array' });
+    // Tömörítve: a docx zip, és a PizZip alapból TÖMÖRÍTETLENÜL ír. Enélkül
+    // egy 120 kB-os hatósági sablonból 1,15 MB-os kimenet lesz – ugyanaz a
+    // tartalom tizedannyi helyen elfér, és a hálózaton is annyival megy.
+    const filled = doc.getZip().generate({ type: 'uint8array', compression: 'DEFLATE' });
     return {
       buffer:    processCheckboxes(filled, data),
       emptyTags: [...emptyTags].filter(t => t && !t.startsWith('CHECK:') && !t.startsWith('B:')),
@@ -207,7 +210,7 @@ const DocxService = (() => {
     const xml = entry.asText();
     const updated = xml.replace(/<w:sdt\b[\s\S]*?<\/w:sdt>/gi, sdt => processSdt(sdt, rowData));
     zip.file('word/document.xml', updated);
-    return zip.generate({ type: 'uint8array' });
+    return zip.generate({ type: 'uint8array', compression: 'DEFLATE' });
   }
 
   // Támogatott tokenek a P5 név-mintában — bővíthető struktúra

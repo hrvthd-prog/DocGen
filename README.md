@@ -111,6 +111,28 @@ nem érinti, azoknak saját értéklistájuk van a sémában.
 > importja változatlanul működik; a meglévő adat a séma betöltésekor magától
 > átköltözik az új kulcsra.
 
+### Amit nem kérdezünk meg, mert kiszámolható
+
+Van adat, ami egy másikból következik — azt nem kérjük be még egyszer. A
+hazautazás módja ilyen: a szomszédos országokból busszal, távolabbról repülővel
+megy haza az ember, tehát az **állampolgárság** eldönti. A séma ezt szabályként
+írja le, nem kódként:
+
+```js
+{ key: 'transport_type', type: 'computed',
+  computed: {
+    from: ['citizenship'],
+    lookup: { bus: ['Ausztria', 'Szlovákia', 'Ukrajna', 'Románia',
+                    'Szerbia', 'Horvátország', 'Szlovénia'] },
+    default: 'airplane',
+  } }
+```
+
+Az ilyen mező **nem kerül ki az adatbekérőbe** (nincs értelme megkérdezni), a
+kimenete pedig a szótáron megy át, mint bármelyik szabad szöveg. Ha nincs
+forrásadat, üres marad — nem találgatunk. Új küldő ország felvételéhez a
+**Beállítások → Séma** lapon kell bővíteni a listát.
+
 Hogy egy mezőnek pontosan mi a jelölője, a **Beállítások → Séma** fülön látszik.
 Amire nem volt adat, azt a *Hiányzó adatok naplója* utólag is megmutatja.
 

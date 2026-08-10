@@ -28,8 +28,8 @@ const SEED_SCHEMA = {
   // A foglalkozás (occupation_before_arrival) szándékosan hiányzik: az
   // személyenként változik, nincs értelme előre felvenni.
   dictionary: [
-    // Hazautazás módja. Melyiket választja, az a kitöltőn múlik – a szomszédos
-    // országokból busszal, a távolabbiakról repülővel szokás hazamenni.
+    // Hazautazás módja. Nem a kitöltő adja meg: a `transport_type` számított
+    // mező az állampolgárságból származtatja, a kimenetet ez fordítja magyarra.
     { en: 'bus',      hu: 'busz' },
     { en: 'airplane', hu: 'repülő' },
     { en: 'plane',    hu: 'repülő' },
@@ -56,7 +56,6 @@ const SEED_SCHEMA = {
     { key: 'kapcsolat',     label: 'Kapcsolat' },
     { key: 'lakcim',        label: 'Magyarországi lakcím' },
     { key: 'korabbi',       label: 'Korábbi (külföldi) lakcím' },
-    { key: 'tavozas',       label: 'Hazautazás' },
     { key: 'foglalkoztatas',label: 'Foglalkoztatás' },
     { key: 'vegzettseg',    label: 'Végzettség és nyelv' },
     { key: 'szamitott',     label: 'Számított mezők' },
@@ -344,12 +343,6 @@ const SEED_SCHEMA = {
       hint: { en: 'Street name and house number of the last address abroad, in this one cell.' },
       tags: ['Korábbi lakcím utca'] },
 
-    // A hatósági űrlap 5. pontja: mivel utazik haza a tartózkodás lejártakor.
-    // Az ország ugyanaz, mint a korábbi lakcím országa – nincs külön mező rá.
-    { key: 'transport_type', group: 'tavozas', type: 'text',
-      label: { hu: 'Hazautazás módja', en: 'Means of Transport' },
-      hint: { en: 'How the employee will travel home when the stay expires. English is fine – the Hungarian form comes from the dictionary.\nExample: by car, by bus, by plane' },
-      tags: ['Közlekedési eszköz'] },
 
     // ── Számított mezők ──────────────────────────────────────────────────────
     // Nem tárolt adat: más mezőkből állnak elő, és a dokumentum-jelölőkben
@@ -379,5 +372,21 @@ const SEED_SCHEMA = {
       label: { hu: 'Korábbi lakcím', en: 'Previous Address' },
       tags: ['Korábbi lakcím'],
       computed: { from: ['previous_country', 'previous_town', 'previous_street'], sep: ', ' } },
+
+    // A hatósági űrlap 5. pontja: mivel utazik haza a tartózkodás lejártakor.
+    // NEM kérdezzük meg a kitöltőtől: az állampolgárságból következik, a
+    // szomszédos országokból busszal, távolabbról repülővel megy haza az ember.
+    // A lista a Beállítások → Séma lapon bővíthető, ha új küldő ország jön.
+    { key: 'transport_type', group: 'szamitott', type: 'computed',
+      label: { hu: 'Hazautazás módja', en: 'Means of Transport' },
+      tags: ['Közlekedési eszköz'],
+      computed: {
+        from: ['citizenship'],
+        lookup: {
+          bus: ['Ausztria', 'Szlovákia', 'Ukrajna', 'Románia',
+                'Szerbia', 'Horvátország', 'Szlovénia'],
+        },
+        default: 'airplane',
+      } },
   ],
 };
