@@ -109,10 +109,20 @@ if (JSDOM) {
 // ════════════════════════════════════════════════════════════════════════════
 section('Összevetés a kiinduló sémával');
 
-test('a kiinduló séma megegyezik a fájllal – nincs eltérés', () => {
+// A minta-xlsx a 44 oszlopos eredeti. A séma azóta hat mezővel bővült a
+// hatósági formanyomtatvány miatt, ezért a diff joggal jelzi őket hiányzónak:
+// a RÉGI fájlból tényleg hiányoznak. Pontosan ezt a hatot várjuk, se többet,
+// se kevesebbet – így a teszt továbbra is kiszúrja a véletlen eltérést.
+const FORMANYOMTATVANY_MEZOK = [
+  'occupation_before_arrival', 'other_accommodation', 'pp_issuance_place',
+  'stairway', 'topographical_number', 'transport_type',
+];
+
+test('a kiinduló séma megegyezik a fájllal – csak a formanyomtatvány-mezők újak', () => {
   const d = SchemaFromXlsx.diff(analysis, SchemaStore.get());
   assertEq(d.added.length, 0, 'váratlan új mező: ' + d.added.map(a => a.key).join(','));
-  assertEq(d.removed.length, 0, 'váratlan hiányzó mező: ' + d.removed.map(r => r.key).join(','));
+  assertEq(d.removed.map(r => r.key).sort().join(','), FORMANYOMTATVANY_MEZOK.join(','),
+    'nem a várt mezők hiányoznak a régi fájlból');
   assertEq(d.labelChanged.length, 0, 'eltérő angol címke: ' + JSON.stringify(d.labelChanged));
   assertEq(d.orderChanged, false, 'eltérő oszlopsorrend');
   if (JSDOM) assertEq(d.enumChanged.length, 0, 'eltérő legördülő: ' + JSON.stringify(d.enumChanged));

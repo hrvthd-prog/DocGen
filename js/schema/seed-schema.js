@@ -21,9 +21,32 @@ const SEED_SCHEMA = {
   version: 1,
 
   // Angol↔magyar szótár a szabad szöveges mezőkhöz (ország, munkakör,
-  // állampolgárság…). Üresen indul: a párokat a Beállítások fülön kell
-  // felvinni, mert ami itt kódba kerülne, azt nem lehetne javítani.
-  dictionary: [],
+  // szakképesítés…). Ez csak a KIINDULÓ készlet: az első betöltés után az
+  // élő szótár a config-fájlban él, és a Beállítások → Szótár lapon bővíthető
+  // vagy javítható. Ide csak az kerül, ami minden ügyfélnél ugyanaz.
+  //
+  // A foglalkozás (occupation_before_arrival) szándékosan hiányzik: az
+  // személyenként változik, nincs értelme előre felvenni.
+  dictionary: [
+    // Hazautazás módja. Melyiket választja, az a kitöltőn múlik – a szomszédos
+    // országokból busszal, a távolabbiakról repülővel szokás hazamenni.
+    { en: 'bus',      hu: 'busz' },
+    { en: 'airplane', hu: 'repülő' },
+    { en: 'plane',    hu: 'repülő' },
+    { en: 'train',    hu: 'vonat' },
+    { en: 'car',      hu: 'autó' },
+
+    // A leggyakoribb küldő országok
+    { en: 'Serbia',      hu: 'Szerbia' },
+    { en: 'Ukraine',     hu: 'Ukrajna' },
+    { en: 'Philippines', hu: 'Fülöp-szigetek' },
+    { en: 'Mexico',      hu: 'Mexikó' },
+    { en: 'Brazil',      hu: 'Brazília' },
+
+    // Szakképesítések, amikre a mező útmutatója is példát ad
+    { en: 'welder',      hu: 'hegesztő' },
+    { en: 'electrician', hu: 'villanyszerelő' },
+  ],
 
   groups: [
     { key: 'alap',          label: 'Alapadatok' },
@@ -33,6 +56,7 @@ const SEED_SCHEMA = {
     { key: 'kapcsolat',     label: 'Kapcsolat' },
     { key: 'lakcim',        label: 'Magyarországi lakcím' },
     { key: 'korabbi',       label: 'Korábbi (külföldi) lakcím' },
+    { key: 'tavozas',       label: 'Hazautazás' },
     { key: 'foglalkoztatas',label: 'Foglalkoztatás' },
     { key: 'vegzettseg',    label: 'Végzettség és nyelv' },
     { key: 'szamitott',     label: 'Számított mezők' },
@@ -132,6 +156,11 @@ const SEED_SCHEMA = {
       // alakú jelölői is feloldódnak, nem csak a {{pp_issuance_date_year}}.
       tags: ['Útlevél kiállításának dátuma', 'pp_issuance'] },
 
+    { key: 'pp_issuance_place', group: 'okmany', type: 'text',
+      label: { hu: 'Útlevél kiállításának helye', en: 'Place of Issuance of Passport' },
+      hint: { en: 'The authority or place that issued the passport, as printed in it.\nExample: Beograd, MUP Subotica' },
+      tags: ['Útlevél kiállításának helye'] },
+
     { key: 'pp_validity', group: 'okmany', type: 'date',
       label: { hu: 'Útlevél érvényessége', en: 'Validity of Passport' },
       hint: { en: 'The date the passport expires.\nFormat: YYYY-MM-DD (e.g. 2031-06-29)' },
@@ -207,6 +236,10 @@ const SEED_SCHEMA = {
       label: { hu: 'Épület', en: 'Building' },
       hint: { en: 'Building marking, if any.\nExample: A\nLeave empty if not applicable.' } },
 
+    { key: 'stairway', group: 'lakcim', type: 'text',
+      label: { hu: 'Lépcsőház', en: 'Stairway' },
+      hint: { en: 'Stairway marking, if any.\nExample: II\nLeave empty if not applicable.' } },
+
     { key: 'floor', group: 'lakcim', type: 'text',
       label: { hu: 'Emelet', en: 'Floor' },
       hint: { en: 'Floor, if any.\nExample: 3  or  fszt.\nLeave empty if not applicable.' } },
@@ -214,6 +247,15 @@ const SEED_SCHEMA = {
     { key: 'door', group: 'lakcim', type: 'text',
       label: { hu: 'Ajtó', en: 'Door' },
       hint: { en: 'Door number, if any.\nExample: 14\nLeave empty if not applicable.' } },
+
+    { key: 'topographical_number', group: 'lakcim', type: 'text',
+      label: { hu: 'Helyrajzi szám', en: 'Topographical LOT Number' },
+      hint: { en: 'Parcel identification / land register reference number of the accommodation, if known.\nExample: 12345/6\nLeave empty if it is not known.' },
+      tags: ['Helyrajzi szám'] },
+
+    { key: 'other_accommodation', group: 'lakcim', type: 'text',
+      label: { hu: 'Egyéb jogcím a szálláson', en: 'Other Legal Title of Residence' },
+      hint: { en: 'Only if the legal title of residence is none of owner / (sub)tenant / family member / courtesy user.\nDescribe it in one short phrase.\nLeave empty otherwise.' } },
 
     { key: 'position', group: 'foglalkoztatas', type: 'text',
       label: { hu: 'Munkakör', en: 'Position' },
@@ -268,6 +310,11 @@ const SEED_SCHEMA = {
       hint: { en: 'Profession or qualification as in the diploma or certificate. English is fine – the Hungarian form comes from the dictionary.\nExample: welder, electrician\nLeave empty if there is none.' },
       tags: ['Szakképesítés', 'professional_qualification_hun'] },
 
+    { key: 'occupation_before_arrival', group: 'vegzettseg', type: 'text',
+      label: { hu: 'Foglalkozás Magyarországra érkezés előtt', en: 'Occupation before Arriving in Hungary' },
+      hint: { en: 'What the employee did for a living before coming to Hungary. English is fine – the Hungarian form comes from the dictionary.\nExample: welder, student, unemployed' },
+      tags: ['Korábbi foglalkozás'] },
+
     { key: 'mother_tongue', group: 'vegzettseg', type: 'text',
       label: { hu: 'Anyanyelv', en: 'Mother Tongue' },
       hint: { en: 'The employee\'s native language.\nExample: Serbian' },
@@ -296,6 +343,13 @@ const SEED_SCHEMA = {
       label: { hu: 'Korábbi utca/cím', en: 'Previous Address (Street)' },
       hint: { en: 'Street name and house number of the last address abroad, in this one cell.' },
       tags: ['Korábbi lakcím utca'] },
+
+    // A hatósági űrlap 5. pontja: mivel utazik haza a tartózkodás lejártakor.
+    // Az ország ugyanaz, mint a korábbi lakcím országa – nincs külön mező rá.
+    { key: 'transport_type', group: 'tavozas', type: 'text',
+      label: { hu: 'Hazautazás módja', en: 'Means of Transport' },
+      hint: { en: 'How the employee will travel home when the stay expires. English is fine – the Hungarian form comes from the dictionary.\nExample: by car, by bus, by plane' },
+      tags: ['Közlekedési eszköz'] },
 
     // ── Számított mezők ──────────────────────────────────────────────────────
     // Nem tárolt adat: más mezőkből állnak elő, és a dokumentum-jelölőkben

@@ -1,5 +1,5 @@
 {
- "_megjegyzes": "A valódi adatbekérő xlsx 2. sorának cellakommentjei, mezőkulcs szerint — GÉPPEL kiolvasva a fixtures/adatbekero-minta.xlsx-ből, nem kézzel írva. A test/xlsx.test.js ehhez méri a generált fájlt: ha a séma útmutatói elcsúsznak vagy kimaradnak, a teszt bukik. Kivétel a három átnevezett mező (place_of_birth_country, professional_qualification, previous_country): ezek szövege a sémából származik, mert a minta-xlsx még a régi, _hun végű kulcsokat tartalmazza.",
+ "_megjegyzes": "A valódi adatbekérő xlsx 2. sorának cellakommentjei, mezőkulcs szerint — GÉPPEL kiolvasva a fixtures/adatbekero-minta.xlsx-ből, nem kézzel írva. A test/xlsx.test.js ehhez méri a generált fájlt: ha a séma útmutatói elcsúsznak vagy kimaradnak, a teszt bukik. Kivétel a három átnevezett és a hat formanyomtatvány-mező (pp_issuance_place, stairway, topographical_number, other_accommodation, occupation_before_arrival, transport_type) (place_of_birth_country, professional_qualification, previous_country): ezek szövege a sémából származik, mert a minta-xlsx még a régi, _hun végű kulcsokat tartalmazza.",
  "personnel_reg_number": "Personnel registration number used by the employer, if one has already been assigned.\nLeave empty if it is not known yet.",
  "surname": "Current family name, spelled exactly as in the passport.\nUse the Latin spelling of the passport's data page.",
  "forename": "Current given name(s), spelled exactly as in the passport.\nEnter all given names, in the passport's order.",
@@ -43,5 +43,11 @@
  "speaks_hungarian": "Choose from the drop-down list:\nyes / no",
  "previous_country": "Country of the last address abroad. English is fine – the Hungarian form comes from the dictionary.\nExample: Serbia",
  "previous_town": "Town or city of the last address abroad.",
- "previous_street": "Street name and house number of the last address abroad, in this one cell."
+ "previous_street": "Street name and house number of the last address abroad, in this one cell.",
+ "pp_issuance_place": "The authority or place that issued the passport, as printed in it.\nExample: Beograd, MUP Subotica",
+ "stairway": "Stairway marking, if any.\nExample: II\nLeave empty if not applicable.",
+ "topographical_number": "Parcel identification / land register reference number of the accommodation, if known.\nExample: 12345/6\nLeave empty if it is not known.",
+ "other_accommodation": "Only if the legal title of residence is none of owner / (sub)tenant / family member / courtesy user.\nDescribe it in one short phrase.\nLeave empty otherwise.",
+ "occupation_before_arrival": "What the employee did for a living before coming to Hungary. English is fine – the Hungarian form comes from the dictionary.\nExample: welder, student, unemployed",
+ "transport_type": "How the employee will travel home when the stay expires. English is fine – the Hungarian form comes from the dictionary.\nExample: by car, by bus, by plane"
 }

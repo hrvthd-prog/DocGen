@@ -205,7 +205,16 @@ test('a kiválasztás állandó azonosítóra épül, nem névre', () => {
 
 test('a generálás átadja a séma-feloldót', () => {
   assert(/makeSchemaResolver/.test(docgenSrc), 'nincs séma-feloldó');
-  assert(/generateDocx\([\s\S]{0,120}resolve:/.test(docgenSrc), 'a generálás nem kapja meg a feloldót');
+  assert(/generateDocx\([\s\S]{0,160}resolve:/.test(docgenSrc), 'a generálás nem kapja meg a feloldót');
+});
+
+test('a generálás átadja az összehasonlítót is', () => {
+  // Enélkül a {{CHECK:Neme=male}} néma hibát adna: a szöveg-egyezésre esne
+  // vissza, ami a magyarra renderelt „Férfi”-t hasonlítaná a „male”-hez,
+  // és minden ilyen négyzet üresen maradna.
+  assert(/makeSchemaMatcher/.test(docgenSrc), 'nincs séma-összehasonlító');
+  assert(/generateDocx\([\s\S]{0,160}equals:/.test(docgenSrc),
+    'a generálás nem kapja meg az összehasonlítót');
 });
 
 test('a nyilvántartás változása frissíti a docgen listáját', () => {

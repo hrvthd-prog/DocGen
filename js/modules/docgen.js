@@ -947,6 +947,15 @@ const DocgenModule = (() => {
     };
   }
 
+  /**
+   * Séma-alapú összehasonlító a `{{CHECK:Neme=male}}` alakú jelölőkhöz.
+   * Enum mezőnél a kanonikus id-t veti össze, tehát a sablon írhat magyar,
+   * angol vagy gépi alakot is.
+   */
+  function makeSchemaMatcher(emp) {
+    return (name, vart) => SchemaStore.tagEquals(name, vart, emp.fields);
+  }
+
   function updateClientCount() {
     const el = q('#dg-client-count');
     if (el) el.textContent = state.selectedClients.length;
@@ -1704,7 +1713,8 @@ const DocgenModule = (() => {
           try {
             const enrichedRow = buildRenderRow(row);
             const { buffer: outBuf, emptyTags } = await DocxService.generateDocx(
-              tmplBuf, enrichedRow, { resolve: makeSchemaResolver(row) });
+              tmplBuf, enrichedRow,
+              { resolve: makeSchemaResolver(row), equals: makeSchemaMatcher(row) });
             emptyTags.forEach(t => allEmptyTags.add(t));
             if (emptyTags.length > 0) {
               missingLogEntries.push({

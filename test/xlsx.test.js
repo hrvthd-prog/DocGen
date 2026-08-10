@@ -100,14 +100,14 @@ atest('a sablon legenerálható és megnyitható', async () => {
   assert(G.wb.getWorksheet('Útmutató'), 'nincs Útmutató munkalap');
 });
 
-atest('mind a 44 oszlop kikerül, az eredeti sorrendben', async () => {
+atest('minden tárolt mező kikerül oszlopként, a séma sorrendjében', async () => {
   const ws = G.wb.getWorksheet('Data');
   const kulcsok = [];
   ws.getRow(1).eachCell({ includeEmpty: false }, c => kulcsok.push(String(c.value)));
-  assertEq(kulcsok.length, 44);
+  const vart = sandbox.SchemaStore.storedFields().map(f => f.key);
+  assertEq(kulcsok.join(','), vart.join(','), 'eltérő oszlopkulcs vagy sorrend');
   assertEq(kulcsok[0], 'personnel_reg_number');
   assertEq(kulcsok[1], 'surname');
-  assertEq(kulcsok[43], 'previous_street');
 });
 
 atest('a 2. sorban az angol címkék állnak', async () => {
@@ -225,7 +225,8 @@ atest('minden mező útmutatója a HELYES mezőn van', async () => {
     }
   });
 
-  assertEq(kulcsok.length, 44, 'nem 44 oszlop');
+  assertEq(kulcsok.length, sandbox.SchemaStore.storedFields().length,
+    'nem minden tárolt mező került ki oszlopként');
   assert(rossz.length === 0, `${rossz.length} hibás mező:\n      ` + rossz.slice(0, 8).join('\n      '));
 });
 
@@ -309,18 +310,36 @@ const ROVIDULT_KULCSOK = {
   previous_country_hun:           'previous_country',
 };
 
-atest('az oszlopkulcsok és a sorrend megegyezik az eredetivel', async () => {
+// A séma azóta bővült a formanyomtatvány mezőivel, ezért nem az EGYEZÉST
+// mérjük, hanem azt, hogy az eredeti oszlopok mind megvannak, egymáshoz képest
+// az eredeti sorrendben. Az elcsúszás – amitől ez a két teszt véd – így is
+// kiderül; az új oszlopok pedig nem buktatják.
+function eredetiOszlopok() {
+  return eredetiSor(1).map(k => ROVIDULT_KULCSOK[k] || k);
+}
+
+atest('az eredeti oszlopok mind megvannak, az eredeti sorrendben', async () => {
   const wg = G.wb.getWorksheet('Data');
-  const generaltKulcsok = [];
-  wg.getRow(1).eachCell({ includeEmpty: false }, c => generaltKulcsok.push(String(c.value).trim()));
-  const vart = eredetiSor(1).map(k => ROVIDULT_KULCSOK[k] || k);
-  assertEq(generaltKulcsok.join(','), vart.join(','), 'eltérő oszlopkulcs vagy sorrend');
+  const generalt = [];
+  wg.getRow(1).eachCell({ includeEmpty: false }, c => generalt.push(String(c.value).trim()));
+
+  const vart = eredetiOszlopok();
+  const hianyzo = vart.filter(k => !generalt.includes(k));
+  assertEq(hianyzo.length, 0, 'kimaradt eredeti oszlop: ' + hianyzo.join(', '));
+  assertEq(generalt.filter(k => vart.includes(k)).join(','), vart.join(','),
+    'az eredeti oszlopok sorrendje elcsúszott');
 });
 
 atest('az angol címkék megegyeznek az eredetivel', async () => {
   const wg = G.wb.getWorksheet('Data');
-  const generaltCimkek = [];
-  wg.getRow(2).eachCell({ includeEmpty: false }, c => generaltCimkek.push(String(c.value).trim()));
+  const kulcsok = [], cimkek = [];
+  wg.getRow(1).eachCell({ includeEmpty: false }, c => kulcsok.push(String(c.value).trim()));
+  wg.getRow(2).eachCell({ includeEmpty: false }, c => cimkek.push(String(c.value).trim()));
+
+  const vart = eredetiOszlopok();
+  const generaltCimkek = kulcsok
+    .map((k, i) => (vart.includes(k) ? cimkek[i] : null))
+    .filter(x => x !== null);
   assertEq(generaltCimkek.join('|'), eredetiSor(2).join('|'), 'eltérő angol címke');
 });
 
