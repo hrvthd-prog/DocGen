@@ -44,8 +44,20 @@ SchemaStore.loadFrom(SEED_SCHEMA);
 // ════════════════════════════════════════════════════════════════════════════
 section('Kiinduló séma épsége');
 
-test('mind a 44 adatbekérő mező megvan', () => {
-  assertEq(SchemaStore.storedFields().length, 44);
+// A hatósági formanyomtatvány (9. melléklet) hat olyan rovatot kér, ami az
+// eredeti 44 oszlopos adatbekérőben nem szerepelt. Külön soroljuk fel őket,
+// hogy a bővülés szándékos maradjon: aki új mezőt vesz fel, ide is beírja.
+const FORMANYOMTATVANY_MEZOK = [
+  'pp_issuance_place', 'stairway', 'topographical_number',
+  'other_accommodation', 'occupation_before_arrival', 'transport_type',
+];
+
+test('az eredeti 44 mező megvan, a formanyomtatvány hatával kiegészítve', () => {
+  const kulcsok = SchemaStore.storedFields().map(f => f.key);
+  assertEq(kulcsok.length, 44 + FORMANYOMTATVANY_MEZOK.length);
+
+  const hianyzo = FORMANYOMTATVANY_MEZOK.filter(k => !kulcsok.includes(k));
+  assertEq(hianyzo.length, 0, 'hiányzó formanyomtatvány-mező: ' + hianyzo.join(', '));
 });
 
 test('a kötelező mezők jelölve vannak', () => {
@@ -204,6 +216,50 @@ test('dátum-rész jelölők: év, hónap, nap', () => {
 test('hiányzó vagy hibás dátumból nem találgatunk részt', () => {
   assertEq(SchemaStore.renderTag('date_of_birth_year', {}), '');
   assertEq(SchemaStore.renderTag('date_of_birth_year', { date_of_birth: 'tavaly' }), '');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+section('Értékhez kötött jelölőnégyzet');
+// A hatósági űrlap nem kiírja az értéket, hanem bejelöli: „☐ male ☒ female".
+// Ilyenkor több négyzet néz ugyanarra a mezőre, más-más várt értékkel.
+
+test('a mező értéke szerint dől el a négyzet', () => {
+  assertEq(SchemaStore.tagEquals('sex', 'male',   { sex: 'male' }), true);
+  assertEq(SchemaStore.tagEquals('sex', 'female', { sex: 'male' }), false);
+});
+
+test('a várt érték bármelyik elfogadott alakban írható', () => {
+  const mezok = { sex: 'male' };
+  for (const alak of ['male', 'Férfi', 'ffi', 'MALE']) {
+    assertEq(SchemaStore.tagEquals('sex', alak, mezok), true, `nem ismerte fel: ${alak}`);
+  }
+  // a jelölő oldala is: magyar címke, alias
+  assertEq(SchemaStore.tagEquals('Neme', 'male', mezok), true);
+});
+
+test('üres mezőnél egyetlen négyzet sem jelölődik be', () => {
+  for (const v of ['unmarried', 'married', 'divorced', 'widow']) {
+    assertEq(SchemaStore.tagEquals('marital_status', v, {}), false, v);
+    assertEq(SchemaStore.tagEquals('marital_status', v, { marital_status: '' }), false, v);
+  }
+});
+
+test('ismeretlen értékre NEM jelölünk be mindent', () => {
+  // Két fel nem ismert érték egyformán `null`-ra dekódolódik – ha ezt
+  // egyezésnek vennénk, egy elgépelt adat MINDEN négyzetet bejelölne.
+  assertEq(SchemaStore.tagEquals('sex', 'male',   { sex: 'egyéb' }), false);
+  assertEq(SchemaStore.tagEquals('sex', 'kutyus', { sex: 'egyéb' }), false);
+});
+
+test('szabad szöveges mezőn ékezet- és kisbetű-tűrő az egyezés', () => {
+  assertEq(SchemaStore.tagEquals('residence_purpose', 'employment',
+    { residence_purpose: 'Employment' }), true);
+  assertEq(SchemaStore.tagEquals('residence_purpose', 'studies',
+    { residence_purpose: 'Employment' }), false);
+});
+
+test('ismeretlen jelölőre null – a hívó eshet vissza másra', () => {
+  assertEq(SchemaStore.tagEquals('nincs_ilyen_mezo', 'x', {}), null);
 });
 
 // ════════════════════════════════════════════════════════════════════════════

@@ -277,6 +277,39 @@ const SchemaStore = (() => {
     return hit.part ? datePart(ertek, hit.part) : ertek;
   }
 
+  /**
+   * Egyezik-e a mező értéke a megadottal? A jelölőnégyzetekhez kell.
+   *
+   * A hatósági űrlapok az értéket nem kiírják, hanem bejelölik: „☐ male ☒ female".
+   * Ehhez nem az érték kell, hanem egy IGEN/NEM válasz – ezt adja ez a függvény,
+   * a `{{CHECK:Neme=male}}` alakú jelölők mögött.
+   *
+   * Az összehasonlítás a felsorolt mezőknél a kanonikus id-n történik, ezért a
+   * sablon írhatja bármelyik elfogadott alakot: `Neme=male`, `Neme=Férfi`,
+   * `Neme=ffi` – mind ugyanazt jelenti.
+   *
+   * `null` = a séma nem ismeri a jelölőt (a hívó eshet vissza szöveg-egyezésre).
+   */
+  function tagEquals(tag, expected, values = {}) {
+    const hit = resolveTag(tag);
+    if (!hit) return null;
+
+    const ertek = hit.field.type === 'computed'
+      ? computeField(hit.field, values, 'hu')
+      : values[hit.field.key];
+
+    if (ertek == null || String(ertek).trim() === '') return false;
+
+    if (hit.field.type === 'enum') {
+      const a = ValueCodec.decode(hit.field, ertek);
+      const b = ValueCodec.decode(hit.field, expected);
+      // Fel nem ismert oldal → nem egyezés. Az `a === b` önmagában két
+      // null-t is egyezőnek látna, ami minden ismeretlen értéket bejelölne.
+      return a !== null && b !== null && a === b;
+    }
+    return ValueCodec.normalize(ertek) === ValueCodec.normalize(expected);
+  }
+
   // ── Számított mezők ────────────────────────────────────────────────────────
 
   /** Egy számított mező értéke a tárolt mezőkből. */
@@ -472,7 +505,7 @@ const SchemaStore = (() => {
   return {
     useBackend, onChange, load, loadFrom, save,
     get, version, fields, storedFields, groups, field, byGroup,
-    resolveTag, renderTag, resolveValues, computeField, renderValue,
+    resolveTag, renderTag, tagEquals, resolveValues, computeField, renderValue,
     dictionary, setDictionary, translate,
     validateValues, validateSchema,
     migrateValues, renameFieldKey, migrateLegacyKeys, usageOf,

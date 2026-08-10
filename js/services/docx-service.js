@@ -41,8 +41,10 @@ const DocxService = (() => {
    *                  Ez a séma-alapú feloldás belépési pontja: ismeri a magyar és
    *                  angol változatot (`Neme` / `Neme_EN`) és a számított mezőket.
    *                  `null` = a séma nem ismeri, essünk vissza a sima kulcskeresésre.
+   * @param equals    opcionális függvény: (mezőnév, várt érték) => bool | null
+   *                  A `{{CHECK:Neme=male}}` alakhoz. `null` = a séma nem ismeri.
    */
-  function makeParser(data, emptyTags, resolve) {
+  function makeParser(data, emptyTags, resolve, equals) {
     const normalized = {};
     for (const k of Object.keys(data || {})) {
       normalized[String(k).trim().toLowerCase()] = k;
@@ -59,13 +61,41 @@ const DocxService = (() => {
       return data ? data[origKey] : '';
     }
 
+    /**
+     * Egy jelölőnégyzet állapota.
+     *
+     *   CHECK:Beszél magyarul   → a mező igaz-e (igen/yes/x…)
+     *   CHECK:Neme=male         → a mező értéke a megadott-e
+     *
+     * A második alak azért kell, mert a hatósági űrlapok nem kiírják az
+     * értéket, hanem a felsorolt lehetőségek közül jelölik be a jót:
+     * „sex: ☐ male ☒ female". Ilyenkor soronként több négyzet ugyanarra a
+     * mezőre néz, más-más várt értékkel.
+     */
+    function checkbox(expr) {
+      const i = expr.indexOf('=');
+      if (i < 0) {
+        return TRUTHY.has(String(lookup(expr) ?? '').trim().toLowerCase());
+      }
+      const mezo = expr.slice(0, i).trim();
+      const vart = expr.slice(i + 1).trim();
+      if (!mezo || !vart) return false;
+
+      if (equals) {
+        const v = equals(mezo, vart);
+        if (v !== null && v !== undefined) return v;
+      }
+      // Séma nélkül csak szöveg-egyezésre futja – kis/nagybetűre érzéketlenül.
+      const ertek = String(lookup(mezo) ?? '').trim().toLowerCase();
+      return !!ertek && ertek === vart.toLowerCase();
+    }
+
     return (tag) => ({
       get: () => {
         let t = String(tag || '').trim();
 
         if (t.startsWith('CHECK:')) {
-          const val = String(lookup(t.slice(6).trim()) ?? '').trim().toLowerCase();
-          return TRUTHY.has(val) ? CHECKED : UNCHECKED;
+          return checkbox(t.slice(6).trim()) ? CHECKED : UNCHECKED;
         }
 
         if (t.startsWith('B:')) t = t.slice(2).trim();
@@ -118,7 +148,7 @@ const DocxService = (() => {
 
     const doc = new Docxtemplater(zip, {
       delimiters: { start: '{{', end: '}}' },
-      parser: makeParser(data, emptyTags, opts.resolve),
+      parser: makeParser(data, emptyTags, opts.resolve, opts.equals),
       nullGetter: () => '',
       paragraphLoop: true,
       linebreaks: true,

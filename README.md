@@ -58,6 +58,21 @@ anyja neve {{Anyja neve}}…
 
 **Jelölőnégyzet:** `{{CHECK:Beszél magyarul}}` → ☒ vagy ☐.
 
+### Több négyzet egy mezőre
+
+A hatósági űrlapok az értéket nem kiírják, hanem bejelölik: „sex: ☐ male ☒
+female". Ilyenkor a jelölőhöz oda kell írni, melyik értékre néz:
+
+```
+sex: {{CHECK:Neme=male}} male  {{CHECK:Neme=female}} female
+educational attainment: {{CHECK:Iskolai végzettség=primary}} primary
+```
+
+A várt érték bármelyik elfogadott alakban írható — `Neme=male`, `Neme=Férfi`
+és `Neme=ffi` ugyanazt jelenti, mert az összehasonlítás a mező kanonikus
+értékén történik. Amire nincs adat, az üresen marad: **fel nem ismert értékre
+egyetlen négyzet sem jelölődik be**, nem találgatunk.
+
 ### Dátum három rovatban
 
 A hatósági formanyomtatványok a dátumot szétszedve kérik. A jelölőhöz fűzött
@@ -330,6 +345,12 @@ dokumentumok tényleges kitöltése böngészőben fut. Indíts egy kiszolgáló
 nyisd meg az appot, majd a konzolba illeszd be a `test/e2e-browser.js`
 tartalmát. 31 ellenőrzés fut le: számított mezők, kétnyelvű párok,
 jelölőnégyzetek, tördelt jelölők, dátum-részek, szótár, hiányzó-adat napló.
+
+Ugyanígy futtatható a `test/formanyomtatvany-check.js`, ami a valódi hatósági
+űrlapot (`test/fixtures/sablonok/06-tartozkodasi-engedely-kerelem.docx`) méri:
+felismeri-e a séma mind az 55 jelölőt, jó helyre kerül-e a 11 jelölőnégyzet, és
+mi marad üresen adathiány miatt. A próbaszemélyek a `proba-szemelyek.json`-ból
+jönnek, ami a kitöltött adatbekérő importjából állt elő.
 
 Nincs build-lépés és nincs csomagkezelő: a `js/` fájljai közvetlenül töltődnek
 be, a sorrendjük az `index.html`-ben számít. Új modul a saját rétegének végére
