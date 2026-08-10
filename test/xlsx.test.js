@@ -300,11 +300,21 @@ atest('az útmutató munkalap a sémából generálódik', async () => {
 // ════════════════════════════════════════════════════════════════════════════
 asection('Szerkezeti egyezés az eredeti adatbekérővel');
 
+// Szándékos kulcsrövidítés: a nyelvjelölés kikerült a kulcsból, mert a magyar
+// alakot már a szótár adja. A régi kulcs jelölőként megmarad, ezért a korábban
+// kiküldött adatbekérők importja változatlanul működik.
+const ROVIDULT_KULCSOK = {
+  place_of_birth_country_hun:     'place_of_birth_country',
+  professional_qualification_hun: 'professional_qualification',
+  previous_country_hun:           'previous_country',
+};
+
 atest('az oszlopkulcsok és a sorrend megegyezik az eredetivel', async () => {
   const wg = G.wb.getWorksheet('Data');
   const generaltKulcsok = [];
   wg.getRow(1).eachCell({ includeEmpty: false }, c => generaltKulcsok.push(String(c.value).trim()));
-  assertEq(generaltKulcsok.join(','), eredetiSor(1).join(','), 'eltérő oszlopkulcs vagy sorrend');
+  const vart = eredetiSor(1).map(k => ROVIDULT_KULCSOK[k] || k);
+  assertEq(generaltKulcsok.join(','), vart.join(','), 'eltérő oszlopkulcs vagy sorrend');
 });
 
 atest('az angol címkék megegyeznek az eredetivel', async () => {
@@ -421,7 +431,31 @@ atest('elterjedt dátumalakok ISO-ra alakulnak', async () => {
   assertEq(XlsxRead._toIsoDate('1990-03-15'), '1990-03-15');
   assertEq(XlsxRead._toIsoDate('1990.03.15.'), '1990-03-15');
   assertEq(XlsxRead._toIsoDate('1990/3/5'), '1990-03-05');
+  assertEq(XlsxRead._toIsoDate('1990. 03. 15.'), '1990-03-15');   // magyar tagolás
   assertEq(XlsxRead._toIsoDate('nem dátum'), null);
+  assertEq(XlsxRead._toIsoDate('15/11/2027'), null);              // kétértelmű: nem találgatunk
+});
+
+// Ez a teszt egy valódi adatvesztésre született: a kitöltött táblázatokból
+// eltűnt a születési idő, az útlevél-dátumok és a belépés/kilépés. Az ok: a
+// beolvasó a cella MEGJELENÍTETT szövegét nézte, ami a kitöltő gépének területi
+// beállításától függ – amerikai formátumban „3/15/90", amit joggal utasított el.
+// A cellában tárolt sorszám viszont mindig ugyanaz.
+atest('a valódi Excel-dátumcella a területi beállítástól függetlenül beolvasódik', async () => {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Data');
+  ws.getRow(1).values = ['surname', 'forename', 'date_of_birth', 'pp_validity'];
+  ws.getRow(2).values = ['x', 'x', 'x', 'x'];
+  ws.getRow(3).values = ['Nagy', 'Béla', new Date(Date.UTC(1990, 2, 15)), new Date(Date.UTC(2030, 5, 30))];
+  // Amerikai megjelenítés – pontosan az az eset, amitől korábban kiesett a sor
+  ws.getRow(3).getCell(3).numFmt = 'm/d/yy';
+  ws.getRow(3).getCell(4).numFmt = 'm/d/yy';
+  const buf = await wb.xlsx.writeBuffer();
+
+  const { rows } = XlsxRead.readRows(buf, { schema: SchemaStore.get() });
+  assertEq(rows[0].fields.date_of_birth, '1990-03-15', 'a születési idő nem olvasódott be');
+  assertEq(rows[0].fields.pp_validity,   '2030-06-30', 'az útlevél lejárata nem olvasódott be');
+  assertEq(rows[0].problems.length, 0, 'hibát jelzett érvényes dátumra');
 });
 
 // ════════════════════════════════════════════════════════════════════════════

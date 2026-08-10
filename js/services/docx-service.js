@@ -20,6 +20,10 @@ const DocxService = (() => {
     }
     const s = String(val);
     if (s === '' || s.toLowerCase() === 'nan' || s.toLowerCase() === 'nat') return '';
+    // A vezető nulla adat, nem formázás: a „03" hónap, a „0123456789" adószám.
+    // Szám-normalizálás nélkül maradnak – a normalizálás az Excelből érkező
+    // 450000.0-féle lebegőpontos alakok miatt kell, nem ezek miatt.
+    if (/^0\d/.test(s.trim())) return s;
     const n = Number(val);
     if (!isNaN(n) && s.trim() !== '') {
       if (Number.isInteger(n)) return String(n);

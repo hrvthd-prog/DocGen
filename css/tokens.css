@@ -237,6 +237,26 @@ input, select, textarea {
 }
 .field-input:focus { border-color: var(--c-green); box-shadow: 0 0 0 3px rgba(61,166,140,.12); }
 
+/* ── Dátummező ────────────────────────────────────────────
+   Maszkolt szövegmező a beíráshoz (lásd js/utils.js), mellette a natív
+   dátummező naptár-ikonná zsugorítva. A natív mezőből csak a naptárgomb
+   látszik: a szerkesztő szegmensei elrejtve. */
+.date-field { position: relative; display: block; }
+.date-field .field-input { padding-right: 30px; }
+.date-field__cal {
+  position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px; padding: 0; border: 0; background: none;
+  color: transparent; cursor: pointer; opacity: .5;
+}
+.date-field__cal:hover { opacity: 1; }
+.date-field__cal::-webkit-datetime-edit,
+.date-field__cal::-webkit-inner-spin-button,
+.date-field__cal::-webkit-clear-button { display: none; }
+.date-field__cal::-webkit-calendar-picker-indicator {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; padding: 0; cursor: pointer;
+}
+
 /* ── Select ───────────────────────────────────────────── */
 .field-select {
   width: 100%;

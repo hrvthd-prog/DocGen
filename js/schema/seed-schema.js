@@ -20,6 +20,11 @@
 const SEED_SCHEMA = {
   version: 1,
 
+  // Angol↔magyar szótár a szabad szöveges mezőkhöz (ország, munkakör,
+  // állampolgárság…). Üresen indul: a párokat a Beállítások fülön kell
+  // felvinni, mert ami itt kódba kerülne, azt nem lehetne javítani.
+  dictionary: [],
+
   groups: [
     { key: 'alap',          label: 'Alapadatok' },
     { key: 'szuletes',      label: 'Születési adatok' },
@@ -90,10 +95,10 @@ const SEED_SCHEMA = {
       hint: { en: 'The mother\'s given name at birth.' },
       tags: ['Anyja keresztneve'] },
 
-    { key: 'place_of_birth_country_hun', group: 'szuletes', type: 'text',
+    { key: 'place_of_birth_country', group: 'szuletes', type: 'text',
       label: { hu: 'Születési ország', en: 'Place of Birth (country)' },
-      hint: { en: 'Country of birth, written in HUNGARIAN.\nExample: Szerbia, Ukrajna\nUse the country\'s current name.' },
-      tags: ['Születési hely ország'] },
+      hint: { en: 'Country of birth. English is fine – the Hungarian form comes from the dictionary.\nExample: Serbia, Ukraine\nUse the country\'s current name.' },
+      tags: ['Születési hely ország', 'place_of_birth_country_hun'] },
 
     { key: 'place_of_birth_locality', group: 'szuletes', type: 'text',
       label: { hu: 'Születési hely (település)', en: 'Place of Birth (town)' },
@@ -123,7 +128,9 @@ const SEED_SCHEMA = {
     { key: 'pp_issuance_date', group: 'okmany', type: 'date',
       label: { hu: 'Útlevél kiállítás dátuma', en: 'Issuance Date of Passport' },
       hint: { en: 'The date the passport was issued.\nFormat: YYYY-MM-DD (e.g. 2021-06-30)' },
-      tags: ['Útlevél kiállításának dátuma'] },
+      // A `pp_issuance` alias miatt a formanyomtatvány {{pp_issuance_year}}
+      // alakú jelölői is feloldódnak, nem csak a {{pp_issuance_date_year}}.
+      tags: ['Útlevél kiállításának dátuma', 'pp_issuance'] },
 
     { key: 'pp_validity', group: 'okmany', type: 'date',
       label: { hu: 'Útlevél érvényessége', en: 'Validity of Passport' },
@@ -256,10 +263,10 @@ const SEED_SCHEMA = {
                     'felsofoku', 'felsőfokú', 'egyetem', 'foiskola', 'főiskola'] },
       ] },
 
-    { key: 'professional_qualification_hun', group: 'vegzettseg', type: 'text',
+    { key: 'professional_qualification', group: 'vegzettseg', type: 'text',
       label: { hu: 'Szakképesítés', en: 'Professional Qualification' },
-      hint: { en: 'Profession or qualification, written in HUNGARIAN, as in the diploma or certificate.\nExample: hegeszto, villanyszerelo\nLeave empty if there is none.' },
-      tags: ['Szakképesítés'] },
+      hint: { en: 'Profession or qualification as in the diploma or certificate. English is fine – the Hungarian form comes from the dictionary.\nExample: welder, electrician\nLeave empty if there is none.' },
+      tags: ['Szakképesítés', 'professional_qualification_hun'] },
 
     { key: 'mother_tongue', group: 'vegzettseg', type: 'text',
       label: { hu: 'Anyanyelv', en: 'Mother Tongue' },
@@ -275,10 +282,10 @@ const SEED_SCHEMA = {
         { id: 'no',  hu: 'Nem',  en: 'No',  accepts: ['no', 'n', 'nem', 'false', '0'] },
       ] },
 
-    { key: 'previous_country_hun', group: 'korabbi', type: 'text',
+    { key: 'previous_country', group: 'korabbi', type: 'text',
       label: { hu: 'Korábbi ország', en: 'Previous Address (Country)' },
-      hint: { en: 'Country of the last address abroad, written in HUNGARIAN.\nExample: Szerbia' },
-      tags: ['Korábbi lakcím ország'] },
+      hint: { en: 'Country of the last address abroad. English is fine – the Hungarian form comes from the dictionary.\nExample: Serbia' },
+      tags: ['Korábbi lakcím ország', 'previous_country_hun'] },
 
     { key: 'previous_town', group: 'korabbi', type: 'text',
       label: { hu: 'Korábbi település', en: 'Previous Address (Locality)' },
@@ -301,7 +308,7 @@ const SEED_SCHEMA = {
     { key: 'place_of_birth', group: 'szamitott', type: 'computed',
       label: { hu: 'Születési helye', en: 'Place of Birth' },
       tags: ['Születési helye'],
-      computed: { from: ['place_of_birth_country_hun', 'place_of_birth_locality'], sep: ', ' } },
+      computed: { from: ['place_of_birth_country', 'place_of_birth_locality'], sep: ', ' } },
 
     { key: 'full_name', group: 'szamitott', type: 'computed',
       label: { hu: 'Teljes név', en: 'Full Name' },
@@ -317,6 +324,6 @@ const SEED_SCHEMA = {
     { key: 'previous_address', group: 'szamitott', type: 'computed',
       label: { hu: 'Korábbi lakcím', en: 'Previous Address' },
       tags: ['Korábbi lakcím'],
-      computed: { from: ['previous_country_hun', 'previous_town', 'previous_street'], sep: ', ' } },
+      computed: { from: ['previous_country', 'previous_town', 'previous_street'], sep: ', ' } },
   ],
 };

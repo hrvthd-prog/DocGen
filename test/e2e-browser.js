@@ -34,13 +34,15 @@
     surname: 'Próba', forename: 'Péter', date_of_birth: '1990-03-15',
     citizenship: 'Szerbia', sex: 'male', marital_status: 'married',
     mothers_surname_at_birth: 'Kovács', mothers_forename_at_birth: 'Anna',
-    place_of_birth_country_hun: 'Szerbia', place_of_birth_locality: 'Szabadka',
+    place_of_birth_country: 'Szerbia', place_of_birth_locality: 'Szabadka',
     postal_code: '1024', locality: 'Budapest',
     name_of_public_place: 'Fő', type_of_public_place: 'utca', street_number: '12',
     pp_number: 'PP1001', pp_validity: '2030-06-30', passport_type: 'private',
     educational_attainment: 'secondary', speaks_hungarian: 'yes',
     email: 'proba.peter@example.invalid', telephone: '+36301111111',
-    position: 'gepkezelo', gross_salary: '450000',
+    // Angolul érkezik, ahogy a kitöltő beírja – a magyar alakot a szótár adja
+    position: 'machine operator', previous_country: 'Serbia',
+    gross_salary: '450000',
   };
 
   // ── A docgen két segédfüggvényének mása (DOM nélkül is fut) ──────────────
@@ -58,16 +60,8 @@
   function makeResolver(fields) {
     const gyorsito = new Map();
     return (name) => {
-      if (gyorsito.has(name)) return gyorsito.get(name);
-      let out = null;
-      const hit = SchemaStore.resolveTag(name);
-      if (hit) {
-        out = hit.field.type === 'computed'
-          ? SchemaStore.computeField(hit.field, fields, hit.lang)
-          : ValueCodec.render(hit.field, fields[hit.field.key], hit.lang);
-      }
-      gyorsito.set(name, out);
-      return out;
+      if (!gyorsito.has(name)) gyorsito.set(name, SchemaStore.renderTag(name, fields));
+      return gyorsito.get(name);
     };
   }
 
@@ -163,6 +157,25 @@
     ok('nem maradt kitöltetlen jelölő', !/\{\{|\}\}/.test(szoveg),
        (szoveg.match(/\{\{[^}]*\}\}/g) || []).join(', '));
   } catch (e) { ok('04-tordelt-jelolok.docx generálása', false, e.message); }
+
+  // ── 5. Dátum-részek és szótár ───────────────────────────────────────────
+  try {
+    const elozoSzotar = SchemaStore.dictionary();
+    SchemaStore.setDictionary([{ en: 'Serbia', hu: 'Szerbia' }, { en: 'machine operator', hu: 'gépkezelő' }]);
+    const { szoveg } = await general('05-datum-reszek.docx');
+    SchemaStore.setDictionary(elozoSzotar);
+
+    ok('dátum három rovatban (angol utótagok)',
+       szoveg.includes('date of birth: 1990 year 03 month 15 day'), szoveg.slice(0, 400));
+    ok('dátum három rovatban (magyar utótagok)',
+       szoveg.includes('útlevél lejárata: 2030 év 06 hó 30 nap'));
+    ok('utótag nélkül a teljes dátum marad', szoveg.includes('teljes dátum: 1990-03-15'));
+    ok('a szótár magyarra fordít', szoveg.includes('ország magyarul: Szerbia'));
+    ok('_eng az eredeti beírást adja', szoveg.includes('country in English: Serbia'));
+    ok('a munkakör is a szótárból jön', szoveg.includes('munkakör magyarul: gépkezelő'));
+    ok('nem maradt kitöltetlen jelölő', !/\{\{|\}\}/.test(szoveg),
+       (szoveg.match(/\{\{[^}]*\}\}/g) || []).join(', '));
+  } catch (e) { ok('05-datum-reszek.docx generálása', false, e.message); }
 
   // ── Összegzés ───────────────────────────────────────────────────────────
   const sikeres = eredmenyek.filter(r => r.sikeres).length;
