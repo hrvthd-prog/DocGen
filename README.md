@@ -83,8 +83,16 @@ date of birth: {{date_of_birth_year}} year {{date_of_birth_month}} month {{date_
 kiállítva:     {{pp_validity_év}} év {{pp_validity_hónap}} hó {{pp_validity_nap}} nap
 ```
 
-Végződés nélkül (`{{date_of_birth}}`) a teljes dátum jön. Ha az adat nem
-ÉÉÉÉ-HH-NN alakú, a rész **üresen marad** — csonka dátumból nem találgatunk.
+Végződés nélkül (`{{date_of_birth}}`) a teljes dátum jön, **magyar alakban:**
+`1988.04.12.` Tárolni ÉÉÉÉ-HH-NN alakban tárolunk — az megy az adatbekérőbe és
+az exportba is —, a magyar alakra csak a dokumentumba íráskor vált.
+
+Ha az adat nem ÉÉÉÉ-HH-NN alakú, a rész **üresen marad** — csonka dátumból nem
+találgatunk, és a teljes dátumot sem írjuk át szebbnek látszó, de hamis alakra.
+
+> Az üres adatbekérő dátumoszlopai `yyyy-mm-dd` formátumot kapnak. Enélkül az
+> Excel a beírt dátumot a kitöltő gépének területi beállítása szerint mutatná
+> (angol rendszeren `3/15/1990`), és a kitöltő azt hinné, elrontotta.
 
 ### Szótár: angolul érkezik, magyarul kell
 

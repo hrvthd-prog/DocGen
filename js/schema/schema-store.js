@@ -183,8 +183,25 @@ const SchemaStore = (() => {
   function renderValue(f, raw, lang = 'hu') {
     if (f.type === 'enum') return ValueCodec.render(f, raw, lang);
     const s = raw == null ? '' : String(raw);
+    if (f.type === 'date') return formatDate(s);
     if (f.type !== 'text' || !s) return s;
     return translate(s, lang) || s;
+  }
+
+  /**
+   * Tárolt ISO dátum → magyar alak.
+   *
+   * Tárolni ÉÉÉÉ-HH-NN alakban tárolunk (gépileg egyértelmű, így megy az
+   * adatbekérőbe is), de a hatósági iratba a magyar alak való: 1988.04.12.
+   * Ez az EGYETLEN hely, ahol a dátum olvasható alakra vált – a nyilvántartás
+   * és az export érintetlen marad.
+   *
+   * Ami nem ÉÉÉÉ-HH-NN, azt változatlanul hagyjuk: csonka dátumból nem
+   * gyártunk szebbnek látszó, de hamis alakot.
+   */
+  function formatDate(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso == null ? '' : iso).trim());
+    return m ? `${m[1]}.${m[2]}.${m[3]}.` : (iso == null ? '' : String(iso));
   }
 
   // ── Lekérdezés ─────────────────────────────────────────────────────────────
@@ -281,6 +298,13 @@ const SchemaStore = (() => {
   function renderTag(tag, values = {}) {
     const hit = resolveTag(tag);
     if (!hit) return null;
+
+    // A dátum-rész a TÁROLT ISO alakból jön, nem a megjelenítettből: abban
+    // már pont áll a kötőjel helyén, és a záró pont is ott van.
+    if (hit.part && hit.field.type === 'date') {
+      return datePart(values[hit.field.key], hit.part);
+    }
+
     const ertek = hit.field.type === 'computed'
       ? computeField(hit.field, values, hit.lang)
       : renderValue(hit.field, values[hit.field.key], hit.lang);

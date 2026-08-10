@@ -207,7 +207,8 @@ test('dátum-rész jelölők: év, hónap, nap', () => {
   assertEq(SchemaStore.renderTag('date_of_birth_year', mezok),  '1999');
   assertEq(SchemaStore.renderTag('date_of_birth_month', mezok), '01');
   assertEq(SchemaStore.renderTag('date_of_birth_day', mezok),   '05');
-  assertEq(SchemaStore.renderTag('date_of_birth', mezok),       '1999-01-05');
+  // Utótag nélkül a TELJES dátum jön, magyar alakban – ez megy a hatósági iratba
+  assertEq(SchemaStore.renderTag('date_of_birth', mezok),       '1999.01.05.');
   // magyar utótagok ugyanúgy
   assertEq(SchemaStore.renderTag('Születési idő_év', mezok),   '1999');
   assertEq(SchemaStore.renderTag('Születési idő_nap', mezok),  '05');
@@ -216,6 +217,30 @@ test('dátum-rész jelölők: év, hónap, nap', () => {
 test('hiányzó vagy hibás dátumból nem találgatunk részt', () => {
   assertEq(SchemaStore.renderTag('date_of_birth_year', {}), '');
   assertEq(SchemaStore.renderTag('date_of_birth_year', { date_of_birth: 'tavaly' }), '');
+});
+
+test('a dátum magyar alakban jelenik meg, a tárolás ISO marad', () => {
+  const mezok = { date_of_birth: '1988-04-12', pp_validity: '2031-06-29' };
+  assertEq(SchemaStore.renderTag('date_of_birth', mezok), '1988.04.12.');
+  assertEq(SchemaStore.renderTag('Útlevél érvényessége', mezok), '2031.06.29.');
+  // a tárolt érték érintetlen – ez megy vissza az adatbekérőbe
+  assertEq(mezok.date_of_birth, '1988-04-12');
+  // a vezető nulla adat, nem formázás
+  assertEq(SchemaStore.renderTag('date_of_birth', { date_of_birth: '2026-01-05' }), '2026.01.05.');
+});
+
+test('a magyar alak mellett a rovatok továbbra is jók', () => {
+  // A rész a TÁROLT ISO-ból jön; ha a megjelenített alakból venné, a
+  // pontokon elhasalna, és mindhárom rovat üres maradna.
+  const mezok = { date_of_birth: '1988-04-12' };
+  assertEq(SchemaStore.renderTag('date_of_birth_year', mezok),  '1988');
+  assertEq(SchemaStore.renderTag('date_of_birth_month', mezok), '04');
+  assertEq(SchemaStore.renderTag('date_of_birth_day', mezok),   '12');
+});
+
+test('csonka dátumot nem szépítünk', () => {
+  assertEq(SchemaStore.renderTag('date_of_birth', { date_of_birth: '1988-04' }), '1988-04');
+  assertEq(SchemaStore.renderTag('date_of_birth', { date_of_birth: '' }), '');
 });
 
 // ════════════════════════════════════════════════════════════════════════════
