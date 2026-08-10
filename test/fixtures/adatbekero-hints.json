@@ -1,5 +1,5 @@
 {
- "_megjegyzes": "A valódi adatbekérő xlsx 2. sorának cellakommentjei, mezőkulcs szerint — GÉPPEL kiolvasva a fixtures/adatbekero-minta.xlsx-ből, nem kézzel írva. A test/xlsx.test.js ehhez méri a generált fájlt: ha a séma útmutatói elcsúsznak vagy kimaradnak, a teszt bukik.",
+ "_megjegyzes": "A valódi adatbekérő xlsx 2. sorának cellakommentjei, mezőkulcs szerint — GÉPPEL kiolvasva a fixtures/adatbekero-minta.xlsx-ből, nem kézzel írva. A test/xlsx.test.js ehhez méri a generált fájlt: ha a séma útmutatói elcsúsznak vagy kimaradnak, a teszt bukik. Kivétel a három átnevezett mező (place_of_birth_country, professional_qualification, previous_country): ezek szövege a sémából származik, mert a minta-xlsx még a régi, _hun végű kulcsokat tartalmazza.",
  "personnel_reg_number": "Personnel registration number used by the employer, if one has already been assigned.\nLeave empty if it is not known yet.",
  "surname": "Current family name, spelled exactly as in the passport.\nUse the Latin spelling of the passport's data page.",
  "forename": "Current given name(s), spelled exactly as in the passport.\nEnter all given names, in the passport's order.",
@@ -10,7 +10,7 @@
  "forename_at_birth": "Given name at birth, if it differs from the current one.\nIf it is the same, repeat the current given name.",
  "mothers_surname_at_birth": "The mother's family name at birth (maiden name), not her married name.",
  "mothers_forename_at_birth": "The mother's given name at birth.",
- "place_of_birth_country_hun": "Country of birth, written in HUNGARIAN.\nExample: Szerbia, Ukrajna\nUse the country's current name.",
+ "place_of_birth_country": "Country of birth. English is fine – the Hungarian form comes from the dictionary.\nExample: Serbia, Ukraine\nUse the country's current name.",
  "place_of_birth_locality": "Town or city of birth, exactly as in the passport.",
  "marital_status": "Choose from the drop-down list:\nmarried / unmarried / widow / divorced",
  "pp_number": "Passport number exactly as printed, without spaces.",
@@ -38,10 +38,10 @@
  "gross_salary": "Gross monthly salary in HUF, digits only, without currency sign or spaces.\nExample: 450000",
  "residence_purpose": "The purpose of the stay in Hungary.\nFor a work-related application: employment",
  "educational_attainment": "Choose from the drop-down list:\nprimary / secondary / tertiary / none",
- "professional_qualification_hun": "Profession or qualification, written in HUNGARIAN, as in the diploma or certificate.\nExample: hegeszto, villanyszerelo\nLeave empty if there is none.",
+ "professional_qualification": "Profession or qualification as in the diploma or certificate. English is fine – the Hungarian form comes from the dictionary.\nExample: welder, electrician\nLeave empty if there is none.",
  "mother_tongue": "The employee's native language.\nExample: Serbian",
  "speaks_hungarian": "Choose from the drop-down list:\nyes / no",
- "previous_country_hun": "Country of the last address abroad, written in HUNGARIAN.\nExample: Szerbia",
+ "previous_country": "Country of the last address abroad. English is fine – the Hungarian form comes from the dictionary.\nExample: Serbia",
  "previous_town": "Town or city of the last address abroad.",
  "previous_street": "Street name and house number of the last address abroad, in this one cell."
 }

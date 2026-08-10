@@ -15,7 +15,7 @@ const SettingsModule = (() => {
   function init(el) {
     container = el;
     render();
-    SchemaStore.onChange(renderFieldList);
+    SchemaStore.onChange(() => { renderFieldList(); renderDictionary(); });
   }
 
   // ── Váz ────────────────────────────────────────────────────────────────────
@@ -45,12 +45,87 @@ const SettingsModule = (() => {
               <div id="sv-fields"></div>
             </div>
           </div>
+
+          <div class="ws-card">
+            <div class="ws-card-header">
+              <span class="ws-card-title">Szótár</span>
+              <span id="sv-dict-info" class="rg-count"></span>
+            </div>
+            <div class="ws-card-body">
+              <p class="sv-intro">
+                Angol↔magyar megfeleltetés a szabad szöveges mezőkhöz: ország,
+                munkakör, állampolgárság, szakképesítés. A kitöltő angolul írja
+                be, a magyar iratba a magyar alak kerül – ezért nem kell két
+                oszlop ugyanarra az adatra.
+              </p>
+              <p class="ef-hint">
+                Soronként egy pár: <code>angol = magyar</code>.
+                Tabulátor és pontosvessző is elválasztó, így két Excel-oszlop
+                közvetlenül beilleszthető. A jelölők:
+                <code>{{previous_country}}</code> és
+                <code>{{previous_country_hun}}</code> magyarul,
+                <code>{{previous_country_eng}}</code> az eredeti beírás szerint.
+              </p>
+              <textarea id="sv-dict" class="field-input sv-dict" rows="12" spellcheck="false"
+                        placeholder="Serbia = Szerbia&#10;Ukraine = Ukrajna&#10;welder = hegesztő"></textarea>
+              <div class="sv-toolbar">
+                <button class="btn btn-primary btn-sm" id="sv-dict-save">Szótár mentése</button>
+                <span id="sv-dict-state" class="sv-problems"></span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>`;
 
     document.getElementById('sv-add').addEventListener('click', () => openFieldDialog(null));
     document.getElementById('sv-xlsx').addEventListener('change', onXlsxPicked);
+    document.getElementById('sv-dict-save').addEventListener('click', saveDictionary);
     renderFieldList();
+    renderDictionary();
+  }
+
+  // ── Szótár ─────────────────────────────────────────────────────────────────
+
+  function renderDictionary() {
+    const ta = document.getElementById('sv-dict');
+    if (!ta || !schemaReady()) return;
+    const parok = SchemaStore.dictionary();
+    ta.value = parok.map(e => `${e.en} = ${e.hu}`).join('\n');
+    const info = document.getElementById('sv-dict-info');
+    if (info) info.textContent = `${parok.length} pár`;
+  }
+
+  /** „Serbia = Szerbia", „Serbia<TAB>Szerbia" és „Serbia;Szerbia" is jó. */
+  function parseDictionary(text) {
+    const parok = [];
+    const hibas = [];
+    text.split(/\r?\n/).forEach((sor, i) => {
+      if (!sor.trim()) return;
+      const m = /^([^=\t;]+)[=\t;](.*)$/.exec(sor);
+      const en = m ? m[1].trim() : '';
+      const hu = m ? m[2].trim() : '';
+      if (!en || !hu) { hibas.push(i + 1); return; }
+      parok.push({ en, hu });
+    });
+    return { parok, hibas };
+  }
+
+  function saveDictionary() {
+    if (!schemaReady()) { toast('A séma még nem töltődött be.', 'error'); return; }
+    const { parok, hibas } = parseDictionary(document.getElementById('sv-dict').value);
+    const allapot = document.getElementById('sv-dict-state');
+
+    if (hibas.length) {
+      allapot.textContent = `${hibas.length} értelmezhetetlen sor (${hibas.slice(0, 5).join(', ')}${hibas.length > 5 ? '…' : ''}) – nem mentettem`;
+      return;
+    }
+
+    const mentett = SchemaStore.setDictionary(parok);
+    SchemaStore.save();
+    const eldobott = parok.length - mentett.length;
+    allapot.textContent = eldobott ? `${eldobott} ismétlődő angol alak kimaradt` : '';
+    renderDictionary();
+    toast(`Szótár mentve – ${mentett.length} pár`, 'success');
   }
 
   function schemaReady() {

@@ -24,7 +24,7 @@ ismerik a mappaválasztó API-t, ami a sablonok beolvasásához kell.
 | **Dokumentumok** | Sablon kiválasztása, személyek kijelölése, generálás |
 | **Nyilvántartás** | Személyek felvitele, keresés, xlsx be- és kivitel |
 | **Ügyek** | Kérelmek és bejelentések követése, határidők, idővonal |
-| **Beállítások** | Séma szerkesztése, export profilok, napló |
+| **Beállítások** | Séma szerkesztése, szótár, export profilok, napló |
 
 Az **Ügyek** fül címkéjén piros pötty jelzi, hány ügy határideje járt le.
 Csak a lejártak kapnak jelzést — ha minden szám ott lenne, pár nap alatt
@@ -37,6 +37,12 @@ megszoknánk, és a jelzés semmit nem jelentene.
 3. **Dokumentumok** → *Kimeneti mappa* — ide készülnek a kész iratok.
 
 A választott mappákat a böngésző megjegyzi, nem kell újra kijelölni.
+
+> A mappákat az app **nem tudja megnyitni az Intézőben**: a böngésző csak
+> hozzáférési fogantyút ad, elérési utat nem, és nincs API a fájlkezelő
+> indítására. A sidebar ezért a mappa nevét mutatja, gomb pedig csak a
+> váltáshoz van. (Ezt korábban egy helyi kiszolgáló végezte; az kikerült a
+> pipeline-ból.)
 
 ## Sablonok
 
@@ -51,6 +57,44 @@ anyja neve {{Anyja neve}}…
 `{{Neme}}` → „Férfi", `{{Neme_EN}}` → „Male". Ugyanaz az adat, két nyelven.
 
 **Jelölőnégyzet:** `{{CHECK:Beszél magyarul}}` → ☒ vagy ☐.
+
+### Dátum három rovatban
+
+A hatósági formanyomtatványok a dátumot szétszedve kérik. A jelölőhöz fűzött
+végződés kiveszi a kért részt — a nyilvántartásban egyetlen dátum marad:
+
+```
+date of birth: {{date_of_birth_year}} year {{date_of_birth_month}} month {{date_of_birth_day}} day
+kiállítva:     {{pp_validity_év}} év {{pp_validity_hónap}} hó {{pp_validity_nap}} nap
+```
+
+Végződés nélkül (`{{date_of_birth}}`) a teljes dátum jön. Ha az adat nem
+ÉÉÉÉ-HH-NN alakú, a rész **üresen marad** — csonka dátumból nem találgatunk.
+
+### Szótár: angolul érkezik, magyarul kell
+
+Az ország, a munkakör vagy a szakképesítés angolul jön a kitöltőtől, a magyar
+iratba viszont magyarul kell. Ezt **nem** két oszloppal oldjuk meg: egy oszlop
+érkezik, a fordítást a **Beállítások → Szótár** adja.
+
+| Jelölő | Mit ad |
+|---|---|
+| `{{previous_country}}` | magyarul (ez az alapértelmezés) |
+| `{{previous_country_hun}}` | magyarul |
+| `{{previous_country_eng}}` | ahogy a táblázatban érkezett |
+
+A szótár soronként egy pár: `angol = magyar`. Tabulátor és pontosvessző is
+elválasztó, így két Excel-oszlop közvetlenül beilleszthető. Amire nincs pár, az
+változatlanul megy tovább — a hiányzó fordítás nem hiba, csak nem fordít.
+
+A szótár a **szabad szöveges** mezőkre hat, mezőtől függetlenül: egy
+„Serbia → Szerbia" pár mindenhol ugyanazt jelenti. A választható (enum) mezőket
+nem érinti, azoknak saját értéklistájuk van a sémában.
+
+> A `_hun` végű mezőkulcsok (`previous_country_hun` stb.) emiatt lerövidültek.
+> A régi kulcs jelölőként megmarad, ezért a korábban kiküldött adatbekérők
+> importja változatlanul működik; a meglévő adat a séma betöltésekor magától
+> átköltözik az új kulcsra.
 
 Hogy egy mezőnek pontosan mi a jelölője, a **Beállítások → Séma** fülön látszik.
 Amire nem volt adat, azt a *Hiányzó adatok naplója* utólag is megmutatja.
@@ -86,6 +130,15 @@ Ennek a gyakorlati haszna: a két éve lejárt engedélyszámra is megtalálod a
 embert, és az ismételt import nem hoz létre duplikátumot.
 
 Új engedély rögzítése egy lépés: *Új azonosító* — a régi automatikusan lezárul.
+
+## Archiválás és törlés
+
+**Archiválás** a normál út: az adat megmarad, csak kikerül a listákból és a
+generálásból — bármikor visszaállítható.
+
+**Törlés** téves felvitelre való, és valóban töröl: a személyt, az
+azonosító-történetét és az ügyeit. A párbeszéd előbb kiírja, mi tűnik el. A
+visszaút a `data/backup/` mappa — a mentés a törlés *előtti* állapotról készül.
 
 ## Az adatbekérő táblázat
 
@@ -232,7 +285,7 @@ nem a fájlnév alapján. A lépés **visszafordítható**: a jelenlegi (akár s
 node test/run-all.js
 ```
 
-Tíz tesztcsomag, 251 teszt. Böngészőt nem igényel.
+Tíz tesztcsomag, 265 teszt. Böngészőt nem igényel.
 
 | Csomag | Mit őriz |
 |---|---|
@@ -241,7 +294,7 @@ Tíz tesztcsomag, 251 teszt. Böngészőt nem igényel.
 | `schema.test.js` | séma mint adat, migráció, átnevezés |
 | `schema-from-xlsx.test.js` | séma-javaslat új sablonból |
 | `xlsx.test.js` | adatbekérő oda-vissza, lapvédelem, kiírás-időkorlát |
-| `docgen-resolve.test.js` | kétnyelvű jelölők, számított mezők |
+| `docgen-resolve.test.js` | kétnyelvű jelölők, dátum-részek, szótár, számított mezők |
 | `logger.test.js` | a napló nem hagyhatja el a gépet |
 | `vbs-encoding.test.js` | a `.vbs` UTF-16 LE marad |
 | `cases.test.js` | határidők, kimenetelek, idővonal, láncolás |
@@ -255,11 +308,14 @@ A `test/fixtures/` mappában kitalált emberekkel dolgozó próbafájlok vannak:
   értékek, szinonimák (`ffi`, `Hajadon`, `Igen`), vegyes dátumalakok, lejárt
   azonosítós visszatérő, fájlon belüli duplikátum, hiányzó kötelező mező,
   kétértelmű dátum
-- **`sablonok/`** — négy `.docx` próbasablon minden jelölő-fajtára
+- **`sablonok/`** — öt `.docx` próbasablon minden jelölő-fajtára
 
 A negyedik sablon (`04-tordelt-jelolok.docx`) magyarázatra szorul: benne a
 jelölők **több futamra vannak szétvágva**, ahogy a Word teszi gépelés közben
 (`{{` + `Ne` + `me` + `}}`). Ez a leggyakoribb valós hiba dokumentumsablonoknál.
+
+Az ötödik (`05-datum-reszek.docx`) a hatósági formanyomtatvány esetét állítja:
+dátum három rovatban, és szótárból fordított ország/munkakör.
 
 Újragenerálás a séma változása után:
 
@@ -272,8 +328,8 @@ node tools/tesztanyag-keszito.js
 A docxtemplater `DOMParser`-t igényel, ami Node-ban nincs — ezért a
 dokumentumok tényleges kitöltése böngészőben fut. Indíts egy kiszolgálót,
 nyisd meg az appot, majd a konzolba illeszd be a `test/e2e-browser.js`
-tartalmát. 24 ellenőrzés fut le: számított mezők, kétnyelvű párok,
-jelölőnégyzetek, tördelt jelölők, hiányzó-adat napló.
+tartalmát. 31 ellenőrzés fut le: számított mezők, kétnyelvű párok,
+jelölőnégyzetek, tördelt jelölők, dátum-részek, szótár, hiányzó-adat napló.
 
 Nincs build-lépés és nincs csomagkezelő: a `js/` fájljai közvetlenül töltődnek
 be, a sorrendjük az `index.html`-ben számít. Új modul a saját rétegének végére

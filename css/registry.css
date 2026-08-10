@@ -21,6 +21,9 @@
 
 .rg-actions { white-space: nowrap; text-align: right; }
 .rg-actions .btn { margin-left: 4px; }
+/* A törlés visszafordíthatatlan – ne nézzen ki ugyanúgy, mint az archiválás */
+.rg-del { color: var(--c-red); }
+.rg-del:hover { background: var(--c-red); color: #fff; }
 
 .rg-archived td { opacity: .55; font-style: italic; }
 .rg-dim { color: var(--c-muted); }
@@ -187,6 +190,13 @@
 }
 .sv-file-btn { position: relative; cursor: pointer; }
 .sv-problems { font-size: 11px; color: var(--c-amber); margin-left: auto; }
+
+/* Szótár: nagy szövegdoboz, mert a párokat tömegesen illesztik be */
+.sv-dict {
+  width: 100%; font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 12px; line-height: 1.6; resize: vertical;
+  margin-bottom: var(--sp-3);
+}
 
 .sv-group { margin-bottom: var(--sp-4); }
 .sv-group-title {

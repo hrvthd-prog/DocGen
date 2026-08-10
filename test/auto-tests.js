@@ -227,6 +227,17 @@ test('uniqueFilename harmadik előfordulás (3) suffix', () => {
   assertEq(r, 'foo (3).docx');
 });
 
+// A vezető nulla korábban elveszett: a „03" hónapból „3" lett a dokumentumban,
+// és ugyanígy csonkult volna egy 0-val kezdődő adóazonosító is.
+test('formatValue megőrzi a vezető nullát', () => {
+  const fv = docxSandbox.DocxService.formatValue;
+  assertEq(fv('03'), '03');
+  assertEq(fv('0123456789'), '0123456789');
+  assertEq(fv('450000.0'), '450000');   // az Excel-lebegőpont továbbra is rendeződik
+  assertEq(fv('0'), '0');
+  assertEq(fv('0.5'), '0.5');
+});
+
 test('uniqueFilename kiterjesztés nélküli fájl is suffix-elve', () => {
   const existing = new Set(['bar']);
   const r = docxSandbox.DocxService.uniqueFilename('bar', existing);
@@ -303,13 +314,39 @@ test('dg-alt-panel mindig nyitva (--open default)', () => {
 });
 
 test('Másik sablonmappa választása gomb', () => {
-  assert(/id="dg-switch-dir"/.test(docgenSrc), 'switch-dir gomb hiányzik');
+  assert(/Másik sablonmappa választása/.test(docgenSrc), 'mappaváltó felirat hiányzik');
   assert(/onSwitchTemplatesDir/.test(docgenSrc), 'onSwitchTemplatesDir handler hiányzik');
 });
 
 test('Switch dir confirm dialog (M5)', () => {
   assert(/dg-switch-confirm/.test(docgenSrc), 'switch-confirm dialog hiányzik');
   assert(/elveszik|elvész/.test(docgenSrc), 'figyelmeztető szöveg hiányzik');
+});
+
+/** Egy modul-szintű függvény törzse (2 szóköz behúzás → `\n  }` a vége). */
+function fvTorzs(src, nev) {
+  const start = src.indexOf(`function ${nev}(`);
+  assert(start !== -1, `nincs ilyen függvény: ${nev}`);
+  const end = src.indexOf('\n  }', start);
+  assert(end !== -1, `nem találom ${nev} végét`);
+  return src.slice(start, end);
+}
+
+// Ez a teszt egy valódi hibára született: a „Személyek kiválasztása" gomb
+// hónapokig néma volt, mert renderSidebar() kirajzolta, bindSidebar() viszont
+// nem kötötte be. Semmi nem hibázott – a kattintás egyszerűen nem csinált semmit.
+test('a sidebar minden gombja be van kötve', () => {
+  const render = fvTorzs(docgenSrc, 'renderSidebar');
+  const bind   = fvTorzs(docgenSrc, 'bindSidebar');
+  const idk = [...render.matchAll(/<button[^>]*\bid="(dg-[a-z-]+)"/g)].map(m => m[1]);
+  assert(idk.length >= 4, `gyanúsan kevés gomb a sidebarban (${idk.length})`);
+  const kotetlen = idk.filter(id => !bind.includes(`#${id}`));
+  assert(!kotetlen.length, `bekötetlen sidebar-gomb: ${kotetlen.join(', ')}`);
+});
+
+test('nincs többé PDF-szerverre hivatkozó holt út', () => {
+  assert(!/_openViaServer|_resolvePathViaServer/.test(docgenSrc), 'a szerver-csonkok megmaradtak');
+  assert(!/fut a PDF szerver/.test(docgenSrc), 'a PDF szerveres figyelmeztetés megmaradt');
 });
 
 // ════════════════════════════════════════════════════════════════════════════

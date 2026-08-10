@@ -15,7 +15,6 @@ const DocgenModule = (() => {
     // [{name, subdir}] — fiókra szűrve
     allTemplates:     [],
     chosenTemplates:  new Set(),
-    autoOpen:         false,
     templateGroups:   [],
     activeGroups:     new Set(),
     outputDir:        null,
@@ -92,7 +91,6 @@ const DocgenModule = (() => {
 
   function loadSettings() {
     const s = Settings.get(_docgenKey(), {});
-    state.autoOpen         = s.autoOpen         || false;
     state.selectedClients  = s.selectedClients  || [];
     state.clientFilterCols = s.clientFilterCols || [];
     // backward compat: migrate old single chosenTemplate string
@@ -112,7 +110,6 @@ const DocgenModule = (() => {
 
   function saveSettings() {
     Settings.set(_docgenKey(), {
-      autoOpen:         state.autoOpen,
       selectedClients:  state.selectedClients,
       chosenTemplates:  [...state.chosenTemplates],
       clientFilterCols: state.clientFilterCols,
@@ -129,11 +126,10 @@ const DocgenModule = (() => {
   // Wordöt vezérelni, ezért itt nincs és nem is lehet beépített konverzió;
   // tartaléknak marad a böngészős nyomtatás (openPrintSelectDialog).
 
-  // A korábbi helyi kiszolgáló nyitotta meg a mappákat az Intézőben és oldotta fel
-  // az abszolút útvonalakat. Ezek kényelmi funkciók voltak – hiányukban az app
-  // működik, csak ezek a gombok nem tudnak mit tenni.
-  async function _openViaServer() { return false; }
-  async function _resolvePathViaServer() { return ''; }
+  // Mappát Intézőben megnyitni böngészőből NEM lehet: a File System Access API
+  // handle-t ad, nem elérési utat, és nincs API a fájlkezelő indítására. Ezt
+  // korábban egy helyi kiszolgáló végezte – az kikerült a pipeline-ból, ezért a
+  // „megnyitás" gombok is. Ami maradt: a mappa NEVE látszik a sidebarban.
 
   // Progresszív onboarding frissítés:
   //  - Ha a workspace az onboard nézetet mutatja, frissíti a lépések állapotát
@@ -323,7 +319,6 @@ const DocgenModule = (() => {
     const cnt      = state.selectedClients.length;
     const dirName  = state.templatesDir ? state.templatesDir.name : 'Nincs beállítva';
     const osszes   = state.clientRows.length;
-    const canPick  = osszes > 0;
     const isAdmin  = Settings.isAdmin();
     const step1done = cnt > 0;
     const step2done = !!state.templatesDir;
@@ -335,7 +330,7 @@ const DocgenModule = (() => {
         <div class="info-row" id="dg-source-info" title="Az adatok a Nyilvántartás fülön kezelhetők">
           ${_folderSVG}${osszes ? `Nyilvántartás – ${osszes} személy` : 'A nyilvántartás üres'}
         </div>
-        <button class="sidebar-btn" id="dg-choose-clients" ${canPick ? '' : 'disabled'}>
+        <button class="sidebar-btn" id="dg-choose-clients">
           Személyek kiválasztása
           <span class="badge ${cnt ? 'badge-green' : 'badge-muted'}" style="margin-left:auto">${cnt}</span>
         </button>
@@ -343,9 +338,8 @@ const DocgenModule = (() => {
 
       <div class="sidebar-section ${pendingStep === 2 ? 'sidebar-section--pending' : ''}">
         <div class="sidebar-section-title"><span class="sidebar-step-badge ${step2done ? 'done' : ''}" id="dg-step-2">2</span>Sablonok</div>
-        ${state.templatesDir ? `<button class="sidebar-btn" id="dg-switch-dir">🔄 Másik sablonmappa választása</button>` : ''}
         <button class="sidebar-btn" id="dg-set-dir">
-          ${state.templatesDir ? '📂 Sablonmappa megnyitása' : 'Sablonmappa beállítása'}
+          ${state.templatesDir ? '🔄 Másik sablonmappa választása' : 'Sablonmappa beállítása'}
         </button>
         <div class="info-row" id="dg-dir-info" title="${escHtml(dirName)}">${_folderSVG}${escHtml(dirName)}</div>
         <button class="sidebar-btn" id="dg-manage-groups">Csoportok kezelése</button>
@@ -353,15 +347,10 @@ const DocgenModule = (() => {
       </div>
 
       <div class="sidebar-section ${pendingStep === 3 ? 'sidebar-section--pending' : ''}">
-        <div class="sidebar-section-title"><span class="sidebar-step-badge ${step3done ? 'done' : ''}" id="dg-step-3">3</span>Beállítások</div>
-        ${state.outputDir ? `<button class="sidebar-btn" id="dg-switch-output">🔄 Másik kimenet mappa választása</button>` : ''}
+        <div class="sidebar-section-title"><span class="sidebar-step-badge ${step3done ? 'done' : ''}" id="dg-step-3">3</span>Kimenet</div>
         <button class="sidebar-btn" id="dg-set-output">
-          ${state.outputDir ? '📂 Kimenet mappa megnyitása' : 'Kimenet mappa beállítása'}
+          ${state.outputDir ? '🔄 Másik kimenet mappa választása' : 'Kimenet mappa beállítása'}
         </button>
-        <label class="check-row" style="padding:4px 8px">
-          <input type="checkbox" id="dg-auto-open" ${state.autoOpen ? 'checked' : ''}>
-          <span style="font-size:12px">Mappa megnyitása generálás után</span>
-        </label>
         <div class="info-row" id="dg-output-info">
           ${_folderSVG}${escHtml(state.outputDir ? state.outputDir.name : 'Nincs beállítva')}
         </div>
@@ -539,8 +528,7 @@ const DocgenModule = (() => {
             <button id="dg-mai-nap-today" style="font-size:11px;padding:2px 8px;background:none;border:1px solid var(--c-border);border-radius:4px;cursor:pointer;color:var(--c-muted)" title="Visszaállítás mai dátumra">Ma</button>
           </div>
           <div class="ws-card-body" style="padding:10px 12px">
-            <input type="date" id="dg-mai-nap-input" value="${_dotToInput(state.maiNap)}"
-              style="width:100%;padding:6px 8px;border:1px solid var(--c-border);border-radius:6px;background:var(--c-bg);color:var(--c-text);font-size:13px;box-sizing:border-box">
+            ${dateFieldHtml({ id: 'dg-mai-nap-input', value: _dotToInput(state.maiNap) })}
             <div style="font-size:11px;color:var(--c-muted);margin-top:6px">Sablonban: <code style="font-family:monospace">{{mai nap}}</code></div>
           </div>
         </div>
@@ -624,15 +612,13 @@ const DocgenModule = (() => {
   function bindSidebar() {
     const missingLogBtn = q('#dg-show-missing-log');
     if (missingLogBtn) missingLogBtn.addEventListener('click', DocgenMissingLog.showDialog);
+    // Az 1. lépés gombja: enélkül a „Személyek kiválasztása" néma volt
+    q('#dg-choose-clients').addEventListener('click', openClientDialog);
+    q('#dg-set-dir').addEventListener('click', onTemplatesDirBtn);
     q('#dg-manage-groups').addEventListener('click', DocgenGroups.openGroupsDialog);
     const visBtn = q('#dg-manage-visibility');
     if (visBtn) visBtn.addEventListener('click', DocgenGroups.openVisibilityDialog);
     q('#dg-set-output').addEventListener('click', onSetOutput);
-    const switchOutputBtn = q('#dg-switch-output');
-    if (switchOutputBtn) switchOutputBtn.addEventListener('click', onSwitchOutputDir);
-    q('#dg-auto-open').addEventListener('change', e => {
-      state.autoOpen = e.target.checked; saveSettings();
-    });
 
     // ── Sidebar magasság-resize ───────────────────────────────────────────────
     const sidebar       = q('#dg-sidebar');
@@ -739,8 +725,11 @@ const DocgenModule = (() => {
     // ── Mai nap kártya ────────────────────────────────────────────────────────
     const maiNapInput = q('#dg-mai-nap-input');
     if (maiNapInput) {
+      // Félbehagyott gépelés („2026-03") ne kerüljön a sablonokba dátumként
       maiNapInput.addEventListener('change', e => {
-        state.maiNap = _inputToDot(e.target.value) || _todayDot();
+        const v = e.target.value.trim();
+        state.maiNap = /^\d{4}-\d{2}-\d{2}$/.test(v) ? _inputToDot(v) : _todayDot();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) e.target.value = _dotToInput(state.maiNap);
         Settings.set('global_mai_nap', state.maiNap);
       });
     }
@@ -749,7 +738,10 @@ const DocgenModule = (() => {
       maiNapToday.addEventListener('click', () => {
         state.maiNap = _todayDot();
         Settings.set('global_mai_nap', state.maiNap);
-        if (maiNapInput) maiNapInput.value = _dotToInput(state.maiNap);
+        if (maiNapInput) {
+          maiNapInput.value = _dotToInput(state.maiNap);
+          maiNapInput.dispatchEvent(new Event('input', { bubbles: true }));  // a naptár is kövesse
+        }
       });
     }
 
@@ -847,17 +839,6 @@ const DocgenModule = (() => {
     '<path d="M2 4.5A1.5 1.5 0 013.5 3h3l1.5 2H13A1.5 1.5 0 0114.5 6.5v6A1.5 1.5 0 0113 14H3' +
     'a1.5 1.5 0 01-1.5-1.5v-8z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
 
-  // ── Helyi path tárolás + PDF szerver /open ────────────────────────────────
-  function _storeHandlePath(key, path) {
-    if (path) Settings.set('path_' + key + '_' + currentUser, path);
-  }
-  function _loadHandlePath(key) {
-    return Settings.get('path_' + key + '_' + currentUser, '');
-  }
-  function _tryGetHandlePath(handle) {
-    if (!handle) return '';
-    return handle._path || handle.path || '';
-  }
   // ── Kontextus-menü sablonokhoz ────────────────────────────────────────────
   let _ctxMenu = null;
   function _showCtxMenu(x, y, items) {
@@ -953,21 +934,16 @@ const DocgenModule = (() => {
    *
    * Ez teszi lehetővé a kétnyelvű sablonokat: `{{Neme}}` → „Férfi",
    * `{{Neme_EN}}` → „Male" – ugyanabból a mezőből, a séma fordításai alapján.
-   * A magyar címke, a gépi kulcs és a jelölő-aliasok mind működnek.
+   * A magyar címke, a gépi kulcs és a jelölő-aliasok mind működnek, ahogy a
+   * dátum-részek (`{{date_of_birth_year}}`) és a szótár is.
+   *
+   * Egy sablon ugyanazt a jelölőt többször is tartalmazza, ezért gyorsítótár.
    */
   function makeSchemaResolver(emp) {
     const gyorsito = new Map();
     return (name) => {
-      if (gyorsito.has(name)) return gyorsito.get(name);
-      let out = null;
-      const hit = SchemaStore.resolveTag(name);
-      if (hit) {
-        out = hit.field.type === 'computed'
-          ? SchemaStore.computeField(hit.field, emp.fields, hit.lang)
-          : ValueCodec.render(hit.field, emp.fields[hit.field.key], hit.lang);
-      }
-      gyorsito.set(name, out);
-      return out;
+      if (!gyorsito.has(name)) gyorsito.set(name, SchemaStore.renderTag(name, emp.fields));
+      return gyorsito.get(name);
     };
   }
 
@@ -979,9 +955,9 @@ const DocgenModule = (() => {
       badge.textContent = state.selectedClients.length;
       badge.className = 'badge ' + (state.selectedClients.length ? 'badge-green' : 'badge-muted');
     }
-    const canPick = state.clientRows.length > 0;
-    const pickBtn = q('#dg-choose-clients');
-    if (pickBtn) pickBtn.disabled = !canPick;
+    // A gomb szándékosan NEM tiltódik le üres nyilvántartásnál: a letiltott
+    // állapot elavulhat (és el is avult), a párbeszéd viszont frissen olvassa
+    // a nyilvántartást, és üres listánál megmondja, hova kell menni.
     updateGenSummary();
     window.updateHeaderBreadcrumb?.({
       sourceName: state.clientRows.length ? `Nyilvántartás (${state.clientRows.length} személy)` : null,
@@ -991,26 +967,15 @@ const DocgenModule = (() => {
   }
 
   // ── Sablonmappa ───────────────────────────────────────────────────────────
+  /** A sidebar gombja: ha még nincs mappa, kér egyet; ha van, váltásra kérdez. */
+  function onTemplatesDirBtn() {
+    return state.templatesDir ? onSwitchTemplatesDir() : onSetTemplatesDir();
+  }
+
   async function onSetTemplatesDir() {
-    if (state.templatesDir) {
-      let storedPath = _loadHandlePath('templates_dir') || _tryGetHandlePath(state.templatesDir);
-      if (!storedPath) {
-        storedPath = await _resolvePathViaServer(state.templatesDir);
-        if (storedPath) _storeHandlePath('templates_dir', storedPath);
-      }
-      if (storedPath) {
-        const opened = await _openViaServer(storedPath);
-        if (!opened) toast('Megnyitás sikertelen — ellenőrizd a PDF szervert', 'error');
-      } else {
-        toast('Az útvonal nem határozható meg — fut a PDF szerver?', 'warn');
-      }
-      return;
-    }
     const h = await FsService.getOrRequestDir('templates_dir', 'Sablonmappa');
     if (!h) return;
     state.templatesDir = h;
-    const path = _tryGetHandlePath(h);
-    if (path) _storeHandlePath('templates_dir', path);
     _rerenderTemplatesDirUI();
     toast(`✓ Sablonmappa: ${h.name}`, 'success');
     await refreshTemplates();
@@ -1235,40 +1200,11 @@ const DocgenModule = (() => {
       const lbl = e.target.closest('[data-tpl-name]');
       if (!lbl) return;
       e.preventDefault();
-      const tplName  = lbl.dataset.tplName;
-      const tplSubdir = lbl.dataset.tplSubdir;
-      const basePath = _loadHandlePath('templates_dir') || _tryGetHandlePath(state.templatesDir);
-      const sep      = basePath.includes('/') ? '/' : '\\';
-      const filePath = basePath
-        ? [basePath, currentUser, tplSubdir, tplName + '.docx'].filter(Boolean).join(sep)
-        : '';
-      const folderPath = basePath
-        ? [basePath, currentUser, tplSubdir].filter(Boolean).join(sep)
-        : '';
       _showCtxMenu(e.clientX, e.clientY, [
-        {
-          icon: '📝',
-          label: 'Szerkesztés Word-ben',
-          action: async () => {
-            if (!filePath) { toast('A fájl elérési útja nem elérhető. Ellenőrizd, hogy a PDF szerver fut.', 'warn'); return; }
-            const ok = await _openViaServer(filePath);
-            if (!ok) toast('Word megnyitás sikertelen — a PDF szerver szükséges', 'error');
-          }
-        },
-        {
-          icon: '📂',
-          label: 'Mappa megnyitása',
-          action: async () => {
-            if (!folderPath) { toast('A mappa elérési útja nem elérhető. Ellenőrizd, hogy a PDF szerver fut.', 'warn'); return; }
-            const ok = await _openViaServer(folderPath);
-            if (!ok) toast('Megnyitás sikertelen — a PDF szerver szükséges', 'error');
-          }
-        },
-        null, // separator
         {
           icon: '🏷️',
           label: 'Generált dokumentum elnevezése',
-          action: () => DocgenNaming.openDialog(tplName),
+          action: () => DocgenNaming.openDialog(lbl.dataset.tplName),
         }
       ]);
     }, { passive: false });
@@ -1302,30 +1238,12 @@ const DocgenModule = (() => {
   }
 
   // ── Kimenet mappa ─────────────────────────────────────────────────────────
+  /** A sidebar gombja: ha még nincs mappa, kér egyet; ha van, váltásra kérdez. */
   async function onSetOutput() {
-    if (state.outputDir) {
-      // Ha van handle, de nincs írási engedély → ne early-return, kínálj mappákat
-      const hasPerm = await FsService.queryPermissionOnly(state.outputDir, true);
-      if (!hasPerm) {
-        // Engedély nélküli handle: kérd el a mappát újra
-        await _pickAndSaveOutputDir();
-        return;
-      }
-      // Engedély megvan → nyissuk meg a mappát
-      let storedPath = _loadHandlePath('output_dir') || _tryGetHandlePath(state.outputDir);
-      if (!storedPath) {
-        storedPath = await _resolvePathViaServer(state.outputDir);
-        if (storedPath) _storeHandlePath('output_dir', storedPath);
-      }
-      if (storedPath) {
-        const opened = await _openViaServer(storedPath);
-        if (!opened) toast('Megnyitás sikertelen — ellenőrizd a PDF szervert', 'error');
-      } else {
-        toast('Az útvonal nem határozható meg — fut a PDF szerver?', 'warn');
-      }
-      return;
-    }
-    await _pickAndSaveOutputDir();
+    if (!state.outputDir) return _pickAndSaveOutputDir();
+    // Engedély nélküli handle esetén nincs mit megerősíteni: kell egy mappa
+    const hasPerm = await FsService.queryPermissionOnly(state.outputDir, true);
+    return hasPerm ? onSwitchOutputDir() : _pickAndSaveOutputDir();
   }
 
   // Közvetlen mappa-picker: nem használja az IndexedDB-ben tárolt handle-t,
@@ -1336,8 +1254,6 @@ const DocgenModule = (() => {
       const h = await window.showDirectoryPicker({ id: 'output_dir', mode: 'readwrite', startIn: 'documents' });
       await FsService.saveHandle('output_dir', h);
       state.outputDir = h;
-      const path = _tryGetHandlePath(h);
-      if (path) _storeHandlePath('output_dir', path);
       toast('✓ Kimeneti mappa: ' + h.name, 'success');
       BevLogger.info('OUTPUT_DIR_SET', 'Kimenet mappa beállítva', h.name, currentUser);
       // Sidebar teljes újrarajzolás (váltó gomb megjelenítéséhez)
@@ -1379,65 +1295,32 @@ const DocgenModule = (() => {
   // Hívd meg minden alkalommal, amikor state.templatesDir változik.
   // Kezeli: info-sor, gomb-felirat, step-badge, 🔄 váltó-gomb megjelenése/eltűnése.
   function _rerenderTemplatesDirUI() {
-    const sec2 = q('#dg-step-2')?.closest('.sidebar-section');
-    if (!sec2) return;
-
-    const dirInfo       = q('#dg-dir-info');
-    const setBtn        = q('#dg-set-dir');
-    const existingSwBtn = q('#dg-switch-dir');
-    const badge         = q('#dg-step-2');
+    const dirInfo = q('#dg-dir-info');
+    const setBtn  = q('#dg-set-dir');
+    const badge   = q('#dg-step-2');
 
     if (state.templatesDir) {
       if (dirInfo) { dirInfo.title = state.templatesDir.name; dirInfo.innerHTML = _folderSVG + escHtml(state.templatesDir.name); }
-      if (setBtn)  setBtn.innerHTML = '📂 Sablonmappa megnyitása';
+      if (setBtn)  setBtn.textContent = '🔄 Másik sablonmappa választása';
       if (badge)   badge.classList.add('done');
-      // Váltó gomb létrehozása, ha még nincs
-      if (!existingSwBtn && setBtn) {
-        const sw = document.createElement('button');
-        sw.className = 'sidebar-btn';
-        sw.id = 'dg-switch-dir';
-        sw.textContent = '🔄 Másik sablonmappa választása';
-        sw.addEventListener('click', onSwitchTemplatesDir);
-        sec2.insertBefore(sw, setBtn);
-      }
     } else {
       if (dirInfo) { dirInfo.title = ''; dirInfo.innerHTML = _folderSVG + 'Nincs beállítva'; }
       if (setBtn)  setBtn.textContent = 'Sablonmappa beállítása';
       if (badge)   badge.classList.remove('done');
-      if (existingSwBtn) existingSwBtn.remove();
     }
   }
 
   function rerenderSidebarSettings() {
-    // Info-sor frissítése
     const el = q('#dg-output-info');
     if (el) el.innerHTML = _folderSVG + escHtml(state.outputDir ? state.outputDir.name : 'Nincs beállítva');
 
-    // Váltó gomb dinamikus kezelése: ha van outputDir, jelenjen meg; ha nincs, tűnjön el
-    const sec3 = q('#dg-step-3')?.closest('.sidebar-section');
-    if (!sec3) return;
-
-    const existingSwitchBtn = q('#dg-switch-output');
     const setBtn = q('#dg-set-output');
-
+    const badge  = q('#dg-step-3');
     if (state.outputDir) {
-      // Lépés-jelvény frissítése
-      const badge = q('#dg-step-3');
-      if (badge) badge.classList.add('done');
-      // Megnyitás gomb szövege
-      if (setBtn) setBtn.innerHTML = '📂 Kimenet mappa megnyitása';
-      // Váltó gomb létrehozása, ha még nincs
-      if (!existingSwitchBtn && setBtn) {
-        const switchBtn = document.createElement('button');
-        switchBtn.className = 'sidebar-btn';
-        switchBtn.id = 'dg-switch-output';
-        switchBtn.textContent = '🔄 Másik kimenet mappa választása';
-        switchBtn.addEventListener('click', onSwitchOutputDir);
-        sec3.insertBefore(switchBtn, setBtn);
-      }
+      if (badge)  badge.classList.add('done');
+      if (setBtn) setBtn.textContent = '🔄 Másik kimenet mappa választása';
     } else {
-      // Váltó gomb eltüntetése
-      if (existingSwitchBtn) existingSwitchBtn.remove();
+      if (badge)  badge.classList.remove('done');
       if (setBtn) setBtn.textContent = 'Kimenet mappa beállítása';
     }
   }
@@ -1905,16 +1788,6 @@ const DocgenModule = (() => {
           : `✓ ${generated.length} dokumentum sikeresen generálva`;
         if (errors.length) rc.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         ra.innerHTML = '';
-        if (state.outputDir && !errors.length) {
-          const openBtn = document.createElement('button');
-          openBtn.className = 'btn btn-primary btn-sm';
-          openBtn.textContent = 'Mappa megnyitása';
-          openBtn.addEventListener('click', async () => {
-            const p = _loadHandlePath('output_dir') || _tryGetHandlePath(state.outputDir);
-            if (p) await _openViaServer(p);
-          });
-          ra.appendChild(openBtn);
-        }
         if (errors.length) {
           const errBtn = document.createElement('button');
           errBtn.className = 'btn btn-ghost btn-sm';

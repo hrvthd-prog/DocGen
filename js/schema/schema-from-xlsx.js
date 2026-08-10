@@ -126,8 +126,16 @@ const SchemaFromXlsx = (() => {
    */
   function diff(analysis, schema) {
     const stored = schema.fields.filter(f => f.type !== 'computed');
-    const byKey = new Map(stored.map(f => [f.key, f]));
-    const fileKeys = analysis.columns.map(c => c.key);
+
+    // A jelölők is kulcsnak számítanak. Enélkül egy korábban kiküldött
+    // adatbekérő – amiben még a régi, `_hun` végű oszlopnév szerepel – „új
+    // mezőnek" látszana, és a felhasználó három duplikátumot venne fel.
+    const byKey = new Map();
+    for (const f of stored) {
+      for (const k of [f.key].concat(f.tags || [])) if (!byKey.has(k)) byKey.set(k, f);
+    }
+    const fileKeys  = analysis.columns.map(c => c.key);
+    const fileMezok = new Set(fileKeys.map(k => byKey.get(k)).filter(Boolean));
 
     const added = analysis.columns
       .filter(c => !byKey.has(c.key))
@@ -138,7 +146,7 @@ const SchemaFromXlsx = (() => {
       }));
 
     const removed = stored
-      .filter(f => !fileKeys.includes(f.key))
+      .filter(f => !fileMezok.has(f))
       .map(f => ({ key: f.key, label: f.label.hu }));
 
     const enumChanged = [];
@@ -160,12 +168,12 @@ const SchemaFromXlsx = (() => {
         }
       }
       if (c.labelEn && f.label.en && c.labelEn !== f.label.en) {
-        labelChanged.push({ key: c.key, label: f.label.hu, from: f.label.en, to: c.labelEn });
+        labelChanged.push({ key: f.key, label: f.label.hu, from: f.label.en, to: c.labelEn });
       }
     }
 
-    const schemaOrder = stored.map(f => f.key).filter(k => fileKeys.includes(k));
-    const fileOrder   = fileKeys.filter(k => byKey.has(k));
+    const schemaOrder = stored.filter(f => fileMezok.has(f)).map(f => f.key);
+    const fileOrder   = fileKeys.filter(k => byKey.has(k)).map(k => byKey.get(k).key);
     const orderChanged = schemaOrder.join('|') !== fileOrder.join('|');
 
     return {

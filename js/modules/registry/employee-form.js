@@ -96,7 +96,7 @@ const EmployeeForm = (() => {
           ${unknown ? `<option value="${escHtml(val)}" selected>${escHtml(val)} (ismeretlen)</option>` : ''}
         </select>`;
     } else if (f.type === 'date') {
-      input = `<input type="date" class="field-input" id="${id}" data-key="${escHtml(f.key)}" value="${escHtml(val)}">`;
+      input = dateFieldHtml({ id, key: f.key, value: val });
     } else if (f.type === 'number') {
       input = `<input type="text" inputmode="decimal" class="field-input" id="${id}" data-key="${escHtml(f.key)}" value="${escHtml(val)}">`;
     } else {
@@ -134,7 +134,7 @@ const EmployeeForm = (() => {
             ${Object.entries(types).map(([k, v]) => `<option value="${k}">${escHtml(v)}</option>`).join('')}
           </select>
           <input type="text" class="field-input" id="ef-id-value" placeholder="Azonosító értéke">
-          <input type="date" class="field-input" id="ef-id-from" title="Érvényesség kezdete">
+          ${dateFieldHtml({ id: 'ef-id-from', attrs: 'title="Érvényesség kezdete"' })}
           <button type="button" class="btn btn-ghost btn-sm" id="ef-id-add">Hozzáadás</button>
         </div>
       </section>`;

@@ -93,6 +93,7 @@ const RegistryModule = (() => {
 
     state.corruptError = null;
     state.ready = true;
+    await migrateLegacyKeys();
     renderSidebar();
     renderList();
   }
@@ -110,8 +111,25 @@ const RegistryModule = (() => {
     await EmployeeRepo.load();
     await CaseRepo.load();
     state.ready = true;
+    await migrateLegacyKeys();
     renderSidebar();
     renderList();
+  }
+
+  /**
+   * Egyszeri séma-felhozatal: a `_hun` végű mezőkulcsok rövidítése. A rekordok
+   * adatai a kulccsal együtt mozognak, ezért a nyilvántartás betöltése UTÁN fut.
+   */
+  async function migrateLegacyKeys() {
+    try {
+      const emps = EmployeeRepo.all({ includeArchived: true });
+      if (!SchemaStore.migrateLegacyKeys(emps)) return;
+      await SchemaStore.save();
+      await EmployeeRepo.flush();
+      BevLogger.info('SEMA_MIGRACIO', 'A _hun mezőkulcsok rövidültek', '', '');
+    } catch (e) {
+      BevLogger.warn('SEMA_MIGRACIO', 'A kulcs-rövidítés nem futott le', e.message, '');
+    }
   }
 
   /**
@@ -290,6 +308,8 @@ const RegistryModule = (() => {
       b.addEventListener('click', () => openForm(b.dataset.edit)));
     box.querySelectorAll('[data-archive]').forEach(b =>
       b.addEventListener('click', () => toggleArchive(b.dataset.archive)));
+    box.querySelectorAll('[data-destroy]').forEach(b =>
+      b.addEventListener('click', () => confirmDestroy(b.dataset.destroy)));
   }
 
   function renderRow(cols) {
@@ -311,6 +331,8 @@ const RegistryModule = (() => {
             <button class="btn btn-ghost btn-sm" data-archive="${emp.id}">
               ${emp.archived ? 'Visszaállítás' : 'Archiválás'}
             </button>
+            <button class="btn btn-ghost btn-sm rg-del" data-destroy="${emp.id}"
+                    title="Végleges törlés – téves felvitel javítására">Törlés</button>
           </td>
         </tr>`;
     };
@@ -358,6 +380,61 @@ const RegistryModule = (() => {
     EmployeeRepo.setArchived(id, !emp.archived);
     toast(emp.archived ? 'Visszaállítva' : 'Archiválva', 'success');
     renderList();
+  }
+
+  /**
+   * Végleges törlés – téves felvitel javítására.
+   *
+   * Az archiválás a normál út: az adat megmarad, csak kikerül a listákból. Ez
+   * viszont valóban töröl, ezért előbb kiírjuk, mi tűnik el: a személy neve, az
+   * azonosító-története és az ügyei. A visszaút a `data/backup/` mappa – a
+   * mentés a törlés ELŐTTI állapotról készül, tehát visszaállítható.
+   */
+  function confirmDestroy(id) {
+    const emp = EmployeeRepo.get(id);
+    if (!emp) return;
+    const nev = nevOf(emp);
+    let ugyek = 0;
+    try { ugyek = CaseRepo.forEmployee(id).length; } catch {}
+
+    showDialog({
+      title: 'Végleges törlés',
+      body: `
+        <p style="font-size:13px;margin-bottom:10px">
+          Biztosan véglegesen törlöd: <b>${escHtml(nev)}</b>?
+        </p>
+        <ul class="sv-warn-list">
+          <li><b>${emp.identifiers.length}</b> azonosító a történetével együtt elvész.</li>
+          ${ugyek ? `<li><b>${ugyek}</b> ügy is törlődik, az idővonalukkal együtt.</li>` : ''}
+        </ul>
+        <p class="ef-hint">
+          Ha csak ki akarod venni a listákból, használd inkább az <b>Archiválás</b>t –
+          az visszafordítható. A törlés a <code>data/backup/</code> mappából
+          állítható vissza, ha adatmappát használsz.
+        </p>`,
+      footer: `
+        <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Mégse</button>
+        <button class="btn btn-danger btn-sm" id="rg-destroy-confirm">Végleges törlés</button>`,
+    });
+
+    document.getElementById('rg-destroy-confirm').addEventListener('click', async () => {
+      try {
+        try { CaseRepo.destroyForEmployee(id); } catch {}
+        EmployeeRepo.destroy(id);
+        await EmployeeRepo.flush();
+        closeDialog();
+        BevLogger.info('SZEMELY_TORLES', `Végleges törlés: ${nev}`, '', `ugyek=${ugyek}`);
+        toast('Véglegesen törölve', 'success');
+        renderList();
+      } catch (e) {
+        toast('A törlés nem sikerült: ' + e.message, 'error');
+      }
+    });
+  }
+
+  function nevOf(emp) {
+    const v = SchemaStore.resolveValues(emp.fields, 'hu');
+    return [v.surname, v.forename].filter(Boolean).join(' ') || '(névtelen)';
   }
 
   async function pickDataDir() {

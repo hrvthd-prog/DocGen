@@ -64,19 +64,13 @@ function buildRenderRow(emp, maiNap) {
   return v;
 }
 
+// Ugyanaz a feloldás, amit a docgen használ – a séma adja, nem a másolata.
+// Korábban itt egy kézzel karbantartott ikertestvér állt, ami elavulhatott.
 function makeSchemaResolver(emp) {
   const gyorsito = new Map();
   return (name) => {
-    if (gyorsito.has(name)) return gyorsito.get(name);
-    let out = null;
-    const hit = SchemaStore.resolveTag(name);
-    if (hit) {
-      out = hit.field.type === 'computed'
-        ? SchemaStore.computeField(hit.field, emp.fields, hit.lang)
-        : ValueCodec.render(hit.field, emp.fields[hit.field.key], hit.lang);
-    }
-    gyorsito.set(name, out);
-    return out;
+    if (!gyorsito.has(name)) gyorsito.set(name, SchemaStore.renderTag(name, emp.fields));
+    return gyorsito.get(name);
   };
 }
 
@@ -88,7 +82,7 @@ const EMP = {
     citizenship: 'Fülöp-szigeteki', sex: 'male', marital_status: 'married',
     educational_attainment: 'tertiary', speaks_hungarian: 'yes',
     mothers_surname_at_birth: 'Szabó', mothers_forename_at_birth: 'Mária',
-    place_of_birth_country_hun: 'Fülöp-szigetek', place_of_birth_locality: 'Manila',
+    place_of_birth_country: 'Fülöp-szigetek', place_of_birth_locality: 'Manila',
     postal_code: '1024', locality: 'Budapest',
     name_of_public_place: 'Fő', type_of_public_place: 'utca', street_number: '12',
   },

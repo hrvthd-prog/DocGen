@@ -59,7 +59,7 @@ const XlsxRead = (() => {
             fields[field.key] = id;
           }
         } else if (field.type === 'date') {
-          const iso = toIsoDate(nyers);
+          const iso = serialToIso(ws, r, c) || toIsoDate(nyers);
           fields[field.key] = iso || nyers;
           if (!iso) gondok.push(`„${field.label.hu}": nem értelmezhető dátum – ${nyers}`);
         } else {
@@ -81,6 +81,28 @@ const XlsxRead = (() => {
     return v == null ? '' : String(v).trim();
   }
 
+  /**
+   * Valódi Excel-dátumcella → ISO.
+   *
+   * Ez a dátumbeolvasás lényege. A cella *megjelenített* szövege a kitöltő
+   * gépének területi beállításától függ: ugyanaz a nap lehet „1990-03-15",
+   * „1990. 03. 15." vagy „3/15/90". Az utóbbiból nem is lehet megmondani, hogy
+   * hónap/nap vagy nap/hónap a sorrend.
+   *
+   * A tárolt érték viszont mindig ugyanaz a sorszám (1900-as rendszer), és az
+   * egyértelmű. Ezért dátummezőnél NEM a szöveget olvassuk, hanem a sorszámot –
+   * emiatt esett ki korábban a születési idő, az útlevél-dátumok és a
+   * belépés/kilépés a legtöbb kitöltött táblázatból.
+   */
+  function serialToIso(ws, r, c) {
+    const cell = ws[XLSX.utils.encode_cell({ r, c })];
+    if (!cell || cell.t !== 'n' || typeof cell.v !== 'number') return null;
+    // 60 = az 1900-as rendszer nem létező szökőnapja; alatta nincs értelmes dátum
+    if (!(cell.v > 60) || cell.v > 2958465) return null;   // 2958465 = 9999-12-31
+    const d = new Date(Date.UTC(1899, 11, 30) + Math.round(cell.v) * 86400000);
+    return isNaN(d) ? null : d.toISOString().slice(0, 10);
+  }
+
   /** Ha a fejléc nem a gépi kulcs, próbáljuk a magyar/angol címkét és a jelölőket. */
   function matchByLabel(header, schema) {
     const norm = s => String(s).toLowerCase().replace(/[\s._-]+/g, ' ').trim();
@@ -91,11 +113,18 @@ const XlsxRead = (() => {
     ) || null;
   }
 
-  /** Elterjedt dátumalakok ISO-ra. Ami nem egyértelmű, azt nem találgatjuk. */
+  /**
+   * Elterjedt dátumalakok ISO-ra. Ami nem egyértelmű, azt nem találgatjuk:
+   * a „05/11/2027" május 11. és november 5. is lehet, és hatósági ügyben
+   * találgatni nem lehet – az ilyen sor inkább hibát kap.
+   *
+   * Az évvel kezdődő alak viszont egyértelmű, akárhogy is tagolják:
+   * „1990-03-15", „1990.03.15.", „1990. 03. 15." mind ugyanaz a nap.
+   */
   function toIsoDate(s) {
     const t = String(s).trim();
     let m;
-    if ((m = /^(\d{4})[-.\/](\d{1,2})[-.\/](\d{1,2})\.?$/.exec(t))) {
+    if ((m = /^(\d{4})\s*[-.\/]\s*(\d{1,2})\s*[-.\/]\s*(\d{1,2})\s*\.?$/.exec(t))) {
       return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;
     }
     // Excel sorszám (1900-as rendszer)

@@ -57,26 +57,26 @@ const CaseForm = (() => {
 
           <label class="cf-field">
             <span id="cf-trigger-label">${escHtml(CaseTypes.triggerLabel(valasztottTipus))}</span>
-            <input type="date" id="cf-trigger" class="field-input" value="${escHtml(c && c.triggerDate || '')}">
+            ${dateFieldHtml({ id: 'cf-trigger', value: c && c.triggerDate || '' })}
             <small id="cf-trigger-hint">Ebből számoljuk a határidőt. Amíg üres, nincs határidő.</small>
           </label>
 
           <label class="cf-field">
             <span>Határidő</span>
-            <input type="date" id="cf-due" class="field-input" value="${escHtml(c && c.dueAt || '')}">
+            ${dateFieldHtml({ id: 'cf-due', value: c && c.dueAt || '' })}
             <small id="cf-due-hint"></small>
           </label>
 
           <label class="cf-field">
             <span>EH szám</span>
             <input type="text" id="cf-eh" class="field-input" value="${escHtml(c && c.ehNumber || '')}"
-                   placeholder="pl. EH-2026-001">
+                   placeholder="pl. EH18506859">
           </label>
 
           <label class="cf-field">
             <span>Iktatószám</span>
             <input type="text" id="cf-file" class="field-input" value="${escHtml(c && c.fileNumber || '')}"
-                   placeholder="pl. 12345-2/2026">
+                   placeholder="pl. 106-1-12345-2/2026-T">
           </label>
 
           <label class="cf-field cf-field--wide">
@@ -98,6 +98,9 @@ const CaseForm = (() => {
     let dueKezzel = !!(c && c.dueAt);
 
     dueEl.addEventListener('input', () => { dueKezzel = true; frissit(); });
+    // A maszkolt dátummező `input`-ot ad gépelés közben – a `change` csak
+    // fókuszvesztéskor jönne, addig a határidő-előnézet elavult maradna.
+    triggerEl.addEventListener('input', () => { dueKezzel = false; frissit(); });
 
     function frissit() {
       const tk = tipusEl.value;
@@ -188,9 +191,7 @@ const CaseForm = (() => {
 
           <label class="cf-field">
             <span>Mikor történt?</span>
-            <input type="date" id="cs-occurred" class="field-input"
-                   max="${escHtml(CaseTypes.isoDate(new Date()))}"
-                   value="${escHtml(CaseTypes.isoDate(new Date()))}">
+            ${dateFieldHtml({ id: 'cs-occurred', value: CaseTypes.isoDate(new Date()) })}
             <small>Ha napokkal később viszed fel, állítsd a tényleges napra.</small>
           </label>
 
@@ -279,7 +280,7 @@ const CaseForm = (() => {
           </label>
           <label class="cf-field">
             <span>Meddig érvényes?</span>
-            <input type="date" id="ci-expires" class="field-input">
+            ${dateFieldHtml({ id: 'ci-expires' })}
             <small>Ebből számoljuk a következő benyújtási ablakot.</small>
           </label>
         </div>`,
@@ -361,9 +362,7 @@ const CaseForm = (() => {
         <div class="cf-grid">
           <label class="cf-field">
             <span>Mikor történt?</span>
-            <input type="date" id="ce-occurred" class="field-input"
-                   max="${escHtml(CaseTypes.isoDate(new Date()))}"
-                   value="${escHtml(e.occurredAt || '')}">
+            ${dateFieldHtml({ id: 'ce-occurred', value: e.occurredAt || '' })}
           </label>
           <div class="cf-field">
             <span>Rögzítve</span>

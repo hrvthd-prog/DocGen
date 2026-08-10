@@ -187,6 +187,30 @@ function sablon04() {
   ]);
 }
 
+/**
+ * Dátum-részek és szótár — a hatósági formanyomtatvány mintájára.
+ *
+ * A tartózkodási engedély kérelmén a dátum három külön rovatba megy
+ * („____ year ____ month ____ day"), az ország pedig magyarul kell, miközben
+ * a kitöltő angolul adta meg. Mindkettő jelölő-szinten oldódik meg, adatbeviteli
+ * körök nélkül.
+ */
+function sablon05() {
+  return docx([
+    cim('Dátum-részek és szótár — próbasablon'),
+
+    cim('Dátum három rovatban'),
+    p('date of birth: {{date_of_birth_year}} year {{date_of_birth_month}} month {{date_of_birth_day}} day'),
+    p('útlevél lejárata: {{pp_validity_év}} év {{pp_validity_hónap}} hó {{pp_validity_nap}} nap'),
+    p('teljes dátum: {{date_of_birth}}'),
+
+    cim('Szótár: ugyanaz a mező két nyelven'),
+    p('ország magyarul: {{previous_country_hun}}'),
+    p('country in English: {{previous_country_eng}}'),
+    p('munkakör magyarul: {{position_hun}}'),
+  ]);
+}
+
 // ── Importálható táblázat ───────────────────────────────────────────────────
 
 /**
@@ -201,7 +225,7 @@ const IMPORT_SOROK = [
     personnel_reg_number: 'SAP-1001', surname: 'Próba', forename: 'Péter',
     date_of_birth: '1990-03-15', citizenship: 'Szerbia', sex: 'male',
     mothers_surname_at_birth: 'Kovács', mothers_forename_at_birth: 'Anna',
-    place_of_birth_country_hun: 'Szerbia', place_of_birth_locality: 'Szabadka',
+    place_of_birth_country: 'Szerbia', place_of_birth_locality: 'Szabadka',
     marital_status: 'married', pp_number: 'PP1001', pp_validity: '2030-06-30',
     passport_type: 'private', postal_code: '1024', locality: 'Budapest',
     name_of_public_place: 'Fő', type_of_public_place: 'utca', street_number: '12',
@@ -320,6 +344,7 @@ function semaMezok() {
     ['02-ketnyelvu-nyilatkozat.docx', sablon02()],
     ['03-jelolonegyzetek.docx',       sablon03()],
     ['04-tordelt-jelolok.docx',       sablon04()],
+    ['05-datum-reszek.docx',          sablon05()],
   ];
   for (const [nev, buf] of sablonok) {
     fs.writeFileSync(path.join(SABLONOK, nev), buf);

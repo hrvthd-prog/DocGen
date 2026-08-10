@@ -174,13 +174,79 @@ test('ismeretlen jelölő null', () => {
   assertEq(SchemaStore.resolveTag('NincsIlyenMező'), null);
 });
 
+test('_HUN végződés a magyar nyelvet kéri', () => {
+  const r = SchemaStore.resolveTag('previous_country_hun');
+  assertEq(r.field.key, 'previous_country');
+  assertEq(r.lang, 'hu');
+  assertEq(SchemaStore.resolveTag('previous_country_eng').lang, 'en');
+});
+
+// A teljes név elsőbbsége nem szőrszálhasogatás: a „Név" jelölő az `év`
+// utótagra végződik, tehát utótag-elemzéssel „N" + év lenne belőle. Egy valódi
+// mezőnév mindig erősebb, mint egy utótag-találgatás.
+test('a teljes mezőnév erősebb, mint az utótag-értelmezés', () => {
+  const r = SchemaStore.resolveTag('Név');
+  assertEq(r.field.key, 'full_name');
+  assertEq(r.part, null);
+});
+
+test('dátum-rész jelölők: év, hónap, nap', () => {
+  const mezok = { date_of_birth: '1999-01-05' };
+  assertEq(SchemaStore.renderTag('date_of_birth_year', mezok),  '1999');
+  assertEq(SchemaStore.renderTag('date_of_birth_month', mezok), '01');
+  assertEq(SchemaStore.renderTag('date_of_birth_day', mezok),   '05');
+  assertEq(SchemaStore.renderTag('date_of_birth', mezok),       '1999-01-05');
+  // magyar utótagok ugyanúgy
+  assertEq(SchemaStore.renderTag('Születési idő_év', mezok),   '1999');
+  assertEq(SchemaStore.renderTag('Születési idő_nap', mezok),  '05');
+});
+
+test('hiányzó vagy hibás dátumból nem találgatunk részt', () => {
+  assertEq(SchemaStore.renderTag('date_of_birth_year', {}), '');
+  assertEq(SchemaStore.renderTag('date_of_birth_year', { date_of_birth: 'tavaly' }), '');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+section('Szótár: szabad szöveg angolról magyarra');
+
+test('a szótár mindkét irányban felismer, és nyelvet vált', () => {
+  SchemaStore.setDictionary([{ en: 'Serbia', hu: 'Szerbia' }, { en: 'welder', hu: 'hegesztő' }]);
+  const mezok = { previous_country: 'Serbia', position: 'welder' };
+  assertEq(SchemaStore.renderTag('previous_country_hun', mezok), 'Szerbia');
+  assertEq(SchemaStore.renderTag('previous_country_eng', mezok), 'Serbia');
+  assertEq(SchemaStore.renderTag('previous_country', mezok),     'Szerbia');
+  assertEq(SchemaStore.renderTag('position_hun', mezok),         'hegesztő');
+  // magyarul beírt érték is felismerhető, és visszaadható angolul
+  assertEq(SchemaStore.renderTag('previous_country_eng', { previous_country: 'Szerbia' }), 'Serbia');
+});
+
+test('szótárban nem szereplő érték változatlanul megy tovább', () => {
+  assertEq(SchemaStore.renderTag('previous_country_hun', { previous_country: 'Fantázia' }), 'Fantázia');
+});
+
+test('a szótár az enum mezőket nem bántja', () => {
+  SchemaStore.setDictionary([{ en: 'Male', hu: 'Hímnemű' }]);
+  assertEq(SchemaStore.renderTag('Neme', { sex: 'male' }), 'Férfi');
+  SchemaStore.setDictionary([]);
+});
+
+test('a féloldalas pár nem kerül be', () => {
+  const megmaradt = SchemaStore.setDictionary([
+    { en: 'Serbia', hu: '' }, { en: '', hu: 'Ukrajna' },
+    { en: 'Serbia', hu: 'Szerbia' }, { en: 'serbia', hu: 'Másik' },
+  ]);
+  assertEq(megmaradt.length, 1, 'csak a teljes, nem ismétlődő pár marad');
+  assertEq(megmaradt[0].hu, 'Szerbia');
+  SchemaStore.setDictionary([]);
+});
+
 // ════════════════════════════════════════════════════════════════════════════
 section('Számított mezők');
 
 const minta = {
   surname: 'Kovács', forename: 'Anna',
   mothers_surname_at_birth: 'Szabó', mothers_forename_at_birth: 'Mária',
-  place_of_birth_country_hun: 'Fülöp-szigetek', place_of_birth_locality: 'Manila',
+  place_of_birth_country: 'Fülöp-szigetek', place_of_birth_locality: 'Manila',
   postal_code: '1024', locality: 'Budapest',
   name_of_public_place: 'Fő', type_of_public_place: 'utca', street_number: '12',
   sex: 'male', marital_status: 'married',
