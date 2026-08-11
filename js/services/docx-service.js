@@ -161,15 +161,43 @@ const DocxService = (() => {
     // tartalom tizedannyi helyen elfér, és a hálózaton is annyival megy.
     const filled = doc.getZip().generate({ type: 'uint8array', compression: 'DEFLATE' });
     return {
-      buffer:    processCheckboxes(filled, data),
+      buffer:    processCheckboxes(filled, data, opts.equals),
       emptyTags: [...emptyTags].filter(t => t && !t.startsWith('CHECK:') && !t.startsWith('B:')),
     };
   }
 
-  // ── sdt checkbox feldolgozás (jövőbeli Word content control sablonokhoz) ──
+  // ── Word content control (SDT) jelölőnégyzetek feldolgozása ────────────────
+  //
+  // A hatósági űrlapok jelölőnégyzetei „content control"-ok: a `<w:tag>` hordozza
+  // az azonosítót `mező:érték` alakban (pl. `marital_status:unmarried`,
+  // `sex:female`). Két dolgot kell beállítani, hogy a doboz be legyen jelölve:
+  //   1. a Word belső állapotát: `<w14:checked w14:val="1">`
+  //   2. a LÁTHATÓ karaktert a tartalomban: ☒ (checked) vagy ☐ (unchecked)
+  // Ha csak az (1) van meg, a doboz Wordben/LibreOffice-ban üresnek LÁTSZIK.
+
+  const FALSY = new Set(['false','0','nem','hamis','no','n','']);
 
   const normalizeVal = v =>
     String(v === null || v === undefined ? '' : v).trim().toLowerCase().replace(/\s+/g,' ');
+
+  const escXml = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  // A jelölő eldöntése: elsőként a séma-egyeztető (ismeri az enum-írásmódokat,
+  // pl. hogy `unmarried` ≡ „Nőtlen/hajadon"). Ha a séma nem ismeri a mezőt
+  // (`null`), esünk vissza a nyers szöveg-egyezésre a renderelt soron.
+  function makeSdtMatcher(rowData, equals) {
+    return (col, target) => {
+      if (equals) {
+        const v = equals(col, target);
+        if (v !== null && v !== undefined) return !!v;
+      }
+      const empVal = normalizeVal(rowData ? rowData[col] : '');
+      const tgtVal = normalizeVal(target);
+      if (TRUTHY.has(tgtVal)) return TRUTHY.has(empVal);
+      if (FALSY.has(tgtVal))  return !TRUTHY.has(empVal) && empVal !== '';
+      return empVal === tgtVal;
+    };
+  }
 
   function setCheckedInSdtPr(xml, checked) {
     const val = checked ? '1' : '0';
@@ -184,31 +212,60 @@ const DocxService = (() => {
     return xml.replace(/<\/w:sdtPr>/i, `  <w14:checked w14:val="${val}"/></w:sdtPr>`);
   }
 
-  function processSdt(sdtXml, rowData) {
-    const prM = sdtXml.match(/<w:sdtPr\b[\s\S]*?<\/w:sdtPr>/i);
-    if (!prM) return sdtXml;
-    const tagM = prM[0].match(/<w:tag\b[^>]*\bw:val\s*=\s*(['"])(.*?)\1[^>]*\/?>/i);
-    if (!tagM) return sdtXml;
-    const raw = (tagM[2] || '').trim();
-    if (!raw.includes(':')) return sdtXml;
-    const [col, target] = raw.split(':').map(s => s.trim());
-    if (!col) return sdtXml;
-    const empVal  = normalizeVal(rowData[col] ?? '');
-    const tgtVal  = normalizeVal(target);
-    let checked;
-    if (TRUTHY.has(tgtVal)) checked = TRUTHY.has(empVal);
-    else if (new Set(['false','0','nem','hamis','no','n','']).has(tgtVal)) checked = !TRUTHY.has(empVal) && empVal !== '';
-    else checked = empVal === tgtVal;
-    const updatedPr = setCheckedInSdtPr(prM[0], checked);
-    return sdtXml.replace(prM[0], updatedPr);
+  // A megjelenítendő karakter a sdtPr-ből: a checkedState/uncheckedState a
+  // kódpontot HEX-ben adja (2612 = ☒, 2610 = ☐). Ha nincs megadva, a saját
+  // konstansaink jönnek.
+  function glyphFromState(sdtPr, checked) {
+    const re = checked
+      ? /<w14:checkedState\b[^>]*\bw14:val\s*=\s*(['"])([0-9A-Fa-f]+)\1/i
+      : /<w14:uncheckedState\b[^>]*\bw14:val\s*=\s*(['"])([0-9A-Fa-f]+)\1/i;
+    const m = re.exec(sdtPr);
+    if (m) { try { return String.fromCodePoint(parseInt(m[2], 16)); } catch (_) { /* rossz kódpont */ } }
+    return checked ? CHECKED : UNCHECKED;
   }
 
-  function processCheckboxes(uint8, rowData) {
+  function setGlyphInSdtContent(sdtXml, sdtPr, checked) {
+    const glyph = glyphFromState(sdtPr, checked);
+    const cM = sdtXml.match(/<w:sdtContent\b[\s\S]*?<\/w:sdtContent>/i);
+    if (!cM) return sdtXml;
+    let content = cM[0];
+    const tRe = /(<w:t\b[^>]*>)([\s\S]*?)(<\/w:t>)/i;   // az ELSŐ szövegfutam
+    if (tRe.test(content)) {
+      content = content.replace(tRe, (_m, open, _body, close) => open + escXml(glyph) + close);
+    } else {
+      content = content.replace(/<w:t\b[^>]*\/>/i, `<w:t xml:space="preserve">${escXml(glyph)}</w:t>`);
+    }
+    return sdtXml.replace(cM[0], content);
+  }
+
+  function processSdt(sdtXml, match) {
+    const prM = sdtXml.match(/<w:sdtPr\b[\s\S]*?<\/w:sdtPr>/i);
+    if (!prM) return sdtXml;
+    // Csak valódi jelölőnégyzet-vezérlőkhöz nyúlunk – a dátum/legördülő
+    // content control-okat (más `mező:érték` tag nélkül is) békén hagyjuk.
+    if (!/<w14:checkbox\b/i.test(prM[0])) return sdtXml;
+    const tagM = prM[0].match(/<w:tag\b[^>]*\bw:val\s*=\s*(['"])(.*?)\1/i);
+    if (!tagM) return sdtXml;
+    const raw = (tagM[2] || '').trim();
+    const i = raw.indexOf(':');
+    if (i < 0) return sdtXml;
+    const col = raw.slice(0, i).trim();
+    const target = raw.slice(i + 1).trim();
+    if (!col || !target) return sdtXml;
+
+    const checked = !!match(col, target);
+    let out = sdtXml.replace(prM[0], setCheckedInSdtPr(prM[0], checked));
+    out = setGlyphInSdtContent(out, prM[0], checked);
+    return out;
+  }
+
+  function processCheckboxes(uint8, rowData, equals) {
     const zip = new PizZip(uint8);
     const entry = zip.file('word/document.xml');
     if (!entry) return uint8;
+    const match = makeSdtMatcher(rowData, equals);
     const xml = entry.asText();
-    const updated = xml.replace(/<w:sdt\b[\s\S]*?<\/w:sdt>/gi, sdt => processSdt(sdt, rowData));
+    const updated = xml.replace(/<w:sdt\b[\s\S]*?<\/w:sdt>/gi, sdt => processSdt(sdt, match));
     zip.file('word/document.xml', updated);
     return zip.generate({ type: 'uint8array', compression: 'DEFLATE' });
   }
@@ -272,6 +329,7 @@ const DocxService = (() => {
 
   return {
     generateDocx,
+    processCheckboxes,   // alacsonyszintű SDT-jelölő feldolgozás (teszthez is)
     enrichClientRow,
     outputFilename,
     uniqueFilename,
