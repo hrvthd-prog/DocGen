@@ -52,6 +52,61 @@ sablonnal. Röviden, de úgy, hogy a *következő* session ebből folytatni tudj
 
 # Napló
 
+## 2026-08-11 — Elba Sichtreiter címkesablon (58 × 18 mm, 83 név)
+
+**Cél:** Nyomtatható `.xlsx`, ahova a felhasználó beilleszti a 83 nevet, és a
+Sichtreiter-be csúsztatható cetlik pontosan 58 × 18 mm-esek lesznek, közöttük
+2 mm vágási réssel, szaggatott szürke kerettel, középre igazított névvel.
+
+**Változás:** új `tools/sichtreiter-cimkek/` — `generate.py` (generátor),
+`Sichtreiter-cimkek-58x18mm.xlsx` (a szállított sablon), `OLVASD-EL.md`.
+`.gitignore`: névre szóló kivétel az `*.xlsx` kizárás alól ennek az EGY üres
+sablonnak (a felhasználó Python nélkül nem tudná legenerálni); `.gitattributes`:
+`*.xlsx binary`.
+
+**Miért / döntés:**
+- **Két lap, nem egy.** `Nevek` lap = egyetlen sárga sáv (`A2:A84`), ide megy a
+  beillesztés; `Címkék` lap = a rács, formulával (`=IF(Nevek!$A$k="",...)`) húzza
+  át a neveket. Ha a nevek közvetlenül a rácsba kerülnének, egy 83 elemű lista
+  beillesztése a rés-oszlopok miatt szétesne.
+- **Az `.xlsx` oszlopszélesség nem mm, hanem karakter-egység**, és az
+  átszámítás alkalmazásfüggő. Kimértem: Excel `px = char × MDW_egész + 5`
+  (Calibri 11 → MDW 7), LibreOffice `px = char × MDW_valós` (7,392). A `+5`
+  miatt a kettő egyszerre nem hozható pontosra → `--target excel|libreoffice`,
+  alapértelmezés Excel (ez a dokumentált eset, a „8,43 char = 64 px"
+  alapértékkel hitelesíthető). A szállított fájl Calc-ban ~59,9 mm.
+- **13 címkesor / lap, nem 14.** 14 sor is kijönne (278 mm), de akkor a
+  fenti/lenti margó 9,5 mm-re szűkül, amit egyes tintasugarasok levágnak.
+  Így 3 × 13 = 39 / lap, 28 sor × 3 = 84 hely (83 név + 1 tartalék), 3 lap.
+- **Oldalmargó szándékosan 10 mm, nem a „pontos" 16 mm.** 16 mm-rel a
+  nyomtatható sáv épp csak annyi, mint a rács (178 mm), és a legkisebb
+  kerekítés új lapra tolta a 3. oszlopot — ezt LibreOffice-szal reprodukáltam.
+  10 mm + `horizontalCentered` a papíron visszaadja a szimmetrikus 16 mm-t.
+- **A szállított fájlt NEM mentettem át LibreOffice-szal**: az a sormagasságot
+  egész képpontra kvantálja (5,67 pt → 5,25 pt), azaz a 2 mm-es rést 1,85 mm-re
+  rontja. Az oszlopszélességeket megtartja.
+
+**Tesztek:**
+- `node test/run-all.js` → minden készlet zöld (13/13 az utolsó készletben);
+  ez a változás JS-t nem érint.
+- Formulák: 83 névvel kitöltött *másolaton* `recalc.py` → 0 hiba, 84 formula;
+  mind a 84 hely a helyes `Nevek!A{k}`-ra képez, olvasási sorrendben.
+- Geometria: a `--target libreoffice` változatot PDF-be renderelve mérve
+  **58,06 × 17,98 mm**, vízszintes rés **1,99 mm** (cél 58 / 18 / 2) — ez
+  igazolja a modellt, és rajta keresztül az Excel-ág számítását.
+- Szerkezet: 27 állítás (keret/igazítás/betű/margó/oldaltörés/nyomtatási
+  terület/oldalszám) rendben.
+
+**Nyitott / következő:**
+- Az Excel-ág mm-pontossága **közvetlenül nincs mérve** (a konténerben nincs
+  Excel), csak a dokumentált képletből és a LibreOffice-ágon igazolt modellből
+  következtetve. A felhasználó az első lap kinyomtatása után vonalzóval
+  ellenőrizze — a `Nevek` lap 5. pontja erre külön felszólít.
+- A LibreOffice Calc telepítése a konténerben kézi volt (a `libreoffice-calc`
+  csomag hiányzott, és `lp-solve` dependencia miatt „unpacked" állapotban
+  maradt; a `share/.registry/calc.xcd` bekötése után működik). Ha később megint
+  kell xlsx-render, ez a lépés újra elvégzendő.
+
 ## 2026-08-11 — schema-from-xlsx: dátumoszlopok felismerése (a hiba forrásának végleges lezárása)
 
 **Cél:** Hogy a sablonból épített séma se hozza vissza a dátum-hibát: a
