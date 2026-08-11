@@ -21,6 +21,14 @@ Kész fájlok/
 logs/
 *.log
 
+# Címkesablon – KIVÉTEL a fenti *.xlsx kizárás alól.
+# ÜRES sablon (58×18 mm-es Sichtreiter-cetlik rácsa), valós személyes adat nincs
+# és nem is lehet benne. Verziózva kell lennie, mert a felhasználónak kész
+# fájlként kell megkapnia – Python nélkül nem tudná legenerálni.
+# FIGYELEM: a neveket NE ebbe a példányba illeszd be, hanem egy máshová mentett
+# munkamásolatba – az (más útvonalon lévén) marad kizárva.
+!tools/sichtreiter-cimkek/Sichtreiter-cimkek-58x18mm.xlsx
+
 # Tesztanyag – KIVÉTEL a fenti kizárások alól.
 # Kitalált emberekkel dolgozik, valós személyes adat nincs benne. Enélkül a
 # tesztek friss klónban nem futnak le, mert a fixture-ök hiányoznak – ezt
