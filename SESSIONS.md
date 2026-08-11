@@ -52,6 +52,45 @@ sablonnal. Röviden, de úgy, hogy a *következő* session ebből folytatni tudj
 
 # Napló
 
+## 2026-08-11 — Dátum kimenet: miért jött mm/dd/yy a HU forrás ellenére
+
+**Cél:** A `bb8ddbd` „magyar dátum a dokumentumokban" javítás ellenére a
+generált iratban `mm/dd/yy` jelent meg, pedig a forrás Excel magyar
+(`ÉÉÉÉ.HH.NN`, év elöl).
+
+**Diagnózis (valódi kódon igazolva):**
+- A `formatDate` (`schema-store.js`) csak `type:'date'` mezőre fut, és eddig
+  csak a kötőjeles ISO-t (`1988-04-12`) formázta.
+- A `schema-from-xlsx.js` (204. sor) sablonfájlból **soha nem gyárt `date`
+  mezőt** — csak `enum`/`text`. Ha a séma sablonból készült, a dátumoszlopok
+  `text` típusúak.
+- `text` mezőnél az import a *megjelenített* cellaszöveget tárolja
+  (`xlsx-read.js` else-ág). A szabvány Excel-dátumcellát (formátumkód 14)
+  a SheetJS **`m/d/yy` amerikai alakban** rendereli, függetlenül a HU locale-tól
+  → így lett `mm/dd/yy`, és a formázó rá se nézett.
+- Valódi `date` mezőnél az import a cella *sorszámát* olvassa
+  (`serialToIso`) → ISO → helyes. Végponttól végpontig igazolva: valódi
+  dátumcella ÉS magyar szöveg (`1988.04.12.`, `1988.4.12`) is `1988.04.12.`-t ad.
+
+**Változás:** `js/schema/schema-store.js` — `formatDate` mostantól minden
+EGYÉRTELMŰ **év-elöl** alakot elfogad és egységesít
+(`1988-04-12`, `1988.04.12`, `1988.4.12`, `1988/04/12` → `1988.04.12.`); az
+ambivalens nap/hó vs hó/nap alakot (`04/12/88`) szándékosan **nem** alakítja.
+Tesztek: `test/schema.test.js` bővítve. Commit: `9af334c`.
+
+**A felhasználó teendője (a tényleges javítás nála):** a séma dátummezőinek
+(`Beállítások → séma`: Születési idő, útlevél kiállítás/érvényesség, engedély
+lejárata, munkaviszony kezdet/vég stb.) típusa legyen **Dátum**, ne Szöveg.
+A felhasználó a rossz rekordokat törölte, újra felviszi.
+
+**Nyitott / következő:**
+- Kód-hardening lehetőség: a `schema-from-xlsx.apply` ismerje fel a
+  dátumoszlopokat és tegye `type:'date'`-re (heurisztika: dátum-számformátumú
+  vagy év-elöl mintás cellák), hogy a sablonból épített séma se hozza vissza a
+  hibát. Egyeztetésre vár.
+- Ellenőrizni a felhasználó ÉLŐ sémáján, hogy a dátummezők tényleg `date`
+  típusúak-e (a böngésző tárolójában van, kódból nem látható).
+
 ## 2026-08-11 — SDT (tartalomvezérlős) jelölőnégyzetek kitöltése
 
 **Cél:** A hatósági `.docx` sablonok Word-tartalomvezérlős (content control)
