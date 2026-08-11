@@ -5,3 +5,6 @@
 
 # A Word-dokumentumok binárisak
 *.docx binary
+
+# A táblázatok is (zip-alapúak)
+*.xlsx binary
