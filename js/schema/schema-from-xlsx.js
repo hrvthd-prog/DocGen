@@ -16,11 +16,14 @@ const SchemaFromXlsx = (() => {
 
   const HEADER_ROW = 1;   // gépi kulcsok
   const LABEL_ROW  = 2;   // angol címkék
+  const DATA_ROW   = 3;   // innen kezdődnek a kitöltött értékek
 
   // ── Beolvasás ──────────────────────────────────────────────────────────────
 
   function analyze(arrayBuffer, sheetName) {
-    const wb = XLSX.read(arrayBuffer, { type: 'array' });
+    // cellNF: a cella számformátuma (cell.z) is kell – ebből ismerhető fel a
+    // dátumoszlop (m/d/yy, yyyy.mm.dd stb.), a puszta számtól (azonosító) elkülönítve.
+    const wb = XLSX.read(arrayBuffer, { type: 'array', cellNF: true });
     const name = (sheetName && wb.Sheets[sheetName]) ? sheetName
                : (wb.Sheets['Data'] ? 'Data' : wb.SheetNames[0]);
     const ws = wb.Sheets[name];
@@ -32,11 +35,39 @@ const SchemaFromXlsx = (() => {
       const key   = cellText(ws, HEADER_ROW - 1, c);
       const label = cellText(ws, LABEL_ROW - 1, c);
       if (!key) continue;
-      columns.push({ key, labelEn: label, colIndex: c });
+      columns.push({ key, labelEn: label, colIndex: c, isDate: isDateColumn(ws, c, range.e.r) });
     }
 
     const dropdowns = readDropdowns(arrayBuffer, name, columns);
     return { sheetName: name, columns, dropdowns };
+  }
+
+  /**
+   * Dátum-e ez a cella? Két megbízható jel, találgatás nélkül:
+   *   – valódi Excel-dátumcella: szám + dátum-számformátum (SSF.is_date)
+   *   – szövegben tárolt, ÉV-ELÖL alak (egyértelmű): 1988-04-12, 1988.04.12.…
+   * A puszta szám (azonosító, telefonszám) és a nap/hó-sorrendű szöveg NEM az.
+   */
+  function isDateCell(cell) {
+    if (!cell) return false;
+    if (cell.t === 'n' && typeof cell.v === 'number') {
+      return !!(cell.z && XLSX.SSF && typeof XLSX.SSF.is_date === 'function' && XLSX.SSF.is_date(cell.z));
+    }
+    const s = String(cell.v == null ? '' : cell.v).trim();
+    return /^\d{4}[-.\/]\d{1,2}[-.\/]\d{1,2}\.?$/.test(s);
+  }
+
+  /** Az oszlop akkor dátum, ha VAN kitöltött cellája és MIND dátum – így egy
+   *  numerikus azonosító-oszlop sosem minősül tévedésből dátumnak. */
+  function isDateColumn(ws, c, lastRow) {
+    let nonEmpty = 0, dates = 0;
+    for (let r = DATA_ROW - 1; r <= lastRow; r++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      if (cellText(ws, r, c) === '') continue;
+      nonEmpty++;
+      if (isDateCell(cell)) dates++;
+    }
+    return nonEmpty > 0 && dates === nonEmpty;
   }
 
   function cellText(ws, r, c) {
@@ -143,6 +174,7 @@ const SchemaFromXlsx = (() => {
         key: c.key,
         labelEn: c.labelEn,
         dropdown: analysis.dropdowns[c.key] || null,
+        isDate: !!c.isDate,
       }));
 
     const removed = stored
@@ -151,6 +183,7 @@ const SchemaFromXlsx = (() => {
 
     const enumChanged = [];
     const labelChanged = [];
+    const typeChanged = [];
     for (const c of analysis.columns) {
       const f = byKey.get(c.key);
       if (!f) continue;
@@ -170,6 +203,11 @@ const SchemaFromXlsx = (() => {
       if (c.labelEn && f.label.en && c.labelEn !== f.label.en) {
         labelChanged.push({ key: f.key, label: f.label.hu, from: f.label.en, to: c.labelEn });
       }
+      // A fájl dátumoszlopa, de a séma szövegként tárolja → a dokumentumban
+      // nyersen (akár m/d/yy) jönne. Enum mezőt nem bántunk.
+      if (c.isDate && !fileVals && f.type !== 'date' && f.type !== 'enum') {
+        typeChanged.push({ key: f.key, label: f.label.hu, from: f.type, to: 'date' });
+      }
     }
 
     const schemaOrder = stored.filter(f => fileMezok.has(f)).map(f => f.key);
@@ -177,9 +215,9 @@ const SchemaFromXlsx = (() => {
     const orderChanged = schemaOrder.join('|') !== fileOrder.join('|');
 
     return {
-      added, removed, enumChanged, labelChanged, orderChanged,
+      added, removed, enumChanged, labelChanged, typeChanged, orderChanged,
       fileOrder: fileKeys,
-      hasChanges: !!(added.length || removed.length || enumChanged.length || labelChanged.length || orderChanged),
+      hasChanges: !!(added.length || removed.length || enumChanged.length || labelChanged.length || typeChanged.length || orderChanged),
     };
   }
 
@@ -201,7 +239,7 @@ const SchemaFromXlsx = (() => {
       const field = {
         key: a.key,
         group: 'egyeb',
-        type: a.dropdown ? 'enum' : 'text',
+        type: a.dropdown ? 'enum' : (a.isDate ? 'date' : 'text'),
         required: false,
         label: { hu: a.labelEn || a.key, en: a.labelEn || '' },
         tags: [],
@@ -228,6 +266,12 @@ const SchemaFromXlsx = (() => {
       if (!choices.labelChanged?.includes(l.key)) continue;
       const f = s.fields.find(x => x.key === l.key);
       if (f) { f.label.en = l.to; changes.push(`Angol címke: ${l.key}`); }
+    }
+
+    for (const t of (d.typeChanged || [])) {
+      if (!choices.typeChanged?.includes(t.key)) continue;
+      const f = s.fields.find(x => x.key === t.key);
+      if (f) { f.type = 'date'; changes.push(`Típus dátumra: ${t.key}`); }
     }
 
     if (choices.order && d.fileOrder) {
