@@ -474,8 +474,13 @@ const SettingsModule = (() => {
         ${szakasz('Új mező a fájlban', d.added.map(a => ({
           key: a.key,
           html: `<b>${escHtml(a.key)}</b>${a.labelEn ? ' – ' + escHtml(a.labelEn) : ''}${
-            a.dropdown ? ` <i>(választható: ${escHtml(a.dropdown.join(', '))})</i>` : ''}`,
+            a.dropdown ? ` <i>(választható: ${escHtml(a.dropdown.join(', '))})</i>`
+                       : a.isDate ? ' <i>(dátum)</i>' : ''}`,
         })), 'added')}
+        ${szakasz('Dátumként ismert mező', (d.typeChanged || []).map(t => ({
+          key: t.key,
+          html: `<b>${escHtml(t.label)}</b> (${escHtml(t.key)}): ${escHtml(t.from)} → dátum`,
+        })), 'typeChanged', 'A fájlban dátum, a séma szövegként tárolja – enélkül a dokumentumban nyersen (akár m/d/yy) jelenne meg.')}
         ${szakasz('Megváltozott választható értékek', d.enumChanged.map(e => ({
           key: e.key,
           html: `<b>${escHtml(e.label)}</b>: ${
@@ -515,6 +520,7 @@ const SettingsModule = (() => {
         added: gyujt('added'),
         enumChanged: gyujt('enumChanged'),
         labelChanged: gyujt('labelChanged'),
+        typeChanged: gyujt('typeChanged'),
         order: !!document.getElementById('sv-diff-order')?.checked,
       };
       const { schema, changes } = SchemaFromXlsx.apply(SchemaStore.get(), d, choices);

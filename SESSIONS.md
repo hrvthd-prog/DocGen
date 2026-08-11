@@ -52,6 +52,31 @@ sablonnal. Röviden, de úgy, hogy a *következő* session ebből folytatni tudj
 
 # Napló
 
+## 2026-08-11 — schema-from-xlsx: dátumoszlopok felismerése (a hiba forrásának végleges lezárása)
+
+**Cél:** Hogy a sablonból épített séma se hozza vissza a dátum-hibát: a
+dátumoszlopok `date` típusúak legyenek, ne `text`.
+
+**Változás:**
+- `js/schema/schema-from-xlsx.js` — az `analyze` felismeri a dátumoszlopokat
+  (`isDate`): valódi Excel-dátumcella (szám + dátum-számformátum,
+  `XLSX.SSF.is_date`), vagy szövegben tárolt EGYÉRTELMŰ év-elöl alak. Puszta
+  szám (azonosító) és nap/hó-sorrendű szöveg NEM az. Egy oszlop akkor dátum, ha
+  minden kitöltött cellája az. Az `analyze` mostantól `cellNF:true`-val olvas
+  (kell a `cell.z` formátum). Új mező → `type:'date'`. Új `typeChanged` diff-
+  kategória: meglévő szöveg-mező, amit a fájl dátumnak mutat → dátumra javasol.
+- `js/modules/settings/settings-view.js` — „Dátumként ismert mező" szekció a
+  séma-összevető párbeszédben + a választás begyűjtése; az új dátummezők
+  „(dátum)" jelzést kapnak.
+- Teszt: `test/schema-from-xlsx-date.test.js` (11 eset), felvéve a run-all-ba.
+
+**Használat a felhasználónak:** Beállítások → „Séma összevetése adatbekérővel";
+a dátumoszlopok most `date`-ként jönnek be, a szövegként tárolt dátummezőket a
+„Dátumként ismert mező" szekcióban egy pipával dátumra lehet váltani.
+
+**Tesztek:** teljes `node test/run-all.js` zöld (a `schema-from-xlsx.test.js`
+külső mintafájl híján kihagyva — ez korábbi viselkedés).
+
 ## 2026-08-11 — Dátum kimenet: miért jött mm/dd/yy a HU forrás ellenére
 
 **Cél:** A `bb8ddbd` „magyar dátum a dokumentumokban" javítás ellenére a
