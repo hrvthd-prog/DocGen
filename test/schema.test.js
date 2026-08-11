@@ -243,6 +243,16 @@ test('csonka dátumot nem szépítünk', () => {
   assertEq(SchemaStore.renderTag('date_of_birth', { date_of_birth: '' }), '');
 });
 
+test('év-elöl alak akárhogy tagolva egységesül, ambigúzat nem alakítunk', () => {
+  // Év elöl = egyértelmű, akárhogy tagolják → 1988.04.12.
+  for (const raw of ['1988-04-12', '1988.04.12', '1988.04.12.', '1988.4.12', '1988/04/12']) {
+    assertEq(SchemaStore.renderTag('date_of_birth', { date_of_birth: raw }), '1988.04.12.', raw);
+  }
+  // nap/hó vs hó/nap → találgatás lenne, ezért érintetlenül marad
+  assertEq(SchemaStore.renderTag('date_of_birth', { date_of_birth: '04/12/88' }), '04/12/88');
+  assertEq(SchemaStore.renderTag('date_of_birth', { date_of_birth: '04/12/1988' }), '04/12/1988');
+});
+
 // ════════════════════════════════════════════════════════════════════════════
 section('Értékhez kötött jelölőnégyzet');
 // A hatósági űrlap nem kiírja az értéket, hanem bejelöli: „☐ male ☒ female".

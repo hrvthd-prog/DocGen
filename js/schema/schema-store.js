@@ -189,19 +189,22 @@ const SchemaStore = (() => {
   }
 
   /**
-   * Tárolt ISO dátum → magyar alak.
+   * Tárolt dátum → magyar alak.
    *
    * Tárolni ÉÉÉÉ-HH-NN alakban tárolunk (gépileg egyértelmű, így megy az
    * adatbekérőbe is), de a hatósági iratba a magyar alak való: 1988.04.12.
    * Ez az EGYETLEN hely, ahol a dátum olvasható alakra vált – a nyilvántartás
    * és az export érintetlen marad.
    *
-   * Ami nem ÉÉÉÉ-HH-NN, azt változatlanul hagyjuk: csonka dátumból nem
-   * gyártunk szebbnek látszó, de hamis alakot.
+   * Az ÉV-ELÖL alak akárhogy tagolva EGYÉRTELMŰ, ezért mindet elfogadjuk és
+   * egységesítjük: 1988-04-12, 1988.04.12, 1988.4.12, 1988/04/12 → 1988.04.12.
+   * Ami NEM év-elöl (pl. 04/12/88), azt változatlanul hagyjuk: a nap/hó vs
+   * hó/nap sorrend találgatás lenne, csonka/hamis dátumot nem gyártunk.
    */
   function formatDate(iso) {
-    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso == null ? '' : iso).trim());
-    return m ? `${m[1]}.${m[2]}.${m[3]}.` : (iso == null ? '' : String(iso));
+    const s = String(iso == null ? '' : iso).trim();
+    const m = /^(\d{4})[-.\/](\d{1,2})[-.\/](\d{1,2})\.?$/.exec(s);
+    return m ? `${m[1]}.${String(m[2]).padStart(2,'0')}.${String(m[3]).padStart(2,'0')}.` : s;
   }
 
   // ── Lekérdezés ─────────────────────────────────────────────────────────────
