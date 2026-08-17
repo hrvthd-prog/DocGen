@@ -56,6 +56,47 @@ sablonnal. Röviden, de úgy, hogy a *következő* session ebből folytatni tudj
 
 # Napló
 
+## 2026-08-17 (4.) — Frissítés ZIP-ből a céges gépen, törlés nélkül
+
+**Cél:** A GitHubról letöltött ZIP-pel lehessen frissíteni az izolált céges
+gépen — kicsomagolás nélkül, és úgy, hogy a lényeges fájlok ne tűnjenek el.
+
+**Változás:** `v10.38`
+- `tools/frissit.vbs` — a ZIP-et ideiglenes mappába bontja, bájtra összeveti a
+  helyi fájlokkal, megmutatja mi változna, **rákérdez**, és csak utána másol.
+  `/csendes` kapcsolóval dialógus nélkül fut.
+- `test/frissit.test.js` — felépít egy hamis „céges gépet" éles adattal, és
+  ellenőrzi, mi maradt meg.
+- `README.md` — új szakasz a használat helyén végzett frissítésről.
+
+**Miért / döntés:**
+- **VBScript, nem PowerShell.** A munkaállomáson a WSH bizonyítottan fut
+  (`tools/pdf-proba/EREDMENY.md`, 2026-08-06), a PowerShell futtatási
+  házirendjéről viszont nincs mérésünk. Ahol van adat, arra építünk.
+- **A szkript soha nem töröl.** A kód és az éles adat ugyanabban a mappában
+  él; egy „tükröző" frissítés (`robocopy /MIR`) a `data/`-t és a `backup/`-ot
+  is letörölné. Az ár: a repóból kikerült fájl ottmarad — ez ártalmatlan,
+  mert az `index.html` névre hivatkozik, nem mappát olvas.
+- A védett mappák (`data`, `Sablonok`, `Kimenet`, `Kész fájlok`, `logs`) nem
+  csak azért maradnak ki, mert a ZIP-ben nincsenek benne (`.gitignore`),
+  hanem külön névre szóló tiltás is van rájuk — a teszt ezt úgy méri, hogy a
+  próba-ZIP-be szándékosan tesz `data/` fájlt.
+- Bájtra hasonlít (ADODB.Stream, `iso-8859-1` — az egyetlen kódolás, amiben
+  mind a 256 bájtnak van saját karaktere), nem dátumra: a ZIP időbélyegei nem
+  megbízhatóak, a méret-egyezés pedig nem elég.
+- A másolt fájlokról letörli a `Zone.Identifier` bejegyzést, különben a
+  letöltésből származó `.vbs` indításkor figyelmeztetést kap.
+
+**Tesztek:** `node test/run-all.js` → minden készlet zöld, benne 8 új teszt.
+A `vbs-encoding` készlet automatikusan az új szkriptre is kiterjed.
+
+**Nyitott / következő:**
+- Névütközés-csapda: a VBScript nem különbözteti meg a kis- és nagybetűt, így
+  a `Vedett()` függvény és a `VEDETT` tömb ütközött („újradefiniált név").
+  Ez fordítási hiba volt, nem néma — de VBS-ben érdemes rá figyelni.
+- Ha egyszer tényleg zavaró lesz az elárvult fájlok gyűlése, a ZIP
+  fájllistájából kiszámolható, mi tűnt el — de csak a kód-mappákon belül.
+
 ## 2026-08-17 (3.) — „HR adatlap" nyomtatási lapfül, makró nélkül
 
 **Cél:** A HR kapjon nyomtatható/PDF-be menthető adatlapot a kitöltött

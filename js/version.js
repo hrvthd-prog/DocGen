@@ -1,4 +1,4 @@
 'use strict';
 
 // Ezt a fájlt a tools/verzio.js írja minden commitnál. Kézzel ne szerkeszd.
-window.APP_VERZIO = { verzio: '10.37', datum: '2026-08-17' };
+window.APP_VERZIO = { verzio: '10.38', datum: '2026-08-17' };
