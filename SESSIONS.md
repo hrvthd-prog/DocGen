@@ -56,6 +56,107 @@ sablonnal. Röviden, de úgy, hogy a *következő* session ebből folytatni tudj
 
 # Napló
 
+## 2026-08-17 (3.) — „HR adatlap" nyomtatási lapfül, makró nélkül
+
+**Cél:** A HR kapjon nyomtatható/PDF-be menthető adatlapot a kitöltött
+táblázatból, a saját „Personal Data Sheet" elrendezésében.
+
+**Változás:**
+- `js/schema/export-profiles.js` — új `printSheet` leírás: szakaszok, soronként
+  egy címke és a mögötte álló mezőkulcsok. Az ELRENDEZÉS ADAT.
+- `js/services/xlsx-write.js` — `addPrintSheet()`: a harmadik lapfül (A4, álló,
+  egy oldal szélesség), egyetlen írható vezérlőcellával (B2 = a személy sora a
+  `Data` lapon). Minden érték `INDEX`-képlet.
+- `test/xlsx.test.js` — 5 új teszt, köztük a lényegi: mezőnként visszafejti a
+  képletek oszlopbetűit és összeveti a `Data` lap tényleges oszlopaival.
+- `README.md` — új szakasz a nyomtatási lapról.
+
+**Miért / döntés:**
+- **Nem VBA.** A makrós munkafüzet `.xlsm`, azt a céges makróvédelem és a
+  levélszűrők blokkolhatják, ráadásul az ExcelJS nem tud VBA-projektet írni —
+  a sablon így nem lenne generálható. A képletes megoldás ugyanazt adja, és a
+  fájl `.xlsx` marad. (A felhasználó ezt választotta három felvetett út közül.)
+- A lap védett, a vezérlőcella kivételével minden zárolt: egy elgépelés
+  különben némán kitörölné az adatlap felét.
+- Összefűzésnél szóköz + `TRIM`, nem vessző: üres mezőnél a vessző lógva
+  maradna („Szerbia, ”). Ez a lap a HR-nek szól, nem hatósági irat.
+- A képletek oszlopbetűi a séma sorrendjéből jönnek, ezért egy átrendezés
+  NÉMÁN elcsúsztathatná őket (az útlevélszám helyén a TAJ). Ezért van rá teszt.
+- Az „ID number” rovatba az útlevélszám kerül (a felhasználó döntése): a
+  külföldi munkavállalónak nincs magyar személyi igazolványa.
+
+**Tesztek:** `node test/run-all.js` → 322/322 zöld.
+`node tools/kiadas.js --csak-ellenoriz` → zöld. `node tools/adatbekero.js` → 3
+lapfül, 65 oszlop.
+
+**Nyitott / következő:**
+- **A `Personal_data_sheet_2023.xlsx` NEM olvasható.** A fájl Microsoft
+  IRM/Purview-védett (a CFB-ben `DRMEncryptedTransform` + `Primary`,
+  `EncryptionInfo` nélkül); sem a SheetJS, sem az `msoffcrypto-tool` nem nyitja,
+  és nincs jelszó, amit meg lehetne adni — a kulcs az Azure RMS-nél van. A
+  nyomtatási lap ezért a KORÁBBI `Date_sheet.xlsx` elrendezését követi.
+  Ha megjön a 2023-as változat védelem nélkül (Fájl → Információ → Hozzáférés
+  korlátozása → Korlátlan hozzáférés, majd Mentés másként), a `printSheet`
+  felsorolását kell hozzáigazítani — kódot nem.
+- A nyelvtudás és a gyerekek egy-egy szabad szöveges cella, nem alrács.
+- Commit-hash: még nincs commitolva.
+
+
+## 2026-08-17 (2.) — Oszlopsorrend a hatósági nyomtatvány szerint
+
+**Cél:** Az adatbekérő oszlopai olyan sorrendben álljanak, ahogy a 9. sz.
+tartózkodási engedély iránti kérelemben és a betétlapokban (9.7. Vendégmunkás,
+9.9. EU Kék Kártya) vannak — hogy az átvezetés fentről lefelé menjen. Emellett:
+a HR-mezők a saját hatósági rovatuk mellé kerüljenek, ne egy blokkba a végén.
+
+**Változás:**
+- `js/schema/seed-schema.js` — a `fields` tömb átrendezve a nyomtatvány
+  rovatsorrendjére, szakaszonkénti kommentekkel (fejrész / 1. / 2. / 3. / 6. /
+  7. pont / betétlap / nem-hatósági). A HR-mezők `group`-ja tematikus lett; a
+  `hr` gyűjtőcsoport helyett `csalad` és `hr_belso` van. 65 oszlop.
+- **Törölve:** `hr_id_number` (az útlevélszám viszi) és
+  `hr_professional_background` (erre az `occupation_before_arrival` van).
+- **Javítva:** `pp_issuance_place` a `pp_issuance_date` MÖGÉ került — a
+  nyomtatványon egyetlen rovat: „kiállításának ideje, helye".
+- `js/schema/export-profiles.js` — `groupFill` az új csoportokra,
+  `freezeColumns: 3 → 7` (a névvel bezárólag; a hatósági sorrendben a név csak
+  a 6–7. oszlop).
+- `test/schema.test.js` — új `HATOSAGI_SORREND` lista: EZ az oszlopsorrend
+  szerződése. Plusz teszt a pp_issuance_place helyére és a törölt mezőkre.
+- `test/xlsx.test.js` — új `oszlop(ws, kulcs)` segéd; minden fix oszlopindex
+  kulcs szerinti keresésre cserélve.
+- `test/schema-from-xlsx.test.js` — az `orderChanged` mostantól `true`, külön
+  teszttel és indoklással.
+- `../adatbekero.xlsx` újragenerálva.
+
+**Miért / döntés:**
+- Az „eredeti 44 oszlop sorrendje" szerződést tudatosan váltottuk le a hatósági
+  sorrendre. A régi oszlopok MEGLÉTÉT továbbra is mérjük (nehogy egy korábban
+  kiküldött adatbekérő importja csendben adatot dobjon el), a sorrendjüket nem.
+- A fix oszlopindexek helyett kulcs szerinti keresés: az átrendezéstől 16 teszt
+  bukott el úgy, hogy közben semmi nem romlott el. Így a következő átrendezés
+  nem jár ezzel.
+- A vészhelyzeti kapcsolattartó a telefonszám mellől a tábla végére került: a
+  kérelem borítóján nincs ilyen rovat, és elöl a fagyasztott sávot szélesítette
+  volna 145 → 219 karakterre.
+- A munkáltató adatai (név, székhely, adószám, KSH, TEÁOR) szándékosan NEM
+  mezők: minden dolgozónál ugyanazok, a sablon írja be őket.
+
+**Tesztek:** `node test/run-all.js` → 317/317 zöld.
+`node tools/kiadas.js --csak-ellenoriz` → zöld.
+`node tools/adatbekero.js` → 65 oszlop, önellenőrzés rendben.
+
+**Nyitott / következő:**
+- **Excel-makró ötlet.** Felmerült, hogy a 2. lapfülön egy gomb generálja le a
+  HR-nek a nyomtatható/PDF dokumentumot. Nem épült meg, mert döntést igényel:
+  a makrós fájl `.xlsm`, azt a levelezés és az Excel makróvédelme blokkolhatja,
+  és a DocGen már tud dokumentumot generálni `.docx` sablonból (+ `docx-pdf.vbs`).
+  Kérdés a felhasználó felé: legyen VBA a táblázatban, vagy inkább egy
+  „HR-adatlap" `.docx` sablon a meglévő pipeline-ban.
+- A `fillableRows` továbbra is 30.
+- Commit-hash: még nincs commitolva.
+
+
 ## 2026-08-17 — Kilépés: az archiválás helyére munkaviszony-megszűnés
 
 **Cél:** Az „archiválás" fogalmilag rossz volt: nem irattározunk, hanem

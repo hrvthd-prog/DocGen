@@ -120,9 +120,9 @@ const FORMANYOMTATVANY_MEZOK = [
   'hr_bank_account', 'hr_children', 'hr_computer_skills', 'hr_degree_document_number',
   'hr_department_cost_center', 'hr_direct_leader', 'hr_dual_citizenship',
   'hr_education_completion_date', 'hr_education_institution', 'hr_education_specialization',
-  'hr_emergency_contact_name', 'hr_emergency_contact_phone', 'hr_id_number',
+  'hr_emergency_contact_name', 'hr_emergency_contact_phone',
   'hr_language_skills', 'hr_previous_employer', 'hr_previous_employment_end',
-  'hr_professional_background', 'hr_sg_category',
+  'hr_sg_category',
 ].sort();
 
 test('a kiinduló séma megegyezik a fájllal – csak a formanyomtatvány-mezők újak', () => {
@@ -131,8 +131,15 @@ test('a kiinduló séma megegyezik a fájllal – csak a formanyomtatvány-mező
   assertEq(d.removed.map(r => r.key).sort().join(','), FORMANYOMTATVANY_MEZOK.join(','),
     'nem a várt mezők hiányoznak a régi fájlból');
   assertEq(d.labelChanged.length, 0, 'eltérő angol címke: ' + JSON.stringify(d.labelChanged));
-  assertEq(d.orderChanged, false, 'eltérő oszlopsorrend');
   if (JSDOM) assertEq(d.enumChanged.length, 0, 'eltérő legördülő: ' + JSON.stringify(d.enumChanged));
+});
+
+test('a régi fájlhoz képest a sorrend SZÁNDÉKOSAN eltér', () => {
+  // 2026-08-17 óta az oszlopsorrend a hatósági nyomtatványé, nem a régi
+  // adatbekérőé (a szerződést a schema.test.js HATOSAGI_SORREND listája őrzi).
+  // A `diff` ezt joggal jelzi – ha egyszer NEM jelezné, az a gyanús.
+  const d = SchemaFromXlsx.diff(analysis, SchemaStore.get());
+  assertEq(d.orderChanged, true, 'a diff nem vette észre a sorrendváltást');
 });
 
 test('hiányzó mezőt észlel, ha a sémából kivesszük', () => {

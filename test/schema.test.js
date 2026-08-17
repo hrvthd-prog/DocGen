@@ -58,12 +58,21 @@ const FORMANYOMTATVANY_MEZOK = [
 // címke szerint egy idegenrendészeti mezőbe kösse őket.
 const HR_MEZOK = [
   'hr_emergency_contact_name', 'hr_emergency_contact_phone', 'hr_dual_citizenship',
-  'hr_id_number', 'hr_bank_account', 'hr_education_completion_date',
+  'hr_bank_account', 'hr_education_completion_date',
   'hr_education_institution', 'hr_education_specialization', 'hr_degree_document_number',
   'hr_computer_skills', 'hr_language_skills', 'hr_children', 'hr_previous_employer',
-  'hr_professional_background', 'hr_previous_employment_end',
+  'hr_previous_employment_end',
   'hr_department_cost_center', 'hr_direct_leader', 'hr_sg_category',
 ];
+
+// Két HR-rovat szándékosan NINCS a sémában, mert már van rá mező:
+//   „Identity Card Number"    → az útlevélszám (pp_number) viszi
+//   „Professional Background" → occupation_before_arrival
+test('a duplikált HR-rovatok nincsenek felvéve', () => {
+  for (const k of ['hr_id_number', 'hr_professional_background']) {
+    assertEq(SchemaStore.field(k), null, `felesleges mező a sémában: ${k}`);
+  }
+});
 
 test('az eredeti 44 mező megvan, a formanyomtatvány és a HR mezőivel kiegészítve', () => {
   const kulcsok = SchemaStore.storedFields().map(f => f.key);
@@ -114,6 +123,62 @@ test('számított mező nem épít HR-adatra', () => {
     .filter(f => (f.computed.from || []).some(k => /^hr_/.test(k)))
     .map(f => f.key);
   assertEq(rossz.join(','), '', 'HR-adatra épülő számított mező');
+});
+
+/**
+ * AZ OSZLOPSORREND SZERZŐDÉSE.
+ *
+ * A sorrend a **9. sz. tartózkodási engedély iránti kérelem** és a hozzá tartozó
+ * betétlapok (9.7. Vendégmunkás, 9.9. EU Kék Kártya) rovatsorrendje. Így az
+ * ügyintéző fentről lefelé haladva tudja átvezetni az adatokat a nyomtatványra,
+ * és a kitöltő is felismeri, melyik hatósági rovatnál tart.
+ *
+ * Korábban az eredeti 44 oszlopos adatbekérő sorrendje volt a szerződés; ezt
+ * 2026-08-17-én szándékosan váltottuk le. Ha a sorrend elcsúszik, ez a teszt
+ * bukik — a listát csak tudatosan, a nyomtatvánnyal a kézben szabad átírni.
+ */
+const HATOSAGI_SORREND = [
+  // fejrész: engedélyszám, elérhetőség
+  'personnel_reg_number', 'number_of_rp', 'expiration_of_rp', 'telephone', 'email',
+  // 1. pont — személyes adatok
+  'surname', 'forename', 'surname_at_birth', 'forename_at_birth',
+  'mothers_surname_at_birth', 'mothers_forename_at_birth', 'sex', 'marital_status',
+  'date_of_birth', 'place_of_birth_locality', 'place_of_birth_country', 'citizenship',
+  'hr_dual_citizenship', 'professional_qualification', 'educational_attainment',
+  'hr_education_completion_date', 'hr_education_institution', 'hr_education_specialization',
+  'hr_degree_document_number', 'occupation_before_arrival',
+  // 2. pont — útlevél (szám → kiállítás ideje → HELYE → típus → érvényesség)
+  'pp_number', 'pp_issuance_date', 'pp_issuance_place', 'passport_type', 'pp_validity',
+  // 3. pont — magyarországi szálláshely (helyrajzi szám elöl)
+  'topographical_number', 'postal_code', 'locality', 'name_of_public_place',
+  'type_of_public_place', 'street_number', 'building', 'stairway', 'floor', 'door',
+  'other_accommodation',
+  // 6. pont — eltartott hozzátartozók
+  'hr_children',
+  // 7. pont — érkezést megelőző lakcím
+  'previous_country', 'previous_town', 'previous_street',
+  // betétlap
+  'gross_salary', 'residence_purpose', 'position', 'feor',
+  'employment_start', 'employment_end',
+  'mother_tongue', 'hr_language_skills', 'speaks_hungarian', 'hr_computer_skills',
+  'hr_previous_employer', 'hr_previous_employment_end',
+  // nem a nyomtatványról
+  'tax_number', 'TAJ', 'hr_emergency_contact_name', 'hr_emergency_contact_phone',
+  'hr_bank_account', 'hr_department_cost_center', 'hr_direct_leader', 'hr_sg_category',
+];
+
+test('az oszlopsorrend a hatósági nyomtatvány rovatsorrendje', () => {
+  const kulcsok = SchemaStore.storedFields().map(f => f.key);
+  assertEq(kulcsok.join('\n'), HATOSAGI_SORREND.join('\n'), 'elcsúszott oszlopsorrend');
+});
+
+test('az útlevél kiállításának helye a kiállítás dátuma után áll', () => {
+  // A nyomtatványon egyetlen rovat: „kiállításának ideje, helye". Korábban a
+  // kiállítás helye a személyes adatok közé került, ami átvezetéskor ugrálást
+  // okozott.
+  const k = SchemaStore.storedFields().map(f => f.key);
+  assertEq(k.indexOf('pp_issuance_place'), k.indexOf('pp_issuance_date') + 1);
+  assertEq(k.indexOf('passport_type'), k.indexOf('pp_issuance_place') + 1);
 });
 
 test('a kötelező mezők jelölve vannak', () => {
@@ -537,7 +602,7 @@ test('a mentett sémából hiányzó seed-mezők pótlódnak', () => {
   // már használatban lévő telepítésen – az adatbekérőből is kimaradna.
   const regi = JSON.parse(JSON.stringify(SEED_SCHEMA));
   regi.fields = regi.fields.filter(f => !/^hr_/.test(f.key));
-  regi.groups = regi.groups.filter(g => g.key !== 'hr');
+  regi.groups = regi.groups.filter(g => g.key !== 'hr_belso' && g.key !== 'csalad');
   SchemaStore.loadFrom(regi);
   const verzioElotte = SchemaStore.version();
   assertEq(SchemaStore.field('hr_bank_account'), null, 'a próbaséma nem volt HR nélküli');
@@ -546,7 +611,7 @@ test('a mentett sémából hiányzó seed-mezők pótlódnak', () => {
   assertEq(felvett, HR_MEZOK.length, 'nem a HR-mezők kerültek fel');
   const hianyzo = HR_MEZOK.filter(k => !SchemaStore.field(k));
   assertEq(hianyzo.join(','), '', 'kimaradt mező');
-  assert(SchemaStore.groups().find(g => g.key === 'hr'), 'a HR csoport nem került fel');
+  assert(SchemaStore.groups().find(g => g.key === 'hr_belso'), 'a HR csoport nem került fel');
   assertEq(SchemaStore.version(), verzioElotte + 1, 'a séma verziója nem lépett');
   assertEq(SchemaStore.validateSchema().length, 0, 'a pótlás ellentmondást hagyott');
 
