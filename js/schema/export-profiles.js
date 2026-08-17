@@ -51,6 +51,42 @@ const DEFAULT_EXPORT_PROFILES = [
       labelRowHeight: 34,
       defaultWidth:   18,
       validationRows: 200,   // meddig terjedjenek a legördülők
+
+      /**
+       * Fejlécszín csoportonként.
+       *
+       * Hetven oszlop egyforma fejléccel átláthatatlan: a kitöltő nem látja,
+       * hol ér véget a lakcím és hol kezdődik a foglalkoztatás. A szín a
+       * séma CSOPORTJÁT jelöli, a színváltásnál pedig vastag vonal is van.
+       *
+       * A csoportok NEM egybefüggő blokkok: az oszlopsorrend az eredeti 44
+       * oszlopos adatbekérőé (ehhez a kitöltők hozzászoktak, és teszt is védi),
+       * abban pedig pl. a családi állapot a születési és az okmányadatok közé
+       * esik. A szín tehát jelmagyarázat, nem szakaszhatár – az Útmutató lap
+       * „Csoport" oszlopa ugyanezt a színt viseli, így a kettő összeolvasható.
+       *
+       * A KÖTELEZŐ mező ettől függetlenül piros marad – az a jelzés erősebb,
+       * mint a csoporté, és nem szabad elveszíteni. Aminek nincs színe itt,
+       * az az `optionalFill`-t kapja.
+       */
+      groupFill: {
+        alap:           'FF2F5597',
+        szuletes:       'FF548235',
+        azonosito:      'FF1F3864',
+        okmany:         'FF7030A0',
+        kapcsolat:      'FF2E75B6',
+        lakcim:         'FF806000',
+        korabbi:        'FFA6761D',
+        foglalkoztatas: 'FFC55A11',
+        vegzettseg:     'FF1F6B5C',
+        hr:             'FF595959',   // HR-adat: szürke, mert nem hatósági kör
+      },
+
+      /**
+       * Ennyi oszlop marad állva vízszintes görgetéskor. Enélkül a 60. oszlop
+       * kitöltésénél már nem látszik, kinek a sorában járunk.
+       */
+      freezeColumns: 3,
     },
   },
 ];

@@ -382,7 +382,7 @@ const SettingsModule = (() => {
         if (orig.key !== key) {
           // Az adatok együtt mozognak a kulccsal
           try {
-            const emps = EmployeeRepo.hasBackend() ? EmployeeRepo.all({ includeArchived: true }) : [];
+            const emps = EmployeeRepo.hasBackend() ? EmployeeRepo.all({ includeExited: true }) : [];
             const moved = SchemaStore.renameFieldKey(orig.key, key, emps);
             if (moved) EmployeeRepo.scheduleSave();
           } catch (e) { return setErr(e.message); }
@@ -421,7 +421,7 @@ const SettingsModule = (() => {
 
   /** Törlés csak azután, hogy látszik, mi veszne el. */
   function deleteField(f) {
-    const emps = EmployeeRepo.hasBackend() ? EmployeeRepo.all({ includeArchived: true }) : [];
+    const emps = EmployeeRepo.hasBackend() ? EmployeeRepo.all({ includeExited: true }) : [];
     const u = SchemaStore.usageOf(f.key, emps);
 
     const figyelmeztetes = [];

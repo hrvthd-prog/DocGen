@@ -176,10 +176,22 @@ embert, és az ismételt import nem hoz létre duplikátumot.
 
 Új engedély rögzítése egy lépés: *Új azonosító* — a régi automatikusan lezárul.
 
-## Archiválás és törlés
+## Kilépés és törlés
 
-**Archiválás** a normál út: az adat megmarad, csak kikerül a listákból és a
-generálásból — bármikor visszaállítható.
+**Kilépettnek jelölés** a normál út: az adat megmarad, csak kikerül a listákból
+és a generálásból — bármikor visszavehető. (Ez volt korábban az „archiválás";
+az adatfájlban is `exited` a neve, nem `archived` — a régi kulcs betöltéskor
+egyszer átfordul.)
+
+A **kilépés dátuma kötelező**, mert ebből fut a bejelentési határidő. A
+megadott nap a séma *Kilépés dátuma* mezőjébe is bekerül, hogy az xlsx-export a
+tényleges — ne a felvételkor tervezett — utolsó munkanapot vigye.
+
+Rögzítés után az app kiírja, hogy a munkaviszony megszűnését **be kell jelenteni
+az OIF-nak 5 napon belül**, kiszámolja a határnapot, és megmondja, hány nap van
+hátra — vagy hogy hány napja lejárt. Egy kattintással meg is nyitható rá a
+*Munkaviszony megszűnésének bejelentése* ügy, hogy a határidő az **Ügyek** fülön
+is látszódjon, ne csak egy elkattintott ablakban.
 
 **Törlés** téves felvitelre való, és valóban töröl: a személyt, az
 azonosító-történetét és az ügyeit. A párbeszéd előbb kiírja, mi tűnik el. A
@@ -194,7 +206,53 @@ A **Nyilvántartás** fülön két xlsx tölthető le:
 
 Az üres sablonban az **1. sor rejtett**: az a gépi kulcsokat tartalmazza, ami az
 importhoz kell, a kitöltőnek nem. A kitöltő a **2. sort** látja, angol
-címkékkel, és mind a 44 cellán ott a kitöltést segítő komment — angolul, példákkal.
+címkékkel, és minden cellán ott a kitöltést segítő komment — angolul, példákkal.
+
+Böngésző nélkül, a parancssorból is legenerálható — ugyanaz a séma és ugyanaz a
+kód fut, mint a gomb mögött:
+
+```bash
+node tools/adatbekero.js            # ide: adatbekero.xlsx
+node tools/adatbekero.js ../ki.xlsx
+```
+
+A szkript a kiírás után **visszaolvassa** a fájlt az éles importálóval, és csak
+akkor írja ki, ha minden oszlop mezőhöz kötődik és nincs címke-ütközés.
+
+### Tájékozódás hetven oszlopban
+
+A fejléc színe a mező **csoportját** jelöli (lakcím, okmányok, foglalkoztatás…),
+színváltásnál vastag vonal van, és az első három oszlop görgetéskor is állva
+marad. A **kötelező** mező ettől függetlenül piros: az erősebb jelzés.
+
+A csoportok nem egybefüggő blokkok — az oszlopsorrend az eredeti adatbekérőé, és
+abban pl. a családi állapot a születési és az okmányadatok közé esik. A szín
+tehát jelmagyarázat; az `Útmutató` lap *Csoport* oszlopa ugyanezt a színt viseli.
+
+### HR-oszlopok: egy táblázat menjen ki, ne kettő
+
+A HR korábban külön, álló „Personal Data Sheet" űrlapon kérte be a maga
+adatait. Azok a rovatok, amiknek **nincs párja** az idegenrendészeti adatkörben,
+`hr_` előtagú oszlopként a tábla végén vannak (vészhelyzeti kapcsolattartó,
+bankszámla, iskola és oklevél adatai, nyelvtudás, gyerekek, előző munkáltató,
+és a HR által kitöltendő három rovat).
+
+**Egyetlen dokumentum-jelölő és számított mező sem hivatkozik rájuk** — a DocGen
+tárolja és visszaexportálja őket, de iratba nem kerülnek. Amit a HR-lap és az
+idegenrendészeti kör egyaránt kér (adóazonosító, TAJ, munkakör, FEOR, bér,
+belépés dátuma), az **nincs megkettőzve**: a meglévő mező viszi.
+
+> A `hr_` előtag nem kozmetika. Az importáló a fejlécet kulcs, majd
+> magyar/angol **címke** és jelölő szerint próbálja mezőhöz kötni, ezért egy
+> „Tax number" fejlécű HR-rovat egyenesen az adóazonosítóba költözne. Új
+> HR-mezőnél a szabály: egyedi kulcs, egyedi magyar ÉS angol címke, jelölő
+> nélkül. A `schema.test.js` ezt géppel is méri.
+
+Ami a HR-lapon egy cellában volt, de a DocGen többől számol (`Name`,
+`Mother's name`, `Place of birth`, `Home address`), az **bontva** szerepel —
+számított mezőbe importálni nem lehet. A HR-lap ismétlődő blokkjai (nyelvvizsgák,
+gyerekek) egy „egy sor = egy ember" táblába nem férnek: egy-egy szabad szöveges
+cellába kerültek, gépi feldolgozásra nem alkalmasak.
 
 A lap **jelszóval védett**, hogy a rejtett sor véletlenül se kerüljön elő:
 
@@ -306,6 +364,41 @@ fejlesztés során **háromszor** megtörtént.
 
 Csak nézni, változtatás nélkül: `node tools/kiadas.js --csak-ellenoriz`
 
+## Verziószámok
+
+A verzió `fő.al` alakú, például **10.27**:
+
+| rész | mit jelent | ki lépteti |
+|---|---|---|
+| fő | kiadás | `node tools/kiadas.js` |
+| al | a commit sorszáma (`git rev-list --count HEAD`) | a `pre-commit` hook, minden commitnál |
+
+Az alverziót nem tárolja semmi, a commit-számból számoljuk — így nem tud
+elcsúszni, és merge-nél sincs mit ütköztetni.
+
+A verzió három helyen látszik: a **fejlécben**, a **Beállítások** fül Verzió
+kártyáján, és a repóban **git tagként** (`v10.27`), amit a `post-commit` hook
+készít. A GitHub *Tags* oldala így a teljes verzió-idővonal: a felületen látott
+számról egy kattintással a pontos commitra lehet jutni.
+
+> **A használat helyén nincs teendő, és nem is kell git.** Az app egy izolált
+> gépen, hálózat nélkül fut; a `js/version.js` sima statikus fájl, a program
+> soha nem hív gitet. A verzió a másolt fájlokkal együtt utazik. A felületen
+> ezért nincs GitHub-hivatkozás sem – az ott csak egy üres fület nyitna.
+
+**A fejlesztői gépen** viszont egyszer be kell állítani, különben nincs
+verzióléptetés (a git a configot szándékosan nem klónozza):
+
+```bash
+git config core.hooksPath tools/hooks
+git config push.followTags true    # hogy a tagek is felmenjenek
+```
+
+Az állapot ellenőrzése: `node tools/verzio.js --ellenoriz`
+
+Rebase és merge közben a hook kihagyja magát — ott minden újrajátszott commit
+átírná az `index.html`-t, ami garantált ütközés.
+
 ## Ha megsérül az adatfájl
 
 Az app ilyenkor **nem indul el üresen** — kiírja, mi történt, és felajánlja a
@@ -330,7 +423,7 @@ nem a fájlnév alapján. A lépés **visszafordítható**: a jelenlegi (akár s
 node test/run-all.js
 ```
 
-Tíz tesztcsomag, 265 teszt. Böngészőt nem igényel.
+Tizenkét tesztcsomag, 312 teszt. Böngészőt nem igényel.
 
 | Csomag | Mit őriz |
 |---|---|

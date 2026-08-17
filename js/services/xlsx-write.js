@@ -35,8 +35,10 @@ const XlsxWrite = (() => {
     wb.creator = 'DocGen';
     wb.created = new Date();
 
+    // A fejlécen kívül az első néhány oszlop is álljon: hetven oszlopnál a
+    // vízszintes görgetés után nem látszana, kinek a sorát töltjük ki.
     const ws = wb.addWorksheet(profile.sheetName, {
-      views: [{ state: 'frozen', ySplit: profile.labelRow }],
+      views: [{ state: 'frozen', ySplit: profile.labelRow, xSplit: st.freezeColumns || 0 }],
     });
 
     // Oszlopszélességek: a magyar címke hossza alapján, ésszerű határok között
@@ -102,23 +104,29 @@ const XlsxWrite = (() => {
     cols.forEach((f, i) => {
       const c = i + 1;
 
+      // Csoportszín, de a kötelezőség erősebb jelzés: az piros marad.
+      const csoportSzin = (st.groupFill && st.groupFill[f.group]) || null;
+      // A csoport első oszlopát vastag vonal választja el az előzőtől.
+      const ujCsoport = i > 0 && cols[i - 1].group !== f.group;
+      const bal = ujCsoport ? { left: { style: 'medium' } } : {};
+
       const kc = keyRow.getCell(c);
       kc.value = f.key;
       kc.font = { name: st.headerFont.name, size: st.headerFont.size,
                   bold: st.headerFont.bold, color: argb(st.headerFont.color) };
       kc.fill = { type: 'pattern', pattern: 'solid',
-                  fgColor: argb(f.required ? st.requiredFill : st.optionalFill) };
+                  fgColor: argb(f.required ? st.requiredFill : (csoportSzin || st.optionalFill)) };
       kc.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      kc.border = { bottom: { style: 'thin' } };
+      kc.border = Object.assign({ bottom: { style: 'thin' } }, bal);
 
       const lc = labelRow.getCell(c);
       lc.value = f.label.en || f.label.hu;
       lc.font = { name: st.headerFont.name, size: st.headerFont.size,
                   bold: st.headerFont.bold, color: argb(st.headerFont.color) };
       lc.fill = { type: 'pattern', pattern: 'solid',
-                  fgColor: argb(f.required ? st.requiredFill : st.labelFill) };
+                  fgColor: argb(f.required ? st.requiredFill : (csoportSzin || st.labelFill)) };
       lc.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      lc.border = { bottom: { style: 'medium' } };
+      lc.border = Object.assign({ bottom: { style: 'medium' } }, bal);
       lc.note = buildNote(f);
     });
 
@@ -249,36 +257,64 @@ const XlsxWrite = (() => {
 
   // ── Útmutató munkalap ──────────────────────────────────────────────────────
 
-  /** A kitöltési útmutató is a sémából áll elő – nem kézzel karbantartott szöveg. */
+  /**
+   * A kitöltési útmutató is a sémából áll elő – nem kézzel karbantartott szöveg.
+   *
+   * KÉT OLVASÓJA VAN, ezért kétnyelvű: a táblázatot külföldi munkavállaló
+   * tölti ki (neki az angol oszlopok és az angol szabályok szólnak), az
+   * ügyintéző pedig a magyar jelentést és a gépi kulcsot keresi benne.
+   *
+   * Az angol útmutató-szöveg (`hint.en`) eddig CSAK a cellakommentben volt
+   * elérhető. Aki nem tudta, hogy a fejlécre kell mutatni az egérrel, annak a
+   * példák és a kivételek láthatatlanok maradtak – ezért itt is kiírjuk.
+   */
   function addGuideSheet(wb, schema, cols, profile) {
     if (!profile.guideSheetName) return;
     const ws = wb.addWorksheet(profile.guideSheetName);
-    ws.columns = [{ width: 30 }, { width: 34 }, { width: 24 }, { width: 12 }, { width: 46 }];
+    ws.columns = [{ width: 30 }, { width: 34 }, { width: 24 }, { width: 12 },
+                  { width: 40 }, { width: 34 }, { width: 62 }];
 
     const cim = ws.getRow(1);
-    cim.getCell(1).value = 'Munkavállalói adatbekérő – kitöltési útmutató';
+    cim.getCell(1).value = 'Munkavállalói adatbekérő – kitöltési útmutató / Employee data sheet – how to fill it in';
     cim.getCell(1).font = { name: 'Arial', size: 12, bold: true };
     ws.getRow(2).getCell(1).value =
       `DocGen · generálva: ${new Date().toISOString().slice(0, 10)} · séma v${schema.version}`;
     ws.getRow(2).getCell(1).font = { name: 'Arial', size: 9, color: argb('FF808080') };
 
     const szabalyok = [
-      'FONTOS – hogy az import ne törjön meg',
-      `1. Az ${profile.keyRow}. sort (gépi oszlopnevek) NE írd át és NE töröld – az importáló ezeket keresi.`,
-      '2. A piros fejlécű mezők kötelezők: soronként mindet ki kell tölteni.',
-      '3. Minden dátum ÉÉÉÉ-HH-NN alakban (pl. 1990-03-15).',
-      '4. A legördülős mezőkbe a listából válassz.',
-      '5. Egy fájlon belül ne szerepeljen kétszer ugyanaz a személy.',
-      '6. Magyar magyarázat: vidd az egeret az oszlopnév cella sarkán lévő jelre.',
+      ['HOW TO FILL IT IN / KITÖLTÉSI SZABÁLYOK', true],
+      [`1. Fill in ONE ROW per person, starting in row ${profile.firstDataRow} of the "${profile.sheetName}" sheet.`, false],
+      [`   Egy személy = egy sor, a "${profile.sheetName}" lap ${profile.firstDataRow}. sorától.`, false],
+      ['2. RED header = mandatory. Every red column must be filled in, in every row.', false],
+      ['   A piros fejlécű mezők kötelezők. A többi fejlécszín a rovatcsoportot jelöli.', false],
+      ['3. All dates: YYYY-MM-DD (example: 1990-03-15).', false],
+      ['   Minden dátum ÉÉÉÉ-HH-NN alakban.', false],
+      ['4. In drop-down columns choose from the list — do not type your own wording.', false],
+      ['   A legördülős mezőkbe a listából válassz.', false],
+      ['5. Hover over a header cell: a help note appears with an example.', false],
+      ['   Magyar magyarázat: vidd az egeret a fejléc cella sarkán lévő jelre.', false],
+      ['6. Leave a cell EMPTY if you do not have the data. Do not write "-", "n/a" or a guess.', false],
+      ['   Amit nem tudsz, hagyd üresen – ne írj bele találgatást.', false],
+      [`7. Do not change or delete row ${profile.keyRow} and do not add new columns — the import reads those names.`, false],
+      [`   Az ${profile.keyRow}. sort és az oszlopokat ne módosítsd.`, false],
+      ['8. The same person must not appear twice in one file.', false],
+      ['   Egy fájlon belül ne szerepeljen kétszer ugyanaz a személy.', false],
+      ['', false],
+      ['CONFIDENTIAL / BIZALMAS', true],
+      ['This file contains personal data (passport, tax and social security number, bank account).', false],
+      ['Send it back only to the requesting HR contact, and do not forward it to anyone else.', false],
+      ['A fájl személyes és pénzügyi adatot tartalmaz – csak a bekérő HR-kapcsolattartónak küldd vissza.', false],
+      ['Columns marked "filled by HR" are not for you to complete. / A „filled by HR" rovatokat a HR tölti ki.', false],
     ];
-    szabalyok.forEach((s, i) => {
+    szabalyok.forEach(([s, bold], i) => {
       const r = ws.getRow(4 + i);
       r.getCell(1).value = s;
-      if (i === 0) r.getCell(1).font = { name: 'Arial', size: 10, bold: true };
+      if (bold) r.getCell(1).font = { name: 'Arial', size: 10, bold: true };
     });
 
     const fejlecSor = 4 + szabalyok.length + 1;
-    const fejlec = ['Oszlopnév (gépi)', 'Magyar jelentés', 'Csoport', 'Kötelező', 'Megjegyzés / lehetséges értékek'];
+    const fejlec = ['Oszlopnév (gépi)', 'Magyar jelentés', 'Csoport', 'Kötelező',
+                    'Megjegyzés / lehetséges értékek', 'English label', 'Guidance / útmutató'];
     const fr = ws.getRow(fejlecSor);
     fejlec.forEach((h, i) => {
       const c = fr.getCell(i + 1);
@@ -288,6 +324,7 @@ const XlsxWrite = (() => {
       c.alignment = { vertical: 'middle', wrapText: true };
     });
 
+    const st = profile.style || {};
     const csoportNev = k => (schema.groups.find(g => g.key === k) || {}).label || k;
     cols.forEach((f, i) => {
       const r = ws.getRow(fejlecSor + 1 + i);
@@ -305,7 +342,17 @@ const XlsxWrite = (() => {
       }
       r.getCell(5).value = megj;
       r.getCell(5).alignment = { wrapText: true };
+      r.getCell(6).value = f.label.en || '';
+      r.getCell(7).value = [f.hint && f.hint.en, f.hint && f.hint.hu].filter(Boolean).join('\n');
+      r.getCell(7).alignment = { wrapText: true, vertical: 'top' };
       if (f.required) r.getCell(4).font = { bold: true, color: argb('FFC00000') };
+      // Ugyanaz a csoportszín, mint a Data lap fejlécén – a két lap így
+      // összeköthető szemmel is.
+      const szin = st.groupFill && st.groupFill[f.group];
+      if (szin) {
+        r.getCell(3).fill = { type: 'pattern', pattern: 'solid', fgColor: argb(szin) };
+        r.getCell(3).font = { color: argb('FFFFFFFF') };
+      }
     });
 
     ws.views = [{ state: 'frozen', ySplit: fejlecSor }];

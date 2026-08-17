@@ -559,6 +559,46 @@ const SchemaStore = (() => {
     return atnevezve;
   }
 
+  /**
+   * A kiinduló sémából hiányzó mezők pótlása a MÁR MENTETT sémában.
+   *
+   * A `load()` a mentett configot használja, ha van – a `SEED_SCHEMA` csak az
+   * első indításkor számít. Emiatt egy meglévő telepítésen a kódba felvett új
+   * mező (pl. a HR-adatkör) magától sosem jelenne meg, és az adatbekérőből is
+   * kimaradna. Ez a lépés hozza fel: kulcs szerint hiányzó mezőket és
+   * csoportokat vesz fel, meglévőt NEM ír át.
+   *
+   * ponytail: aki szándékosan törölt egy seed-mezőt a séma-szerkesztőben, annak
+   * visszakerül. Ha ez zavaró lesz, a megoldás egy „törölt seed-kulcsok" lista
+   * a configban – addig ez a néhány sor kevesebb kárt tesz, mint egy csendben
+   * elmaradó adatkör.
+   *
+   * @returns {number} a felvett mezők száma (0 = nem volt mit tenni)
+   */
+  function addMissingSeedFields(seed = (typeof SEED_SCHEMA !== 'undefined' ? SEED_SCHEMA : null)) {
+    ensureLoaded();
+    if (!seed || !Array.isArray(seed.fields)) return 0;
+
+    const vanKulcs = new Set(schema.fields.map(f => f.key));
+    const hianyzo = seed.fields.filter(f => f && f.key && !vanKulcs.has(f.key));
+    if (!hianyzo.length) return 0;
+
+    // A normalize adja a hiányzó részek pótlását és az egységes alakot –
+    // ne itt építsük össze kézzel a mezőobjektumot.
+    const bovitett = normalize({
+      version:    schema.version,
+      updatedAt:  schema.updatedAt,
+      groups:     schema.groups.concat(
+                    (seed.groups || []).filter(g => !schema.groups.find(x => x.key === g.key))),
+      fields:     schema.fields.concat(hianyzo),
+      dictionary: schema.dictionary,
+    });
+    bovitett.version = schema.version + 1;
+    schema = bovitett;
+    emit();
+    return hianyzo.length;
+  }
+
   /** Mező törlése előtti hatásvizsgálat – mi veszne el. */
   function usageOf(key, employees = []) {
     ensureLoaded();
@@ -576,7 +616,7 @@ const SchemaStore = (() => {
     resolveTag, renderTag, tagEquals, resolveValues, computeField, renderValue,
     dictionary, setDictionary, translate,
     validateValues, validateSchema,
-    migrateValues, renameFieldKey, migrateLegacyKeys, usageOf,
+    migrateValues, renameFieldKey, migrateLegacyKeys, addMissingSeedFields, usageOf,
     _normalize: normalize, _datePart: datePart,
   };
 })();

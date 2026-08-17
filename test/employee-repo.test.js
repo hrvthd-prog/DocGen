@@ -88,10 +88,57 @@ atest('módosítás összefésüli a mezőket', async () => {
 atest('puha törlés kiveszi a listából, de megőrzi a rekordot', async () => {
   await fresh();
   const e = Repo.create({ fields: { surname: 'Kovács' } });
-  Repo.setArchived(e.id, true);
-  assertEq(Repo.count(), 0, 'archivált rekord látszik az alaplistában');
-  assertEq(Repo.count({ includeArchived: true }), 1, 'az archivált rekord elveszett');
+  Repo.setExited(e.id, true, '2026-08-01');
+  assertEq(Repo.count(), 0, 'kilépett rekord látszik az alaplistában');
+  assertEq(Repo.count({ includeExited: true }), 1, 'a kilépett rekord elveszett');
   assert(Repo.get(e.id), 'a rekord nem kérhető le azonosítóval');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+asection('Kilépés');
+
+atest('a kilépés dátuma kötelező és formátumhoz kötött', async () => {
+  await fresh();
+  const e = Repo.create({ fields: { surname: 'Kovács' } });
+  for (const rossz of [null, '', '2026.08.01', '2026-13-01', 'tegnap']) {
+    let dobott = false;
+    try { Repo.setExited(e.id, true, rossz); } catch { dobott = true; }
+    assert(dobott, `dátum nélkül/rossz dátummal is kilépettnek jelölt: ${rossz}`);
+  }
+  assertEq(Repo.get(e.id).exited, false, 'a hibás próbálkozás mégis megjelölte');
+});
+
+atest('a kilépés napja a séma „Kilépés dátuma" mezőjébe is bekerül', async () => {
+  await fresh();
+  // A felvételkor TERVEZETT utolsó munkanap – a tényleges felülírja
+  const e = Repo.create({ fields: { surname: 'Kovács', employment_end: '2029-12-31' } });
+  Repo.setExited(e.id, true, '2026-08-10');
+  assertEq(Repo.get(e.id).exitDate, '2026-08-10');
+  assertEq(Repo.get(e.id).fields.employment_end, '2026-08-10',
+    'az export a tervezett napot vinné a tényleges helyett');
+});
+
+atest('visszavételkor a kilépés dátuma törlődik', async () => {
+  await fresh();
+  const e = Repo.create({ fields: { surname: 'Kovács' } });
+  Repo.setExited(e.id, true, '2026-08-10');
+  Repo.setExited(e.id, false);
+  assertEq(Repo.get(e.id).exited, false);
+  assertEq(Repo.get(e.id).exitDate, null, 'ottmaradt egy megszűnt munkaviszony napja');
+  assertEq(Repo.count(), 1, 'a visszavett dolgozó nem került vissza az aktív listába');
+});
+
+atest('a régi `archived` kulcs kilépéssé alakul betöltéskor', async () => {
+  Repo.useBackend(Repo.createMemoryBackend({
+    version: 1,
+    employees: [{ id: 'x1', fields: { surname: 'Régi' }, archived: true }],
+  }));
+  await Repo.load();
+  const e = Repo.get('x1');
+  assertEq(e.exited, true, 'az archivált rekord aktívként jött vissza');
+  assertEq(e.archived, undefined, 'a régi kulcs ottmaradt');
+  // Dátum nincs – a korábbi archiválásoknál nem volt mit rögzíteni
+  assertEq(e.exitDate, null);
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -225,12 +272,12 @@ atest('szabad szavas keresés mezőben és azonosítóban is talál', async () =
   assertEq(Repo.search('nincsilyen').length, 0, 'hamis találat');
 });
 
-atest('archivált rekord alapból kimarad a keresésből', async () => {
+atest('kilépett rekord alapból kimarad a keresésből', async () => {
   await fresh();
   const e = Repo.create({ fields: { surname: 'Kovács' } });
-  Repo.setArchived(e.id, true);
+  Repo.setExited(e.id, true, '2026-08-01');
   assertEq(Repo.search('kovács').length, 0);
-  assertEq(Repo.search('kovács', { includeArchived: true }).length, 1);
+  assertEq(Repo.search('kovács', { includeExited: true }).length, 1);
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -268,7 +315,7 @@ atest('hiányos régi rekord betöltéskor felhozatalra kerül', async () => {
   assert(e.id, 'nem kapott azonosítót');
   assert(Array.isArray(e.identifiers), 'nincs identifiers tömb');
   assert(e.createdAt, 'nincs createdAt');
-  assertEq(e.archived, false);
+  assertEq(e.exited, false);
 });
 
 atest('sérült adat esetén üres nyilvántartással indul, nem omlik össze', async () => {

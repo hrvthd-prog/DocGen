@@ -52,12 +52,68 @@ const FORMANYOMTATVANY_MEZOK = [
   'other_accommodation', 'occupation_before_arrival',
 ];
 
-test('az eredeti 44 mező megvan, a formanyomtatvány hatával kiegészítve', () => {
-  const kulcsok = SchemaStore.storedFields().map(f => f.key);
-  assertEq(kulcsok.length, 44 + FORMANYOMTATVANY_MEZOK.length);
+// A HR korábbi „Personal Data Sheet" űrlapjából átvett rovatok. Egyetlen irat
+// sem hivatkozik rájuk – azért vannak a sémában, hogy EGY táblázat menjen ki a
+// munkavállalóhoz. A `hr_` prefix kötelező: ez zárja ki, hogy az importáló
+// címke szerint egy idegenrendészeti mezőbe kösse őket.
+const HR_MEZOK = [
+  'hr_emergency_contact_name', 'hr_emergency_contact_phone', 'hr_dual_citizenship',
+  'hr_id_number', 'hr_bank_account', 'hr_education_completion_date',
+  'hr_education_institution', 'hr_education_specialization', 'hr_degree_document_number',
+  'hr_computer_skills', 'hr_language_skills', 'hr_children', 'hr_previous_employer',
+  'hr_professional_background', 'hr_previous_employment_end',
+  'hr_department_cost_center', 'hr_direct_leader', 'hr_sg_category',
+];
 
-  const hianyzo = FORMANYOMTATVANY_MEZOK.filter(k => !kulcsok.includes(k));
-  assertEq(hianyzo.length, 0, 'hiányzó formanyomtatvány-mező: ' + hianyzo.join(', '));
+test('az eredeti 44 mező megvan, a formanyomtatvány és a HR mezőivel kiegészítve', () => {
+  const kulcsok = SchemaStore.storedFields().map(f => f.key);
+  assertEq(kulcsok.length, 44 + FORMANYOMTATVANY_MEZOK.length + HR_MEZOK.length);
+
+  const hianyzo = FORMANYOMTATVANY_MEZOK.concat(HR_MEZOK).filter(k => !kulcsok.includes(k));
+  assertEq(hianyzo.length, 0, 'hiányzó mező: ' + hianyzo.join(', '));
+});
+
+/**
+ * A HR-mezők nem üthetnek ütközésbe az idegenrendészeti adatkörrel.
+ *
+ * Az importáló a fejlécet kulcs, majd magyar/angol CÍMKE és jelölő szerint
+ * próbálja mezőhöz kötni (xlsx-read.js matchByLabel). Ha két mezőnek egyezik a
+ * címkéje, a HR-rovat tartalma egy hatósági iratba kerülhetne – ezért mérjük.
+ * A `validateSchema` a kulcsot, a magyar címkét és a jelölőket vizsgálja, az
+ * ANGOL címkét viszont nem: azt itt ellenőrizzük.
+ */
+test('a HR-mezők nem ütköznek az idegenrendészeti mezőkkel', () => {
+  const norm = s => String(s).toLowerCase().replace(/[\s._-]+/g, ' ').trim();
+  const hrKulcsok = new Set(HR_MEZOK);
+  const idegen = SchemaStore.fields().filter(f => !hrKulcsok.has(f.key));
+  const foglalt = new Set();
+  for (const f of idegen) {
+    for (const t of [f.key, f.label.hu, f.label.en].concat(f.tags || [])) {
+      if (t) foglalt.add(norm(t));
+    }
+  }
+
+  const utkozes = [];
+  for (const key of HR_MEZOK) {
+    const f = SchemaStore.field(key);
+    assert(f, `nincs ilyen HR-mező: ${key}`);
+    assert(/^hr_/.test(f.key), `a HR-mező kulcsa nem hr_ előtaggal kezdődik: ${f.key}`);
+    assertEq((f.tags || []).length, 0, `a HR-mezőnek nem lehet jelölője: ${f.key}`);
+    for (const t of [f.key, f.label.hu, f.label.en]) {
+      if (t && foglalt.has(norm(t))) utkozes.push(`${f.key}: „${t}"`);
+    }
+  }
+  assertEq(utkozes.length, 0, 'ütköző címke: ' + utkozes.join(' | '));
+});
+
+test('számított mező nem épít HR-adatra', () => {
+  // Ha egy irat számított mezője HR-adatból származna, a „nem használjuk"
+  // szabály csendben megszűnne.
+  const rossz = SchemaStore.fields()
+    .filter(f => f.type === 'computed')
+    .filter(f => (f.computed.from || []).some(k => /^hr_/.test(k)))
+    .map(f => f.key);
+  assertEq(rossz.join(','), '', 'HR-adatra épülő számított mező');
 });
 
 test('a kötelező mezők jelölve vannak', () => {
@@ -473,6 +529,41 @@ test('meglévő kulcsra átnevezés nem engedett', () => {
   let dobott = false;
   try { SchemaStore.renameFieldKey('surname', 'forename', []); } catch { dobott = true; }
   assert(dobott, 'engedte az ütköző átnevezést');
+});
+
+test('a mentett sémából hiányzó seed-mezők pótlódnak', () => {
+  // Éles gépen a séma a config-fájlban él, a SEED_SCHEMA csak az első
+  // indításkor számít. Enélkül a kódba felvett HR-adatkör sosem jelenne meg a
+  // már használatban lévő telepítésen – az adatbekérőből is kimaradna.
+  const regi = JSON.parse(JSON.stringify(SEED_SCHEMA));
+  regi.fields = regi.fields.filter(f => !/^hr_/.test(f.key));
+  regi.groups = regi.groups.filter(g => g.key !== 'hr');
+  SchemaStore.loadFrom(regi);
+  const verzioElotte = SchemaStore.version();
+  assertEq(SchemaStore.field('hr_bank_account'), null, 'a próbaséma nem volt HR nélküli');
+
+  const felvett = SchemaStore.addMissingSeedFields(SEED_SCHEMA);
+  assertEq(felvett, HR_MEZOK.length, 'nem a HR-mezők kerültek fel');
+  const hianyzo = HR_MEZOK.filter(k => !SchemaStore.field(k));
+  assertEq(hianyzo.join(','), '', 'kimaradt mező');
+  assert(SchemaStore.groups().find(g => g.key === 'hr'), 'a HR csoport nem került fel');
+  assertEq(SchemaStore.version(), verzioElotte + 1, 'a séma verziója nem lépett');
+  assertEq(SchemaStore.validateSchema().length, 0, 'a pótlás ellentmondást hagyott');
+
+  // Másodszor már nincs mit tenni – a lépés minden indításkor lefut.
+  assertEq(SchemaStore.addMissingSeedFields(SEED_SCHEMA), 0, 'nem idempotens');
+  SchemaStore.loadFrom(SEED_SCHEMA);
+});
+
+test('a pótlás nem írja át a meglévő mezőt', () => {
+  const sajat = JSON.parse(JSON.stringify(SEED_SCHEMA));
+  const f = sajat.fields.find(x => x.key === 'position');
+  f.label.hu = 'Munkakör (saját elnevezés)';
+  SchemaStore.loadFrom(sajat);
+  SchemaStore.addMissingSeedFields(SEED_SCHEMA);
+  assertEq(SchemaStore.field('position').label.hu, 'Munkakör (saját elnevezés)',
+    'a helyben szerkesztett címke visszaállt a seedre');
+  SchemaStore.loadFrom(SEED_SCHEMA);
 });
 
 test('mező törlése előtt látszik, mi veszne el', () => {
