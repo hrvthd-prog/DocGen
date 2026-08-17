@@ -1,0 +1,6 @@
+#!/bin/sh
+# A most született commit megjelölése a verziószámmal: v10.27
+# Ez a verzió → commit megfeleltetés, ez látszik a GitHub Tags oldalán.
+# Feltöltés: git push --follow-tags
+
+node tools/verzio.js --tagel

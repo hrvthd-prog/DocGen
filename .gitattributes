@@ -5,3 +5,7 @@
 
 # A Word-dokumentumok binárisak
 *.docx binary
+
+# A git hookok shell-szkriptek: CRLF sorvéggel a `#!/bin/sh` sor használhatatlan
+# lesz („bad interpreter"), és a hook némán nem fut le.
+tools/hooks/* text eol=lf

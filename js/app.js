@@ -120,6 +120,18 @@ window.updateHeaderBreadcrumb = function({ sourceName, clientCount, onSourceClic
   if (clientBtn && onClientClick) clientBtn.addEventListener('click', onClientClick);
 };
 
+// ── Verzió a fejlécben ────────────────────────────────────────────────────
+// A link a verzióhoz tartozó git tagre mutat: onnan egy kattintás a pontos
+// commit és a diff. Offline is olvasható marad, csak a link nem él.
+(function showVersion() {
+  const el = document.getElementById('header-verzio');
+  const v  = window.APP_VERZIO;
+  if (!el || !v) return;
+  el.textContent = 'v' + v.verzio;
+  el.title = `Verzió ${v.verzio} — ${v.datum}`;
+  el.href = `${v.repo}/releases/tag/v${v.verzio}`;
+})();
+
 // ── Indítás ───────────────────────────────────────────────────────────────
 switchTab(Settings.get('last_tab', 'docgen'));
 

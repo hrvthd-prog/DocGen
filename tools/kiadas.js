@@ -17,44 +17,15 @@
  */
 
 const { spawnSync } = require('child_process');
-const fs = require('fs');
 const path = require('path');
 
 const GYOKER = path.join(__dirname, '..');
-const LAPOK  = ['index.html', 'print.html'];
 const csakEllenoriz = process.argv.includes('--csak-ellenoriz');
 
 function fejlec(szoveg) {
   console.log('\n' + '═'.repeat(60));
   console.log(szoveg);
   console.log('═'.repeat(60));
-}
-
-/** A jelenlegi verziószám az index.html-ből. */
-function jelenlegiVerzio() {
-  const s = fs.readFileSync(path.join(GYOKER, 'index.html'), 'utf8');
-  // Csak valódi hivatkozásokra illesztünk. A `?v=` előfordulhat kommentben is
-  // (pl. magyarázó szövegben), azt nem szabad verziónak venni.
-  const talalatok = [...s.matchAll(/(?:src|href)="[^"]*\?v=(\d+)"/g)].map(m => Number(m[1]));
-  if (!talalatok.length) return null;
-  const egyedi = [...new Set(talalatok)];
-  return { verzio: Math.max(...egyedi), db: talalatok.length, vegyes: egyedi.length > 1, egyedi };
-}
-
-function verzioLeptetes(ujVerzio) {
-  let osszes = 0;
-  for (const lap of LAPOK) {
-    const ut = path.join(GYOKER, lap);
-    if (!fs.existsSync(ut)) continue;
-    const elotte = fs.readFileSync(ut, 'utf8');
-    let db = 0;
-    const utana = elotte.replace(/((?:src|href)="[^"]*)\?v=\d+"/g,
-      (_, elo) => { db++; return `${elo}?v=${ujVerzio}"`; });
-    fs.writeFileSync(ut, utana);
-    console.log(`  ${lap.padEnd(14)} ${db} hivatkozás`);
-    osszes += db;
-  }
-  return osszes;
 }
 
 function futtat(cimke, args) {
@@ -74,38 +45,27 @@ futtat('A tesztek elbuktak', [path.join(GYOKER, 'test', 'run-all.js')]);
 fejlec('2/3  Klón-próba — a repó önmagában is teljes?');
 futtat('A klón-próba elbukott', [path.join(__dirname, 'klon-proba.js')]);
 
-// ── 3. Verziólépés ──────────────────────────────────────────────────────────
+// ── 3. Főverzió-lépés ───────────────────────────────────────────────────────
+// Az alverziót minden commitnál a pre-commit hook lépteti; itt a FŐ verzió nő.
 fejlec('3/3  Gyorsítótár-verzió');
 
-const most = jelenlegiVerzio();
-if (!most) {
-  console.log('✗ Nem találtam „?v=" hivatkozást az index.html-ben.');
-  console.log('  A gyorsítótár-védelem eltűnt – ez önmagában hiba.');
-  process.exit(1);
-}
-
-if (most.vegyes) {
-  console.log(`FIGYELEM: vegyes verziószámok vannak: ${most.egyedi.join(', ')}`);
-  console.log('Egy részleges csere maradhatott félbe. Most egységesítjük.\n');
-}
-
-console.log(`Jelenlegi verzió: ${most.verzio}  (${most.db} hivatkozás)`);
+const VERZIO = path.join(__dirname, 'verzio.js');
 
 if (csakEllenoriz) {
+  futtat('A verzió-ellenőrzés elbukott', [VERZIO, '--ellenoriz']);
   console.log('\n(--csak-ellenoriz: nem írtam semmit)');
   process.exit(0);
 }
 
-const uj = most.verzio + 1;
-console.log(`Léptetés:         ${most.verzio} → ${uj}\n`);
-const osszes = verzioLeptetes(uj);
+futtat('A verziólépés elbukott', [VERZIO, '--kiadas']);
 
 console.log('');
 console.log('═'.repeat(60));
-console.log(`✓ Kiadásra kész — verzió ${uj}, ${osszes} hivatkozás frissítve.`);
+console.log('✓ Kiadásra kész.');
 console.log('');
 console.log('Hátralévő lépések:');
-console.log('  1. git add -A && git commit');
-console.log('  2. a fájlok másolása a megosztott mappába');
+console.log('  1. git add -A && git commit   (a hook lépteti az alverziót és tagel)');
+console.log('  2. git push --follow-tags');
+console.log('  3. a fájlok másolása a megosztott mappába');
 console.log('');
 console.log('A felhasználóknak NEM kell Ctrl+F5 — a verziólépés elintézi.');
