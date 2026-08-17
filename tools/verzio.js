@@ -129,7 +129,9 @@ function tagel() {
   const tag = 'v' + m.verzio;
   const megvan = git('tag', '--list', tag);
   if (megvan) { console.log(`A ${tag} tag már létezik – kihagyva.`); return; }
-  git('tag', tag);
+  // Annotált tag kell (-a): a `git push --follow-tags` a könnyűsúlyú tageket
+  // NEM viszi fel, tehát a verzió sosem érne el a GitHubra. Ez lemért eset.
+  git('tag', '-a', tag, '-m', `DocGen ${tag}`);
   console.log(`✓ ${tag} – push: git push --follow-tags`);
 }
 
