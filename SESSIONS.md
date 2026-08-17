@@ -99,7 +99,7 @@ lapfül, 65 oszlop.
   korlátozása → Korlátlan hozzáférés, majd Mentés másként), a `printSheet`
   felsorolását kell hozzáigazítani — kódot nem.
 - A nyelvtudás és a gyerekek egy-egy szabad szöveges cella, nem alrács.
-- Commit: `974179e` (v10.35).
+- Verzió: **v10.35** (a két mai bejegyzés közös commitban).
 
 
 ## 2026-08-17 (2.) — Oszlopsorrend a hatósági nyomtatvány szerint
@@ -154,7 +154,7 @@ a HR-mezők a saját hatósági rovatuk mellé kerüljenek, ne egy blokkba a vé
   Kérdés a felhasználó felé: legyen VBA a táblázatban, vagy inkább egy
   „HR-adatlap" `.docx` sablon a meglévő pipeline-ban.
 - A `fillableRows` továbbra is 30.
-- Commit: `974179e` (v10.35).
+- Verzió: **v10.35** (a két mai bejegyzés közös commitban).
 
 
 ## 2026-08-17 — Kilépés: az archiválás helyére munkaviszony-megszűnés
