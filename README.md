@@ -467,6 +467,37 @@ Az állapot ellenőrzése: `node tools/verzio.js --ellenoriz`
 Rebase és merge közben a hook kihagyja magát — ott minden újrajátszott commit
 átírná az `index.html`-t, ami garantált ütközés.
 
+## Frissítés a használat helyén (ZIP-ből)
+
+Az izolált gépen nincs git és nincs hálózat, ezért a kód GitHubról letöltött
+ZIP-ben érkezik (*Code → Download ZIP*). Kicsomagolni nem kell:
+
+1. Húzd rá a letöltött ZIP-et a `tools\frissit.vbs` fájlra.
+   (Vagy kattints rá duplán: magától megkeresi a legfrissebb *DocGen* ZIP-et
+   a Letöltések és az Asztal mappában.)
+2. A szkript megmutatja, mi változna — **utána kérdez rá**, hogy csinálja-e.
+
+**Amit garantál:** soha nem töröl semmit. Csak azokat a fájlokat írja felül,
+amelyek a ZIP-ben is szerepelnek és tényleg különböznek (bájtra hasonlít
+össze). Az adatmappa, a sablonok, a kimenet és a mentések a
+verziókezelésben sincsenek benne, tehát a ZIP-ben sem — ezen felül a `data`,
+`Sablonok`, `Kimenet`, `Kész fájlok` és `logs` mappa külön, névre szóló
+tiltás alatt áll.
+
+Ez nem ígéret, hanem mért tulajdonság: a `test/frissit.test.js` felépít egy
+hamis „céges gépet" éles adattal, ráengedi a szkriptet egy olyan ZIP-pel,
+amiben szándékosan `data/` is van, és ellenőrzi, hogy az éles fájl megmaradt.
+Egy „tükröző" frissítő (`robocopy /MIR`, mappa-felülmásolás) pont ezt törölné
+le — a `data/backup/` mentésekkel együtt.
+
+> **VBScript**, mert ezen a munkaállomáson a Windows Script Host bizonyítottan
+> fut (`tools/pdf-proba/EREDMENY.md`), a PowerShell futtatási házirendjéről
+> viszont nincs mérésünk. Rendszergazdai, kérdés nélküli futtatáshoz:
+> `cscript //nologo tools\frissit.vbs <zip> /csendes`
+
+Frissítés után a fejlécben látszik az új verziószám — ebből derül ki, hogy
+tényleg megérkezett-e.
+
 ## Ha megsérül az adatfájl
 
 Az app ilyenkor **nem indul el üresen** — kiírja, mi történt, és felajánlja a
