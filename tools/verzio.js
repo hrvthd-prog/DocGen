@@ -24,7 +24,6 @@ const path = require('path');
 const GYOKER      = path.join(__dirname, '..');
 const LAPOK       = ['index.html', 'print.html'];
 const VERZIO_FAJL = path.join(GYOKER, 'js', 'version.js');
-const REPO        = 'https://github.com/hrvthd-prog/DocGen';
 
 // Csak valódi hivatkozásra illesztünk. A `?v=` előfordulhat kommentben is
 // (pl. magyarázó szövegben), azt nem szabad verziónak venni.
@@ -89,7 +88,7 @@ function ir(uj) {
 `'use strict';
 
 // Ezt a fájlt a tools/verzio.js írja minden commitnál. Kézzel ne szerkeszd.
-window.APP_VERZIO = { verzio: '${uj}', datum: '${datum}', repo: '${REPO}' };
+window.APP_VERZIO = { verzio: '${uj}', datum: '${datum}' };
 `;
   fs.writeFileSync(VERZIO_FAJL, tartalom);
   return osszes;
