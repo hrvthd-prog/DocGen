@@ -143,7 +143,8 @@ employee {
                   type: sap | residence_permit | passport | tax | taj | ...
   fields{}      ← a séma szerinti adatok
   audit         ← createdAt / updatedAt / updatedBy / schemaVersion
-  archived      ← puha törlés (kilépett dolgozó ne tűnjön el visszamenőleg)
+  exited        ← puha törlés (kilépett dolgozó ne tűnjön el visszamenőleg)
+  exitDate      ← a munkaviszony megszűnésének napja – ebből fut a bejelentés
 }
 ```
 

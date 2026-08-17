@@ -8,7 +8,8 @@
  *     id:          belső UUID – soha nem változik, a felületen nem jelenik meg
  *     identifiers: [{ type, value, validFrom, validTo, current, note }]
  *     fields:      { <sémakulcs>: érték }   ← a séma értelmezi, a tároló átlátszatlanul kezeli
- *     archived:    puha törlés
+ *     exited:      kilépett dolgozó (puha törlés) – korábban `archived`
+ *     exitDate:    a munkaviszony megszűnésének napja (ÉÉÉÉ-HH-NN)
  *     createdAt / updatedAt / updatedBy / schemaVersion
  *   }
  *
@@ -52,6 +53,16 @@ const EmployeeRepo = (() => {
     tax:              'tax_number',
     taj:              'TAJ',
   };
+
+  /**
+   * A kilépés napja ebbe a séma-mezőbe is bemásolódik.
+   *
+   * Az adatbekérő „Kilépés dátuma" oszlopa a felvételkor TERVEZETT utolsó
+   * munkanapot tartalmazza. Kilépéskor a tényleges nap derül ki – ha csak a
+   * rekord `exitDate` mezőjébe kerülne, az xlsx-export és a sablonok továbbra
+   * is a tervezett napot vinnék.
+   */
+  const EXIT_DATE_FIELD = 'employment_end';
 
   /**
    * Sérült adatfájl jelzése.
@@ -234,7 +245,11 @@ const EmployeeRepo = (() => {
     if (!Array.isArray(e.identifiers)) e.identifiers = [];
     e.identifiers = e.identifiers.map(normalizeIdentifier).filter(Boolean);
     if (!e.fields || typeof e.fields !== 'object') e.fields = {};
-    e.archived      = !!e.archived;
+    // Korábban `archived` volt a neve. A fogalom valójában a kilépés, ezért az
+    // adatfájlban is az a neve – a régi kulcs itt egyszer átfordul és eltűnik.
+    e.exited        = e.exited !== undefined ? !!e.exited : !!e.archived;
+    delete e.archived;
+    e.exitDate      = e.exitDate || null;
     e.createdAt     = e.createdAt || nowIso();
     e.updatedAt     = e.updatedAt || e.createdAt;
     e.updatedBy     = e.updatedBy || '';
@@ -272,10 +287,10 @@ const EmployeeRepo = (() => {
 
   // ── Lekérdezés ─────────────────────────────────────────────────────────────
 
-  function all({ includeArchived = false } = {}) {
+  function all({ includeExited = false } = {}) {
     ensureLoaded();
-    return includeArchived ? cache.employees.slice()
-                           : cache.employees.filter(e => !e.archived);
+    return includeExited ? cache.employees.slice()
+                         : cache.employees.filter(e => !e.exited);
   }
 
   function get(id) {
@@ -283,8 +298,8 @@ const EmployeeRepo = (() => {
     return cache.employees.find(e => e.id === id) || null;
   }
 
-  function count({ includeArchived = false } = {}) {
-    return all({ includeArchived }).length;
+  function count({ includeExited = false } = {}) {
+    return all({ includeExited }).length;
   }
 
   /**
@@ -335,9 +350,9 @@ const EmployeeRepo = (() => {
   }
 
   /** Szabad szavas keresés a mezőkben és az azonosítókban (a lejártakban is). */
-  function search(text, { includeArchived = false } = {}) {
+  function search(text, { includeExited = false } = {}) {
     const needle = normText(text);
-    const list = all({ includeArchived });
+    const list = all({ includeExited });
     if (!needle) return list;
     return list.filter(emp => {
       for (const v of Object.values(emp.fields)) {
@@ -358,7 +373,8 @@ const EmployeeRepo = (() => {
       id: newId(),
       identifiers: identifiers.map(normalizeIdentifier).filter(Boolean),
       fields: Object.assign({}, fields),
-      archived: false,
+      exited: false,
+      exitDate: null,
       createdAt: nowIso(),
       updatedAt: nowIso(),
       updatedBy: currentUserName(),
@@ -447,11 +463,35 @@ const EmployeeRepo = (() => {
     return emp.identifiers.find(i => i.type === type && i.current) || null;
   }
 
-  function setArchived(id, archived) {
+  /**
+   * Kilépettnek jelölés – ez a korábbi „archiválás".
+   *
+   * A kilépés napja kötelező, és nem formaság: ebből fut a munkaviszony
+   * megszűnésének OIF felé teendő bejelentése. Dátum nélkül nincs mit
+   * számolni, ezért itt dobunk – nem a felületen, hogy az importból vagy
+   * bármely más útról érkező jelölés se csúszhasson át dátum nélkül.
+   *
+   * Visszavételkor a dátum törlődik: egy visszavett dolgozónál nincs
+   * megszűnt munkaviszony napja. A séma-mezőben lévő érték viszont marad –
+   * az a felhasználó adata, nem a mi jelölésünk.
+   */
+  function setExited(id, exited, exitDate = null) {
     ensureLoaded();
     const emp = get(id);
     if (!emp) throw new Error('Nincs ilyen azonosítójú személy.');
-    emp.archived  = !!archived;
+
+    if (exited) {
+      const nap = String(exitDate || '').trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(nap) || isNaN(new Date(nap).getTime())) {
+        throw new Error('A kilépés dátuma kötelező, ÉÉÉÉ-HH-NN alakban.');
+      }
+      emp.exited   = true;
+      emp.exitDate = nap;
+      emp.fields[EXIT_DATE_FIELD] = nap;
+    } else {
+      emp.exited   = false;
+      emp.exitDate = null;
+    }
     emp.updatedAt = nowIso();
     emp.updatedBy = currentUserName();
     scheduleSave();
@@ -638,8 +678,8 @@ const EmployeeRepo = (() => {
   }
 
   return {
-    ID_TYPES, NATURAL_KEY_FIELDS, IDENTIFIER_FIELD_MAP, applyIdentifiersToFields,
-    isCorruptError,
+    ID_TYPES, NATURAL_KEY_FIELDS, IDENTIFIER_FIELD_MAP, EXIT_DATE_FIELD,
+    applyIdentifiersToFields, isCorruptError,
     // tároló
     useBackend, hasBackend, describeBackend, onChange,
     createFileBackend, createIdbBackend, createMemoryBackend,
@@ -648,7 +688,7 @@ const EmployeeRepo = (() => {
     all, get, count, search, findByIdentifier, findByNaturalKey, matchIncoming,
     currentIdentifier, idTypeLabel, naturalKeyOf,
     // módosítás
-    create, update, addIdentifier, removeIdentifier, setArchived, destroy,
+    create, update, addIdentifier, removeIdentifier, setExited, destroy,
     // belső, teszteléshez
     _validate: validate, _normText: normText,
   };

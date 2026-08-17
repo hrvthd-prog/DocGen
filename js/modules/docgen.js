@@ -56,7 +56,7 @@ const DocgenModule = (() => {
     render();
     restoreHandles();
 
-    // A nyilvántartás bármely változása (felvitel, import, archiválás) azonnal
+    // A nyilvántartás bármely változása (felvitel, import, kilépés) azonnal
     // látszódjon itt is – így nem lehet elavult listából generálni.
     EmployeeRepo.onChange(() => { loadFromRegistry({ silent: true }); renderAll(); });
 
@@ -890,7 +890,7 @@ const DocgenModule = (() => {
       return;
     }
 
-    // Időközben törölt/archivált személyek kiesnek a kijelölésből
+    // Időközben törölt/kilépett személyek kiesnek a kijelölésből
     const letezo = new Set(state.clientRows.map(e => e.id));
     const elotte = state.selectedClients.length;
     state.selectedClients = state.selectedClients.filter(id => letezo.has(id));

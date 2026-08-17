@@ -58,6 +58,7 @@ const SEED_SCHEMA = {
     { key: 'korabbi',       label: 'Korábbi (külföldi) lakcím' },
     { key: 'foglalkoztatas',label: 'Foglalkoztatás' },
     { key: 'vegzettseg',    label: 'Végzettség és nyelv' },
+    { key: 'hr',            label: 'HR-adatok (nem idegenrendészeti)' },
     { key: 'szamitott',     label: 'Számított mezők' },
   ],
 
@@ -342,6 +343,101 @@ const SEED_SCHEMA = {
       label: { hu: 'Korábbi utca/cím', en: 'Previous Address (Street)' },
       hint: { en: 'Street name and house number of the last address abroad, in this one cell.' },
       tags: ['Korábbi lakcím utca'] },
+
+
+    // ── HR-adatok ────────────────────────────────────────────────────────────
+    // A HR korábbi „Personal Data Sheet" álló űrlapjának azon rovatai, amiknek
+    // NINCS párja a fenti idegenrendészeti adatkörben. Azért kerültek ide, hogy
+    // egy táblázat menjen ki a munkavállalóhoz, ne kettő.
+    //
+    // Egyetlen dokumentum-jelölő sem hivatkozik rájuk, számított mező sem
+    // épít rájuk – a DocGen tárolja és visszaexportálja őket, de az
+    // idegenrendészeti iratokba nem kerülnek.
+    //
+    // A `hr_` prefix nem kozmetika: az importáló a fejlécet kulcs, majd
+    // magyar/angol címke és jelölő szerint próbálja mezőhöz kötni
+    // (xlsx-read.js matchByLabel). A prefixelt kulcs és a máshol nem használt
+    // címkék zárják ki, hogy egy HR-rovat véletlenül egy idegenrendészeti
+    // mezőbe költözzön. Új HR-mezőnél ez a szabály: egyedi kulcs, egyedi
+    // magyar ÉS angol címke, jelölő (tag) nélkül.
+    { key: 'hr_emergency_contact_name', group: 'hr', type: 'text',
+      label: { hu: 'Vészhelyzeti kapcsolattartó neve', en: 'Emergency Contact — Name' },
+      hint: { en: 'Who should we call if something happens to you at work?\nFull name of one person.' } },
+
+    { key: 'hr_emergency_contact_phone', group: 'hr', type: 'text',
+      label: { hu: 'Vészhelyzeti kapcsolattartó telefonszáma', en: 'Emergency Contact — Phone' },
+      hint: { en: 'Phone number of the person above, in international format.\nExample: +36301234567' } },
+
+    { key: 'hr_dual_citizenship', group: 'hr', type: 'text',
+      label: { hu: 'Kettős állampolgárság', en: 'Dual Citizenship' },
+      hint: { en: 'If you hold a second citizenship, name that country.\nLeave empty if you have only one.' } },
+
+    { key: 'hr_id_number', group: 'hr', type: 'text',
+      label: { hu: 'Személyi igazolvány száma', en: 'Identity Card Number' },
+      hint: { en: 'Number of your national identity card (not the passport, not the residence permit).\nLeave empty if you do not have one.' } },
+
+    { key: 'hr_bank_account', group: 'hr', type: 'text',
+      label: { hu: 'Bankszámlaszám és a bank neve', en: 'Bank Account Number and Name of Bank' },
+      hint: { en: 'The account your salary should be paid to, and the name of the bank.\nIBAN is preferred.\nExample: HU42 1177 3016 1111 1018 0000 0000 - OTP Bank' } },
+
+    { key: 'hr_education_completion_date', group: 'hr', type: 'date',
+      label: { hu: 'Végzettség megszerzésének dátuma', en: 'Date of Completion of Education' },
+      hint: { en: 'When you finished your highest education.\nFormat: YYYY-MM-DD' } },
+
+    { key: 'hr_education_institution', group: 'hr', type: 'text',
+      label: { hu: 'Oktatási intézmény, szak neve', en: 'Name of Educational Institution and Faculty' },
+      hint: { en: 'Name of the school or university, and the faculty.\nWrite it as it appears on the certificate.' } },
+
+    { key: 'hr_education_specialization', group: 'hr', type: 'text',
+      label: { hu: 'Végzett szakirány', en: 'Graduated Specialization' },
+      hint: { en: 'The specialization you graduated in.\nExample: mechanical engineering' } },
+
+    { key: 'hr_degree_document_number', group: 'hr', type: 'text',
+      label: { hu: 'Oklevél/bizonyítvány száma', en: 'Document Number of Degree or Certificate' },
+      hint: { en: 'The serial number printed on your diploma or certificate.' } },
+
+    { key: 'hr_computer_skills', group: 'hr', type: 'text',
+      label: { hu: 'Számítástechnikai ismeretek', en: 'Computer Skills' },
+      hint: { en: 'Software you can use, in one cell, separated by commas.\nExample: Excel, SAP, AutoCAD\nWrite "none" if you have none.' } },
+
+    // A nyelvvizsgák és a gyerekek a HR űrlapján több sort kaptak. Egy
+    // „egy sor = egy ember" táblázatban ismétlődő blokk nem tárolható, ezért
+    // egyetlen szabad szöveges cellába kerülnek. Gépi feldolgozásra így nem
+    // alkalmasak – a HR olvassa el. Ha ez később kevés, fix rekeszekre kell
+    // bontani (hr_language_1_name, _level, _exam …).
+    { key: 'hr_language_skills', group: 'hr', type: 'text',
+      label: { hu: 'Nyelvtudás (nyelv / szint / vizsga)', en: 'Language Skills (language / level / exam)' },
+      hint: { en: 'All your languages in THIS ONE CELL. For each: language, level, type of exam.\nSeparate them with a semicolon.\nExample: English, B2, IELTS; German, A2, no exam' } },
+
+    { key: 'hr_children', group: 'hr', type: 'text',
+      label: { hu: 'Gyermekek (név, születési idő)', en: 'Children (name, date of birth)' },
+      hint: { en: 'All your children in THIS ONE CELL: name and date of birth for each.\nSeparate them with a semicolon.\nExample: Anna Kovacs, 2015-04-02; Peter Kovacs, 2019-11-30\nWrite "none" if you have no children.' } },
+
+    { key: 'hr_previous_employer', group: 'hr', type: 'text',
+      label: { hu: 'Előző munkáltató', en: 'Previous Employer' },
+      hint: { en: 'Name of the company you worked for before this job.' } },
+
+    { key: 'hr_professional_background', group: 'hr', type: 'text',
+      label: { hu: 'Szakmai előzmények', en: 'Professional Background' },
+      hint: { en: 'Short summary of your work experience, in one cell.\nExample: 6 years welder at ABC Ltd, 2 years machine operator' } },
+
+    { key: 'hr_previous_employment_end', group: 'hr', type: 'date',
+      label: { hu: 'Előző munkaviszony megszűnésének dátuma', en: 'End Date of Previous Employment' },
+      hint: { en: 'The last day of your previous employment.\nFormat: YYYY-MM-DD' } },
+
+    // Az utolsó három rovatot a HR tölti ki, nem a munkavállaló. Az útmutató
+    // ezt ki is írja, hogy a kitöltő ne találgasson.
+    { key: 'hr_department_cost_center', group: 'hr', type: 'text',
+      label: { hu: 'Szervezeti egység, költséghely', en: 'Department and Cost Center (filled by HR)' },
+      hint: { en: 'FILLED BY HR — please leave empty.' } },
+
+    { key: 'hr_direct_leader', group: 'hr', type: 'text',
+      label: { hu: 'Közvetlen vezető', en: 'Direct Leader (filled by HR)' },
+      hint: { en: 'FILLED BY HR — please leave empty.' } },
+
+    { key: 'hr_sg_category', group: 'hr', type: 'text',
+      label: { hu: 'SG kategória', en: 'SG Category (filled by HR)' },
+      hint: { en: 'FILLED BY HR — please leave empty.' } },
 
 
     // ── Számított mezők ──────────────────────────────────────────────────────

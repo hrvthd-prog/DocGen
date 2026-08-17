@@ -21,12 +21,30 @@
 
 .rg-actions { white-space: nowrap; text-align: right; }
 .rg-actions .btn { margin-left: 4px; }
-/* A törlés visszafordíthatatlan – ne nézzen ki ugyanúgy, mint az archiválás */
+/* A törlés visszafordíthatatlan – ne nézzen ki ugyanúgy, mint a kilépés */
 .rg-del { color: var(--c-red); }
 .rg-del:hover { background: var(--c-red); color: #fff; }
 
-.rg-archived td { opacity: .55; font-style: italic; }
+.rg-exited td { opacity: .55; font-style: italic; }
 .rg-dim { color: var(--c-muted); }
+
+.rg-exit-badge {
+  margin-right: var(--sp-2);
+  font-size: 10px;
+  font-style: normal;
+  color: var(--c-muted);
+  white-space: nowrap;
+}
+
+/* Bejelentési figyelmeztetés – lejárt határidőnél hangosabb */
+.rg-exit-warn { font-size: 13px; line-height: 1.6; }
+.rg-exit-warn p { margin-bottom: var(--sp-2); }
+.rg-exit-deadline {
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 3px solid var(--c-amber);
+  background: var(--c-bg);
+}
+.rg-exit-warn.is-late .rg-exit-deadline { border-left-color: var(--c-red); color: var(--c-red); }
 
 /* Jelzi, hogy az azonosítónak van korábbi története */
 .rg-more {

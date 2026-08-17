@@ -109,14 +109,21 @@ if (JSDOM) {
 // ════════════════════════════════════════════════════════════════════════════
 section('Összevetés a kiinduló sémával');
 
-// A minta-xlsx a 44 oszlopos eredeti. A séma azóta hat mezővel bővült a
-// hatósági formanyomtatvány miatt, ezért a diff joggal jelzi őket hiányzónak:
-// a RÉGI fájlból tényleg hiányoznak. Pontosan ezt a hatot várjuk, se többet,
-// se kevesebbet – így a teszt továbbra is kiszúrja a véletlen eltérést.
+// A minta-xlsx a 44 oszlopos eredeti. A séma azóta bővült: öt mezővel a
+// hatósági formanyomtatvány miatt, tizennyolccal a HR korábbi adatlapjából.
+// A diff joggal jelzi őket hiányzónak – a RÉGI fájlból tényleg hiányoznak.
+// Pontosan ezeket várjuk, se többet, se kevesebbet, így a teszt továbbra is
+// kiszúrja a véletlen eltérést.
 const FORMANYOMTATVANY_MEZOK = [
   'occupation_before_arrival', 'other_accommodation', 'pp_issuance_place',
   'stairway', 'topographical_number',
-];
+  'hr_bank_account', 'hr_children', 'hr_computer_skills', 'hr_degree_document_number',
+  'hr_department_cost_center', 'hr_direct_leader', 'hr_dual_citizenship',
+  'hr_education_completion_date', 'hr_education_institution', 'hr_education_specialization',
+  'hr_emergency_contact_name', 'hr_emergency_contact_phone', 'hr_id_number',
+  'hr_language_skills', 'hr_previous_employer', 'hr_previous_employment_end',
+  'hr_professional_background', 'hr_sg_category',
+].sort();
 
 test('a kiinduló séma megegyezik a fájllal – csak a formanyomtatvány-mezők újak', () => {
   const d = SchemaFromXlsx.diff(analysis, SchemaStore.get());

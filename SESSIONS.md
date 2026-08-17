@@ -36,7 +36,7 @@ sablonnal. Röviden, de úgy, hogy a *következő* session ebből folytatni tudj
 ## YYYY-MM-DD — <rövid cím>
 
 **Cél:** mit kértek / mi volt a feladat.
-**Változás:** mit csináltunk (fájlok, `commit-hash`).
+**Változás:** mit csináltunk (fájlok, `v<verzió>`).
 **Miért / döntés:** a nem magától értetődő döntések és okuk.
 **Tesztek:** mi fut, mi az eredmény.
 **Nyitott / következő:** mi maradt hátra, mire figyeljen a következő session.
@@ -44,13 +44,155 @@ sablonnal. Röviden, de úgy, hogy a *következő* session ebből folytatni tudj
 
 **Elvek:**
 - A tetejére kerül az új bejegyzés (fordított időrend).
-- A commit-hash köti a naplót a git-történethez — mindig írd bele.
+- A **verziószám** köti a naplót a git-történethez — mindig írd bele. Nem a
+  commit-hasht: az a saját commitjába nem írható bele (körkörös), ezért a régi
+  bejegyzésekben ott maradt a „még nincs commitolva". A verzió viszont a
+  commit-számból ELŐRE kiszámolható (`git rev-list --count HEAD` + 1), és a
+  `post-commit` hook `v<verzió>` néven tagelt commitra mutat.
 - Ne írd át a régi bejegyzéseket utólag „simára"; a tévedés is tanulság.
 - Egy bejegyzés legyen tömör (nem jegyzőkönyv) — a *folytathatóság* a cél.
 
 ---
 
 # Napló
+
+## 2026-08-17 — Kilépés: az archiválás helyére munkaviszony-megszűnés
+
+**Cél:** Az „archiválás" fogalmilag rossz volt: nem irattározunk, hanem
+kilépett dolgozót jelölünk – amihez dátum és bejelentési kötelezettség tartozik.
+
+**Változás:** `v10.34`
+- `js/services/employee-repo.js` — `archived` → `exited` + új `exitDate`;
+  `setArchived` → `setExited(id, exited, exitDate)`, a dátum **kötelező** és a
+  `EXIT_DATE_FIELD` (`employment_end`) séma-mezőbe is bemásolódik. A régi
+  `archived` kulcs betöltéskor egyszer átfordul és eltűnik.
+- `js/modules/registry/registry-view.js` — kilépés-párbeszéd dátummal, majd
+  figyelmeztető párbeszéd az OIF felé teendő bejelentésről (határidő, hátralévő
+  napok), és egy kattintásos ügynyitás a `munkaviszony_kijelentes` típusra.
+- `css/registry.css`, `js/modules/docgen.js`, `TERV.md`, `README.md` — a
+  fogalom átvezetése; `test/employee-repo.test.js` — új tesztek.
+
+**Miért / döntés:**
+- A dátum a **tárolóban** kötelező, nem a felületen: így importból vagy bármely
+  más útról érkező jelölés sem csúszhat át dátum nélkül.
+- A dátum a séma-mezőbe is bemásolódik, mert az adatbekérő „Kilépés dátuma"
+  oszlopa a felvételkor TERVEZETT utolsó munkanap – enélkül az export és a
+  sablonok a tervezett napot vinnék a tényleges helyett.
+- Visszavételkor az `exitDate` törlődik, de a séma-mező értéke marad: az a
+  felhasználó adata, nem a mi jelölésünk.
+- A figyelmeztetésből ügyet lehet nyitni: egy figyelmeztetés, amit nem lehet
+  elintézni, pár nap múlva zaj. A határidő-napszám az ügytípusból jön (ma 5),
+  nem itteni konstans – a Beállításokban átírható.
+
+**Tesztek:** `node test/run-all.js` → 13/13 készlet zöld.
+Külső függések ellenőrizve: `munkaviszony_kijelentes` ügytípus,
+`employment_end` séma-mező, `CaseRepo.hasOpenCaseOfType` / `daysLeft` /
+`create({triggerDate})` — mind létezik. `archived` maradvány sehol nincs a
+migrációs kódon és a rá vonatkozó teszten kívül.
+
+**Nyitott / következő:**
+- Téves kilépési dátumot csak visszavétel + újbóli jelölés útján lehet
+  javítani. Ha ez zavaró lesz, a kilépés dátuma szerkeszthetővé tehető.
+- A kilépés-párbeszédre nincs gépi teszt (böngészős UI); a tároló-oldali
+  szabály (kötelező dátum, séma-mező írása) viszont tesztelt.
+
+## 2026-08-17 — Commitonkénti alverzió, tag és a felületen látható verzió
+
+**Cél:** Minden commit kapjon új alverziót, ami a felületen és a GitHubon is
+követhető.
+
+**Változás:** `v10.31`, `v10.32`, `v10.33`
+- `tools/verzio.js` + `tools/hooks/{pre,post}-commit` — az alverzió a
+  commit-számból jön (nincs tárolt számláló), a `pre-commit` írja a `?v=`-t és
+  a `js/version.js`-t, a `post-commit` **annotált** taget készít.
+- `tools/kiadas.js` a saját verziólogikája helyett a `verzio.js`-t hívja;
+  `test/verzio.test.js` új; a fejlécben és a Beállítások fülön látszik a verzió.
+
+**Miért / döntés:**
+- Commit-szám, nem külön számláló: az állapot elcsúszik és merge-nél ütközik.
+- A commit SHA-ja a saját commitjába nem írható (körkörös) — ezért a
+  verzió→commit megfeleltetést a git tag adja.
+- **Annotált** tag kell: a `git push --follow-tags` a könnyűsúlyút nem viszi
+  fel (ez lemért eset volt, a v10.31 a gépen ragadt).
+- A felületen nincs GitHub-link: az app a használat helyén izolált, hálózat
+  nélküli gépen fut, ott csak üres fület nyitna.
+
+**Tesztek:** `node test/run-all.js` → zöld; `node tools/verzio.js --ellenoriz`.
+Mellékesen kiderült, hogy a `print.html` `?v=5`-ön állt az `index.html` 10-e
+mellett – a teszt ezt már géppel őrzi.
+
+**Nyitott / következő:**
+- Rebase/merge közben a hook kihagyja magát (különben minden újrajátszott
+  commit ütközne az `index.html`-en), ezért utána a verzió elmarad. Ilyenkor
+  `git reset --soft HEAD~1` + újracommit rakja helyre.
+- `--amend`-nél a verzió eggyel túllép (a hook a következő sorszámot számolja).
+- Új gépen egyszeri: `git config core.hooksPath tools/hooks` és
+  `git config push.followTags true`.
+
+## 2026-08-17 — Adatbekérő: a HR-adatlap és a DocGen-tábla egyesítése
+
+**Cél:** Eddig két adatbekérő ment a külföldi munkavállalóhoz: a HR álló
+„Personal Data Sheet" űrlapja és a DocGen fekvő táblája. Egy fájl menjen ki,
+úgy, hogy a DocGen importja se sérüljön, és a kitöltés is könnyebb legyen.
+
+**Változás:**
+- `js/schema/seed-schema.js` — új `hr` csoport és 18 `hr_` előtagú mező: a
+  HR-lap azon rovatai, amiknek nincs párja az idegenrendészeti adatkörben.
+  A tábla 49 → 67 oszlop.
+- `js/schema/export-profiles.js` — `style.groupFill` (fejlécszín csoportonként)
+  és `style.freezeColumns: 3`.
+- `js/services/xlsx-write.js` — csoportszín + színváltásnál vastag vonal a
+  fejlécen, oszlopfagyasztás, és kétnyelvű `Útmutató` lap: angol szabályok,
+  `English label` és `Guidance` oszlop, bizalmassági blokk.
+- `js/schema/schema-store.js` + `js/modules/registry/registry-view.js` —
+  `addMissingSeedFields()`: a mentett sémából hiányzó seed-mezők pótlása
+  betöltéskor.
+- `tools/adatbekero.js` — új: üres sablon generálása böngésző nélkül,
+  visszaolvasó önellenőrzéssel.
+- `../adatbekero.xlsx` — a kiküldhető, egyesített fájl újragenerálva (a
+  korábbi, 44 oszlopos, 2026-08-07-i példány helyére).
+
+**Miért / döntés:**
+- *Fekvő tábla, HR-extrák jobbra* (nem álló űrlap + rejtett sor). Az importáló
+  az ismeretlen fejlécet eldobja, nem hibázik (`xlsx-read.js`), így a HR-kör
+  nulla kockázattal befér, és egy fájlban marad a 30 ember.
+- A `hr_` előtag az ütközés elleni valódi védelem: a `matchByLabel` a
+  magyar/angol CÍMKÉRE is illeszt, ezért egy „Tax number" fejlécű HR-rovat az
+  adóazonosítóba költözött volna. Új teszt méri (kulcs, mindkét címke, jelölő),
+  és azt is, hogy számított mező nem épít `hr_` adatra.
+- A címkesor szövegét NEM bántottam (nincs `*` a kötelezőn): a
+  „az angol címkék megegyeznek az eredetivel" teszt szándékos szerződés. A
+  kötelezőség nem-színes jelzése a cellakommentben és az Útmutató lapon van.
+- A csoportszínek nem adnak egybefüggő blokkokat, mert az oszlopsorrend az
+  eredeti fájlé (teszt védi). Jelmagyarázatként működnek, az Útmutató lap
+  *Csoport* oszlopa ugyanazt a színt viseli.
+- Nyelvvizsgák és gyerekek: ismétlődő blokk egy sorba nem tárolható, ezért
+  egy-egy szabad szöveges cella (a felhasználó döntése). Gépi feldolgozásra nem
+  alkalmas — ha kell, fix rekeszekre kell bontani.
+- Bankszámlaszám bekerült (a HR-lapon eddig is így volt), ezért az Útmutató
+  lapra bizalmassági blokk került.
+
+**Tesztek:** `node test/run-all.js` → 312/312 zöld (a séma-készlet 4 új
+teszttel). `node tools/kiadas.js --csak-ellenoriz` → zöld.
+Két várakozás-teszt frissült szándékosan (`schema.test.js`,
+`schema-from-xlsx.test.js`): a bővülés listája bennük van felsorolva.
+A `test/fixtures/adatbekero-hints.json` 18 új bejegyzést kapott.
+
+**Nyitott / következő:**
+- A `test/fixtures/adatbekero-minta.xlsx` továbbra is a régi 44 oszlopos fájl —
+  szándékosan, az mérné a sorrend-elcsúszást. Ha egyszer lecseréljük, a
+  `FORMANYOMTATVANY_MEZOK` listát is nullázni kell.
+- `addMissingSeedFields` visszahozza a szándékosan törölt seed-mezőt is
+  (`ponytail:` megjegyzés a kódban jelzi). Ha ez zavaró lesz, „törölt
+  seed-kulcsok" lista kell a configba.
+- Tisztázatlan maradt: a HR-lap `Home address` vs `Place of residence`
+  megkettőzése. Feltevés szerint a magyarországi lakcím bontása a tartózkodási
+  hely, az állandó (külföldi) cím pedig a `previous_*` mezők — ha ez nem igaz,
+  új mező kell.
+- Verzió: **v10.34** (a kilépés-funkcióval közös commitban – lásd a fenti
+  bejegyzést; a kettő ugyanabban a munkafában készült, a `registry-view.js`-t
+  mindkettő érinti, ezért nem volt tisztán szétvágható).
+
 
 ## 2026-08-11 — schema-from-xlsx: dátumoszlopok felismerése (a hiba forrásának végleges lezárása)
 
