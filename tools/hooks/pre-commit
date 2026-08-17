@@ -1,0 +1,14 @@
+#!/bin/sh
+# Alverzió léptetése minden commitnál — a verzió így ugyanabban a commitban
+# van, amelyiket jelöli. Részletek: tools/verzio.js
+#
+# Rebase és merge közben kihagyjuk: ott a hook minden újrajátszott commitnál
+# átírná az index.html-t, és az garantált ütközés.
+
+git_dir=$(git rev-parse --git-dir)
+if [ -d "$git_dir/rebase-merge" ] || [ -d "$git_dir/rebase-apply" ] || [ -f "$git_dir/MERGE_HEAD" ]; then
+  exit 0
+fi
+
+node tools/verzio.js --leptet || exit 1
+git add index.html print.html js/version.js

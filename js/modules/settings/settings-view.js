@@ -74,6 +74,8 @@ const SettingsModule = (() => {
               </div>
             </div>
           </div>
+
+          ${verzioKartya()}
         </div>
       </div>`;
 
@@ -82,6 +84,37 @@ const SettingsModule = (() => {
     document.getElementById('sv-dict-save').addEventListener('click', saveDictionary);
     renderFieldList();
     renderDictionary();
+  }
+
+  /**
+   * Verzió-kártya. Ha valaki azt mondja, hogy „nálam másképp működik", itt
+   * derül ki egy pillanat alatt, hogy melyik kódot futtatja.
+   */
+  function verzioKartya() {
+    const v = window.APP_VERZIO;
+    if (!v) return '';
+    const tag = `v${v.verzio}`;
+    return `
+      <div class="ws-card">
+        <div class="ws-card-header">
+          <span class="ws-card-title">Verzió</span>
+          <span class="rg-count">${escHtml(v.datum)}</span>
+        </div>
+        <div class="ws-card-body">
+          <p class="sv-intro">
+            A verzió <b>${escHtml(tag)}</b> alakú: a fő szám a kiadás, a második
+            a commit sorszáma. Minden commit új alverziót kap, és ugyanezzel a
+            névvel git tag is készül – így a felületen látott szám egyetlen
+            kattintással visszakereshető a repóban.
+          </p>
+          <div class="sv-toolbar">
+            <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener"
+               href="${escHtml(v.repo)}/releases/tag/${escHtml(tag)}">Ez a verzió a GitHubon</a>
+            <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener"
+               href="${escHtml(v.repo)}/tags">Összes verzió</a>
+          </div>
+        </div>
+      </div>`;
   }
 
   // ── Szótár ─────────────────────────────────────────────────────────────────

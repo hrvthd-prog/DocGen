@@ -68,6 +68,16 @@ function main() {
       console.log('  Valami hiányzik a verziókezelésből – nézd meg a .gitignore-t.');
       process.exit(1);
     }
+    // 4. A hookok a repóban vannak, de a `core.hooksPath` a configban – azt a
+    //    git szándékosan nem klónozza. Ez minden gépen egyszeri kézi lépés.
+    const hookDir = path.join(klon, 'tools', 'hooks');
+    if (!fs.existsSync(path.join(hookDir, 'pre-commit'))) {
+      console.log('\n✗ A tools/hooks/pre-commit nincs a repóban – nem lenne verzióléptetés.');
+      process.exit(1);
+    }
+    console.log('\nEmlékeztető: friss klónban egyszer le kell futtatni:');
+    console.log('  git config core.hooksPath tools/hooks');
+
     console.log('\n✓ A friss klón önmagában is teljes.');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });

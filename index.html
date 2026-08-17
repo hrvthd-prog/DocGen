@@ -5,15 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DocGen — Dokumentumkezelő</title>
 
-  <!-- FRISSÍTÉSKOR: ne kézzel írd át a lenti verziószámokat, hanem futtasd:
-           node tools/kiadas.js
-       Az lefuttatja a teszteket, ellenőrzi a repót, és lépteti a verziót.
+  <!-- A lenti verziószámokat NE írd át kézzel.
+       Az alverziót (a pont utáni szám = commit sorszáma) a pre-commit hook
+       lépteti minden commitnál; a főverziót a kiadás: node tools/kiadas.js
        A verziólépés nélkül a böngésző a gyorsítótárból veszi a régi JS-t, és a
        felhasználók a frissítés után is a régi kódot futtatják. -->
-  <link rel="stylesheet" href="css/app.css?v=10">
-  <link rel="stylesheet" href="css/registry.css?v=10">
-  <link rel="stylesheet" href="css/cases.css?v=10">
-  <link rel="stylesheet" href="vendor/client-picker.css?v=10">
+  <link rel="stylesheet" href="css/app.css?v=10.31">
+  <link rel="stylesheet" href="css/registry.css?v=10.31">
+  <link rel="stylesheet" href="css/cases.css?v=10.31">
+  <link rel="stylesheet" href="vendor/client-picker.css?v=10.31">
 </head>
 <body>
   <svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" class="bev-sprite" style="position:absolute;overflow:hidden" aria-hidden="true">
@@ -55,6 +55,7 @@
         <span class="header-bc-item muted">Nincs adat betöltve</span>
       </div>
       <div class="header-user">
+        <a id="header-verzio" class="header-verzio" target="_blank" rel="noopener"></a>
         <span id="header-username" class="muted"></span>
       </div>
     </header>
@@ -91,57 +92,60 @@
   <div id="dialog-overlay" class="dialog-overlay hidden"></div>
 
   <!-- Vendor -->
-  <script src="vendor/pdf-lib.min.js?v=10"></script>
-  <script src="vendor/client-picker.js?v=10"></script>
-  <script src="vendor/xlsx.full.min.js?v=10"></script>
-  <script src="vendor/pizzip.min.js?v=10"></script>
-  <script src="vendor/docxtemplater.js?v=10"></script>
-  <script src="vendor/FileSaver.min.js?v=10"></script>
-  <script src="vendor/exceljs.min.js?v=10"></script>
+  <script src="vendor/pdf-lib.min.js?v=10.31"></script>
+  <script src="vendor/client-picker.js?v=10.31"></script>
+  <script src="vendor/xlsx.full.min.js?v=10.31"></script>
+  <script src="vendor/pizzip.min.js?v=10.31"></script>
+  <script src="vendor/docxtemplater.js?v=10.31"></script>
+  <script src="vendor/FileSaver.min.js?v=10.31"></script>
+  <script src="vendor/exceljs.min.js?v=10.31"></script>
+
+  <!-- Verzió (a tools/verzio.js írja minden commitnál) -->
+  <script src="js/version.js?v=10.31"></script>
 
   <!-- Naplózás -->
-  <script src="js/logger.js?v=10"></script>
+  <script src="js/logger.js?v=10.31"></script>
 
   <!-- Service réteg -->
-  <script src="js/services/settings-service.js?v=10"></script>
-  <script src="js/services/fs-service.js?v=10"></script>
-  <script src="js/services/docx-service.js?v=10"></script>
-  <script src="js/services/employee-repo.js?v=10"></script>
-  <script src="js/services/xlsx-write.js?v=10"></script>
-  <script src="js/services/xlsx-read.js?v=10"></script>
+  <script src="js/services/settings-service.js?v=10.31"></script>
+  <script src="js/services/fs-service.js?v=10.31"></script>
+  <script src="js/services/docx-service.js?v=10.31"></script>
+  <script src="js/services/employee-repo.js?v=10.31"></script>
+  <script src="js/services/xlsx-write.js?v=10.31"></script>
+  <script src="js/services/xlsx-read.js?v=10.31"></script>
 
   <!-- Séma-réteg (a séma adat, nem kód – lásd js/schema/seed-schema.js) -->
-  <script src="js/schema/value-codec.js?v=10"></script>
-  <script src="js/schema/seed-schema.js?v=10"></script>
-  <script src="js/schema/schema-store.js?v=10"></script>
-  <script src="js/schema/schema-from-xlsx.js?v=10"></script>
-  <script src="js/schema/export-profiles.js?v=10"></script>
+  <script src="js/schema/value-codec.js?v=10.31"></script>
+  <script src="js/schema/seed-schema.js?v=10.31"></script>
+  <script src="js/schema/schema-store.js?v=10.31"></script>
+  <script src="js/schema/schema-from-xlsx.js?v=10.31"></script>
+  <script src="js/schema/export-profiles.js?v=10.31"></script>
 
   <!-- Megosztott segédfüggvények -->
-  <script src="js/utils.js?v=10"></script>
+  <script src="js/utils.js?v=10.31"></script>
 
   <!-- Modulok -->
   <!-- Dokumentumgenerálás: alegységek a mag előtt töltődnek -->
-  <script src="js/modules/docgen/missing-log.js?v=10"></script>
-  <script src="js/modules/docgen/naming.js?v=10"></script>
-  <script src="js/modules/docgen/merge.js?v=10"></script>
-  <script src="js/modules/docgen/groups.js?v=10"></script>
-  <script src="js/modules/docgen.js?v=10"></script>
-  <script src="js/modules/registry/employee-form.js?v=10"></script>
-  <script src="js/modules/registry/xlsx-io.js?v=10"></script>
-  <script src="js/modules/registry/registry-view.js?v=10"></script>
+  <script src="js/modules/docgen/missing-log.js?v=10.31"></script>
+  <script src="js/modules/docgen/naming.js?v=10.31"></script>
+  <script src="js/modules/docgen/merge.js?v=10.31"></script>
+  <script src="js/modules/docgen/groups.js?v=10.31"></script>
+  <script src="js/modules/docgen.js?v=10.31"></script>
+  <script src="js/modules/registry/employee-form.js?v=10.31"></script>
+  <script src="js/modules/registry/xlsx-io.js?v=10.31"></script>
+  <script src="js/modules/registry/registry-view.js?v=10.31"></script>
 
   <!-- Ügykövetés: a típusok a séma-réteghez, a tároló a service-réteghez tartozik,
        de a betöltési sorrend miatt itt, a felhasználóik előtt szerepelnek -->
-  <script src="js/schema/case-types.js?v=10"></script>
-  <script src="js/services/case-repo.js?v=10"></script>
-  <script src="js/modules/cases/case-timeline.js?v=10"></script>
-  <script src="js/modules/cases/case-form.js?v=10"></script>
-  <script src="js/modules/cases/cases-view.js?v=10"></script>
+  <script src="js/schema/case-types.js?v=10.31"></script>
+  <script src="js/services/case-repo.js?v=10.31"></script>
+  <script src="js/modules/cases/case-timeline.js?v=10.31"></script>
+  <script src="js/modules/cases/case-form.js?v=10.31"></script>
+  <script src="js/modules/cases/cases-view.js?v=10.31"></script>
 
-  <script src="js/modules/settings/settings-view.js?v=10"></script>
+  <script src="js/modules/settings/settings-view.js?v=10.31"></script>
 
   <!-- App shell -->
-  <script src="js/app.js?v=10"></script>
+  <script src="js/app.js?v=10.31"></script>
 </body>
 </html>
