@@ -89,11 +89,15 @@ const SettingsModule = (() => {
   /**
    * Verzió-kártya. Ha valaki azt mondja, hogy „nálam másképp működik", itt
    * derül ki egy pillanat alatt, hogy melyik kódot futtatja.
+   *
+   * Az app a használat helyén egy izolált gépen, hálózat nélkül fut – ezért
+   * itt nincs link és nincs git-fogalom: a szám és a dátum önmagában elég
+   * ahhoz, hogy a fejlesztői oldalon egyértelmű legyen, melyik kiadásról van
+   * szó. A visszakeresést a repóban a `v<szám>` tag adja.
    */
   function verzioKartya() {
     const v = window.APP_VERZIO;
     if (!v) return '';
-    const tag = `v${v.verzio}`;
     return `
       <div class="ws-card">
         <div class="ws-card-header">
@@ -102,17 +106,13 @@ const SettingsModule = (() => {
         </div>
         <div class="ws-card-body">
           <p class="sv-intro">
-            A verzió <b>${escHtml(tag)}</b> alakú: a fő szám a kiadás, a második
-            a commit sorszáma. Minden commit új alverziót kap, és ugyanezzel a
-            névvel git tag is készül – így a felületen látott szám egyetlen
-            kattintással visszakereshető a repóban.
+            Ez a gép a <b>${escHtml(v.verzio)}</b> verziót futtatja,
+            kiadva ${escHtml(v.datum)}.
           </p>
-          <div class="sv-toolbar">
-            <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener"
-               href="${escHtml(v.repo)}/releases/tag/${escHtml(tag)}">Ez a verzió a GitHubon</a>
-            <a class="btn btn-ghost btn-sm" target="_blank" rel="noopener"
-               href="${escHtml(v.repo)}/tags">Összes verzió</a>
-          </div>
+          <p class="ef-hint">
+            Hibajelentésnél add meg ezt a számot – ebből derül ki, hogy a
+            hiba a jelenlegi kiadásban van-e, vagy egy régebbi másolatban.
+          </p>
         </div>
       </div>`;
   }

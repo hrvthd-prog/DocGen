@@ -121,15 +121,15 @@ window.updateHeaderBreadcrumb = function({ sourceName, clientCount, onSourceClic
 };
 
 // ── Verzió a fejlécben ────────────────────────────────────────────────────
-// A link a verzióhoz tartozó git tagre mutat: onnan egy kattintás a pontos
-// commit és a diff. Offline is olvasható marad, csak a link nem él.
+// Szöveg, nem link: az app a használat helyén hálózat nélküli gépen fut, ott
+// egy GitHub-hivatkozás csak egy üres fület nyitna. A visszakereséshez a
+// fejlesztői oldalon a `v<szám>` git tag van.
 (function showVersion() {
   const el = document.getElementById('header-verzio');
   const v  = window.APP_VERZIO;
   if (!el || !v) return;
   el.textContent = 'v' + v.verzio;
-  el.title = `Verzió ${v.verzio} — ${v.datum}`;
-  el.href = `${v.repo}/releases/tag/v${v.verzio}`;
+  el.title = `Verzió ${v.verzio} — kiadva ${v.datum}`;
 })();
 
 // ── Indítás ───────────────────────────────────────────────────────────────

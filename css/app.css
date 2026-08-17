@@ -86,10 +86,8 @@ html, body { overflow: auto; }
 .header-verzio {
   font-size: 11px;
   color: rgba(255,255,255,.45);
-  text-decoration: none;
   letter-spacing: .02em;
 }
-.header-verzio:hover { color: rgba(255,255,255,.8); }
 
 #header-username {
   font-weight: 500;
