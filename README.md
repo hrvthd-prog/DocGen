@@ -225,22 +225,56 @@ A fejléc színe a mező **csoportját** jelöli (lakcím, okmányok, foglalkozt
 színváltásnál vastag vonal van, és az első három oszlop görgetéskor is állva
 marad. A **kötelező** mező ettől függetlenül piros: az erősebb jelzés.
 
-A csoportok nem egybefüggő blokkok — az oszlopsorrend az eredeti adatbekérőé, és
-abban pl. a családi állapot a születési és az okmányadatok közé esik. A szín
-tehát jelmagyarázat; az `Útmutató` lap *Csoport* oszlopa ugyanezt a színt viseli.
+A csoportok nem egybefüggő blokkok, mert az oszlopsorrend a hatósági
+nyomtatványé: abban pl. a szakképzettség és az iskolai végzettség a személyes
+adatok között van, a nyelvismeret viszont csak a betétlapon. A szín tehát
+jelmagyarázat; az `Útmutató` lap *Csoport* oszlopa ugyanezt a színt viseli.
+
+### Az oszlopsorrend a hatósági nyomtatványé
+
+A sorrend a **9. sz. tartózkodási engedély iránti kérelem** és a betétlapjai
+(9.7. Vendégmunkás, 9.9. EU Kék Kártya) rovatsorrendje:
+
+```
+borító (engedélyszám, lejárat, telefon, e-mail)
+1. pont  személyes adatok → szakképzettség → végzettség → korábbi foglalkozás
+2. pont  útlevél: szám → kiállítás ideje → kiállítás HELYE → típus → érvényesség
+3. pont  szálláshely: helyrajzi szám → irányítószám → … → ajtó → jogcím
+6. pont  eltartott hozzátartozók
+7. pont  az érkezést megelőző lakcím
+betétlap bér → munkakör (FEOR) → nyelvismeret → korábbi magyar munkahely
+──────── innentől, ami egyik nyomtatványon sincs: adóazonosító, TAJ,
+         vészhelyzeti kapcsolattartó, és a HR saját rovatai
+```
+
+Így az ügyintéző fentről lefelé haladva vezeti át az adatokat, nem ugrál a
+táblázatban. A sorrend **szerződés**: a `schema.test.js`-ben egy felsorolás
+(`HATOSAGI_SORREND`) őrzi, és a teszt bukik, ha elcsúszik.
+
+> Korábban az eredeti 44 oszlopos adatbekérő sorrendje volt a szerződés. Ezért
+> a tesztek nem oszlopszám, hanem **kulcs szerint** keresik a cellákat — így egy
+> újabb átrendezés nem buktat el tizenhat tesztet ok nélkül.
+
+Az első hét oszlop görgetéskor is áll: a névvel bezárólag. Ez ~145 karakternyi
+szélesség — ha sok, a `style.freezeColumns` lejjebb vehető, de a névnél
+kevesebbnek nincs értelme.
 
 ### HR-oszlopok: egy táblázat menjen ki, ne kettő
 
 A HR korábban külön, álló „Personal Data Sheet" űrlapon kérte be a maga
 adatait. Azok a rovatok, amiknek **nincs párja** az idegenrendészeti adatkörben,
-`hr_` előtagú oszlopként a tábla végén vannak (vészhelyzeti kapcsolattartó,
-bankszámla, iskola és oklevél adatai, nyelvtudás, gyerekek, előző munkáltató,
-és a HR által kitöltendő három rovat).
+`hr_` előtagú oszlopként vannak benne — de nem egy blokkban a végén, hanem
+**annál a hatósági rovatnál, amelyikhez tartoznak**: a kettős állampolgárság az
+állampolgárság mellett, az iskola és az oklevél adatai a végzettségnél, a
+nyelvtudás a betétlap nyelvismeret-rovatánál, a gyerekek a kérelem 6. pontjánál.
+A bankszámla és a HR által kitöltendő három rovat a tábla végén marad.
 
 **Egyetlen dokumentum-jelölő és számított mező sem hivatkozik rájuk** — a DocGen
 tárolja és visszaexportálja őket, de iratba nem kerülnek. Amit a HR-lap és az
 idegenrendészeti kör egyaránt kér (adóazonosító, TAJ, munkakör, FEOR, bér,
-belépés dátuma), az **nincs megkettőzve**: a meglévő mező viszi.
+belépés dátuma), az **nincs megkettőzve**: a meglévő mező viszi. Két HR-rovat
+ezért ki is maradt: az „Identity Card Number" az útlevélszám (`pp_number`), a
+„Professional Background" pedig az `occupation_before_arrival`.
 
 > A `hr_` előtag nem kozmetika. Az importáló a fejlécet kulcs, majd
 > magyar/angol **címke** és jelölő szerint próbálja mezőhöz kötni, ezért egy
@@ -252,7 +286,8 @@ Ami a HR-lapon egy cellában volt, de a DocGen többől számol (`Name`,
 `Mother's name`, `Place of birth`, `Home address`), az **bontva** szerepel —
 számított mezőbe importálni nem lehet. A HR-lap ismétlődő blokkjai (nyelvvizsgák,
 gyerekek) egy „egy sor = egy ember" táblába nem férnek: egy-egy szabad szöveges
-cellába kerültek, gépi feldolgozásra nem alkalmasak.
+cellába kerültek, gépi feldolgozásra nem alkalmasak. Ha a hatósági kitöltéshez
+ez kevés lesz, fix rekeszekre kell bontani őket (`hr_child_1_name`, …).
 
 A lap **jelszóval védett**, hogy a rejtett sor véletlenül se kerüljön elő:
 
@@ -264,6 +299,39 @@ A lap **jelszóval védett**, hogy a rejtett sor véletlenül se kerüljön elő
 
 A kitölthető sorok száma 30. A védelem tiltja a sorbeszúrást, ezért ennél több
 munkavállaló nem fér bele egy fájlba — a `protection.fillableRows` állítja.
+
+### „HR adatlap" — nyomtatható lap makró nélkül
+
+A munkafüzet harmadik lapja a HR korábbi *Personal Data Sheet* elrendezését
+hozza, álló A4-en. A tetején **egyetlen írható cella** van: a személy sorszáma a
+`Data` lapon. Minden érték `INDEX`-képlettel onnan jön, tehát átíráskor magától
+frissül — nyomtatás és PDF a szokásos Ctrl+P, illetve *Mentés PDF-ként*.
+
+```
+B2 = 1        → az első kitöltött sor adatlapja
+B2 = 7        → a hetediké
+```
+
+**Miért képlet és nem makró:** a makrós munkafüzet `.xlsm`, azt a céges
+makróvédelem és a levélszűrők blokkolhatják, ráadásul az ExcelJS nem tud
+VBA-projektet írni — a sablon így nem lenne generálható. A képlet ugyanazt adja,
+üzemeltetési kockázat nélkül. A lap védett, a vezérlőcella kivételével minden
+zárolt: egy elgépelés különben némán kitörölné az adatlap felét.
+
+Az **elrendezés adat**, a `printSheet` a `js/schema/export-profiles.js`-ben:
+szakaszok, soronként egy címke és a mögötte álló mezőkulcsok. Több kulcs egy
+cellába fűződik (szóközzel, `TRIM`-mel — üres mező így nem hagy lyukat vagy lógó
+elválasztót). Ismeretlen kulcsú sor kimarad, nem hibázik.
+
+> A képletek oszlopbetűi a séma sorrendjéből származnak, ezért egy átrendezés
+> némán elcsúsztathatná őket — az útlevélszám helyén a TAJ jelenne meg,
+> hibaüzenet nélkül. Az `xlsx.test.js` ezért mezőnként visszafejti a képleteket
+> és összeveti a `Data` lap tényleges oszlopaival.
+
+Két rovat nem 1:1 az eredetivel: a **nyelvtudás** (a HR-lapon háromoszlopos
+alrács volt) és a **gyerekek** egy-egy szabad szöveges cella, mert a táblázatban
+is az. Az „ID number" rovatba az **útlevélszám** kerül — a külföldi
+munkavállalónak nincs magyar személyi igazolványa.
 
 ## Ügyek és határidők
 
@@ -423,7 +491,7 @@ nem a fájlnév alapján. A lépés **visszafordítható**: a jelenlegi (akár s
 node test/run-all.js
 ```
 
-Tizenkét tesztcsomag, 312 teszt. Böngészőt nem igényel.
+Tizenkét tesztcsomag, 322 teszt. Böngészőt nem igényel.
 
 | Csomag | Mit őriz |
 |---|---|

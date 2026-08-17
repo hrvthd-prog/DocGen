@@ -90,6 +90,23 @@ async function generalt(employees = []) {
   return { buf, wb };
 }
 
+/**
+ * Egy mező oszlopszáma a generált lapon, a rejtett kulcssorból.
+ *
+ * A tesztek korábban rögzített oszlopszámokat használtak („a surname a 2.").
+ * Amikor az oszlopsorrend a hatósági nyomtatványé lett, ettől tizenhat teszt
+ * bukott el úgy, hogy közben semmi nem romlott el. A sorrendet egy helyen, a
+ * `schema.test.js` HATOSAGI_SORREND listája őrzi — itt kulcs szerint keresünk.
+ */
+function oszlop(ws, kulcs) {
+  let n = 0;
+  ws.getRow(1).eachCell({ includeEmpty: false }, (c, i) => {
+    if (String(c.value).trim() === kulcs) n = i;
+  });
+  if (!n) throw new Error(`nincs ilyen oszlop a lapon: ${kulcs}`);
+  return n;
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 asection('Üres sablon előállítása');
 
@@ -107,19 +124,20 @@ atest('minden tárolt mező kikerül oszlopként, a séma sorrendjében', async 
   const vart = sandbox.SchemaStore.storedFields().map(f => f.key);
   assertEq(kulcsok.join(','), vart.join(','), 'eltérő oszlopkulcs vagy sorrend');
   assertEq(kulcsok[0], 'personnel_reg_number');
-  assertEq(kulcsok[1], 'surname');
 });
 
 atest('a 2. sorban az angol címkék állnak', async () => {
   const ws = G.wb.getWorksheet('Data');
-  assertEq(String(ws.getRow(2).getCell(2).value), 'Surname (as in passport)');
+  assertEq(String(ws.getRow(2).getCell(oszlop(ws, 'surname')).value),
+    'Surname (as in passport)');
 });
 
 atest('a kötelező mezők piros, az opcionálisak kék fejlécet kapnak', async () => {
   const ws = G.wb.getWorksheet('Data');
   const fill = c => (c.fill && c.fill.fgColor && c.fill.fgColor.argb) || '';
-  assertEq(fill(ws.getRow(1).getCell(2)), 'FFC00000', 'surname nem piros');   // kötelező
-  assertEq(fill(ws.getRow(1).getCell(1)), 'FF1F3864', 'törzsszám nem kék');   // opcionális
+  assertEq(fill(ws.getRow(1).getCell(oszlop(ws, 'surname'))), 'FFC00000', 'surname nem piros');
+  assertEq(fill(ws.getRow(1).getCell(oszlop(ws, 'personnel_reg_number'))), 'FF1F3864',
+    'törzsszám nem kék');
 });
 
 atest('a kötelezőség a LÁTHATÓ soron is látszik', async () => {
@@ -127,8 +145,19 @@ atest('a kötelezőség a LÁTHATÓ soron is látszik', async () => {
   // kitöltő semmilyen jelzést nem kapna arról, mit nem hagyhat üresen.
   const ws = G.wb.getWorksheet('Data');
   const fill = c => (c.fill && c.fill.fgColor && c.fill.fgColor.argb) || '';
-  assertEq(fill(ws.getRow(2).getCell(2)), 'FFC00000', 'a kötelező surname nem piros a 2. sorban');
-  assertEq(fill(ws.getRow(2).getCell(1)), 'FF1F3864', 'az opcionális törzsszám nem kék a 2. sorban');
+  assertEq(fill(ws.getRow(2).getCell(oszlop(ws, 'surname'))), 'FFC00000',
+    'a kötelező surname nem piros a 2. sorban');
+  assertEq(fill(ws.getRow(2).getCell(oszlop(ws, 'personnel_reg_number'))), 'FF1F3864',
+    'az opcionális törzsszám nem kék a 2. sorban');
+});
+
+atest('a fejlécszín a mező csoportját követi', async () => {
+  // A csoportszín a jelmagyarázat: enélkül hatvanöt egyforma fejléc van.
+  const ws = G.wb.getWorksheet('Data');
+  const fill = c => (c.fill && c.fill.fgColor && c.fill.fgColor.argb) || '';
+  assertEq(fill(ws.getRow(2).getCell(oszlop(ws, 'postal_code'))), 'FF806000', 'lakcím');
+  assertEq(fill(ws.getRow(2).getCell(oszlop(ws, 'position'))), 'FFC55A11', 'foglalkoztatás');
+  assertEq(fill(ws.getRow(2).getCell(oszlop(ws, 'hr_sg_category'))), 'FF595959', 'csak HR');
 });
 
 atest('a gépi kulcsok sora rejtett – a kitöltőnek nem kell látnia', async () => {
@@ -153,12 +182,13 @@ function noteSzoveg(cell) {
 atest('a kitöltést segítő komment a LÁTHATÓ 2. soron van', async () => {
   // Korábban az 1. sorra került – ami rejtett, tehát a kitöltő sosem látta.
   const ws = G.wb.getWorksheet('Data');
-  assert(noteSzoveg(ws.getRow(2).getCell(2)), 'nincs komment a 2. sor cellájában');
+  assert(noteSzoveg(ws.getRow(2).getCell(oszlop(ws, 'surname'))),
+    'nincs komment a 2. sor cellájában');
 });
 
 atest('a komment angolul is eligazít – külföldi tölti ki', async () => {
   const ws = G.wb.getWorksheet('Data');
-  const sz = noteSzoveg(ws.getRow(2).getCell(2));   // surname, kötelező
+  const sz = noteSzoveg(ws.getRow(2).getCell(oszlop(ws, 'surname')));   // kötelező mező
   assert(/REQUIRED/.test(sz), 'a kötelezőség nincs angolul jelezve');
   assert(/KÖTELEZŐ/.test(sz), 'a kötelezőség nincs magyarul jelezve');
   assert(/Vezetéknév/.test(sz), 'nincs magyar jelentés');
@@ -166,17 +196,13 @@ atest('a komment angolul is eligazít – külföldi tölti ki', async () => {
 
 atest('a dátummezőnél a formátum angolul is szerepel', async () => {
   const ws = G.wb.getWorksheet('Data');
-  const kulcsok = [];
-  ws.getRow(1).eachCell({ includeEmpty: false }, c => kulcsok.push(String(c.value)));
-  const oszlop = kulcsok.indexOf('date_of_birth') + 1;
-  assert(oszlop > 0, 'nincs date_of_birth oszlop');
-  const sz = noteSzoveg(ws.getRow(2).getCell(oszlop));
+  const sz = noteSzoveg(ws.getRow(2).getCell(oszlop(ws, 'date_of_birth')));
   assert(/YYYY-MM-DD/.test(sz), `nincs angol dátumformátum: ${sz.slice(0, 80)}`);
 });
 
 atest('a választható mezőnél a komment a legördülőre utal és felsorolja az értékeket', async () => {
   const ws = G.wb.getWorksheet('Data');
-  const sz = noteSzoveg(ws.getRow(2).getCell(6));   // sex
+  const sz = noteSzoveg(ws.getRow(2).getCell(oszlop(ws, 'sex')));
   assert(/drop-down/i.test(sz), 'nem utal a legördülőre');
   assert(/male/.test(sz) && /female/.test(sz), `hiányos értékfelsorolás: ${sz.slice(0, 120)}`);
 });
@@ -279,9 +305,11 @@ atest('a választható mezőkre legördülő kerül a helyes értékkészlettel'
     const betu = /^([A-Z]+)/.exec(range)[1];
     talalt[betu] = String(def.formulae[0]).replace(/^"|"$/g, '');
   }
-  // sex = F oszlop (6.), marital_status = M (13.)
-  assertEq(talalt['F'], 'male,female', 'a nem legördülője hibás');
-  assertEq(talalt['M'], 'unmarried,married,divorced,widow', 'a családi állapot legördülője hibás');
+  const ws2 = G.wb.getWorksheet('Data');
+  const betu = k => XlsxWrite._colLetter(oszlop(ws2, k));
+  assertEq(talalt[betu('sex')], 'male,female', 'a nem legördülője hibás');
+  assertEq(talalt[betu('marital_status')], 'unmarried,married,divorced,widow',
+    'a családi állapot legördülője hibás');
   assertEq(Object.keys(talalt).length, 5, 'nem pontosan 5 legördülő van');
 });
 
@@ -318,29 +346,126 @@ function eredetiOszlopok() {
   return eredetiSor(1).map(k => ROVIDULT_KULCSOK[k] || k);
 }
 
-atest('az eredeti oszlopok mind megvannak, az eredeti sorrendben', async () => {
+atest('az eredeti oszlopok mind megvannak', async () => {
+  // A SORRENDET már nem az eredeti fájl adja: 2026-08-17 óta a hatósági
+  // nyomtatvány rovatsorrendje a szerződés (schema.test.js → HATOSAGI_SORREND).
+  // Itt csak az számít, hogy egyetlen régi oszlop se vesszen el – különben egy
+  // korábban kiküldött adatbekérő importja csendben adatot dobna el.
   const wg = G.wb.getWorksheet('Data');
   const generalt = [];
   wg.getRow(1).eachCell({ includeEmpty: false }, c => generalt.push(String(c.value).trim()));
 
-  const vart = eredetiOszlopok();
-  const hianyzo = vart.filter(k => !generalt.includes(k));
+  const hianyzo = eredetiOszlopok().filter(k => !generalt.includes(k));
   assertEq(hianyzo.length, 0, 'kimaradt eredeti oszlop: ' + hianyzo.join(', '));
-  assertEq(generalt.filter(k => vart.includes(k)).join(','), vart.join(','),
-    'az eredeti oszlopok sorrendje elcsúszott');
 });
 
 atest('az angol címkék megegyeznek az eredetivel', async () => {
+  // Mezőnként vetjük össze, nem pozíció szerint: a címke a kitöltő egyetlen
+  // fogódzója, azt átrendezéskor sem szabad elrontani.
   const wg = G.wb.getWorksheet('Data');
   const kulcsok = [], cimkek = [];
   wg.getRow(1).eachCell({ includeEmpty: false }, c => kulcsok.push(String(c.value).trim()));
   wg.getRow(2).eachCell({ includeEmpty: false }, c => cimkek.push(String(c.value).trim()));
+  const most = new Map(kulcsok.map((k, i) => [k, cimkek[i]]));
 
-  const vart = eredetiOszlopok();
-  const generaltCimkek = kulcsok
-    .map((k, i) => (vart.includes(k) ? cimkek[i] : null))
-    .filter(x => x !== null);
-  assertEq(generaltCimkek.join('|'), eredetiSor(2).join('|'), 'eltérő angol címke');
+  const eredetiCimkek = eredetiSor(2);
+  const rossz = eredetiOszlopok()
+    .map((k, i) => (most.get(k) === eredetiCimkek[i] ? null
+                                                     : `${k}: „${most.get(k)}" ≠ „${eredetiCimkek[i]}"`))
+    .filter(Boolean);
+  assertEq(rossz.join(' | '), '', 'eltérő angol címke');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+asection('Nyomtatási lapfül (HR adatlap)');
+
+function keplet(cell) {
+  const v = cell.value;
+  return (v && typeof v === 'object' && v.formula) ? String(v.formula) : '';
+}
+
+/** A képletben hivatkozott Data-oszlopbetűk, előfordulási sorrendben, egyszer. */
+function hivatkozottOszlopok(f) {
+  const ki = [];
+  const re = /INDEX\([^!]+!\$([A-Z]+):\$[A-Z]+/g;
+  let m;
+  while ((m = re.exec(f))) if (!ki.includes(m[1])) ki.push(m[1]);
+  return ki;
+}
+
+atest('a nyomtatási lap létrejön és A4-re van állítva', async () => {
+  const ws = G.wb.getWorksheet(PROFILE.printSheet.name);
+  assert(ws, 'nincs nyomtatási lapfül');
+  assertEq(ws.pageSetup.orientation, 'portrait');
+  assertEq(ws.pageSetup.fitToWidth, 1, 'nem fér egy oldal szélességbe');
+});
+
+atest('a vezérlőcella az EGYETLEN írható cella', async () => {
+  // Ha a képletcellák nem zároltak, a HR egyetlen elgépeléssel kitörli az
+  // adatlap felét – és nem is venné észre, mert a lap utána is kinéz valahogy.
+  const ws = G.wb.getWorksheet(PROFILE.printSheet.name);
+  const sp = ws.sheetProtection || {};
+  assertEq(sp.sheet, true, 'a nyomtatási lap nincs védve');
+  // Védelem alatt a zároltság az alapértelmezés, ezért a képletcellán nincs
+  // külön `protection` – csak a feloldást kell keresni.
+  const zarolt = c => !(c.protection && c.protection.locked === false);
+  assertEq(zarolt(ws.getCell('B2')), false, 'a vezérlőcella zárolt – nem lehet személyt váltani');
+  assertEq(zarolt(ws.getCell('B5')), true, 'egy képletcella feloldva maradt');
+});
+
+atest('minden sor képlete a SAJÁT mezőjének oszlopára mutat', async () => {
+  // Ez a lap legkockázatosabb pontja: az oszlopbetűket a séma sorrendje adja,
+  // tehát egy átrendezés némán elcsúsztathatná a képleteket – a nyomtatványon
+  // az útlevélszám helyén a TAJ jelenne meg, hibaüzenet nélkül.
+  const data = G.wb.getWorksheet('Data');
+  const ws   = G.wb.getWorksheet(PROFILE.printSheet.name);
+
+  const varhato = [];
+  for (const sz of PROFILE.printSheet.sections) {
+    for (const sor of sz.rows) varhato.push(sor);
+  }
+
+  let ellenorzott = 0;
+  const rossz = [];
+  ws.eachRow(row => {
+    const f = keplet(row.getCell(2));
+    if (!f) return;
+    const cimke = String(row.getCell(1).value || '');
+    const sor = varhato.find(s => s.label === cimke);
+    if (!sor) { rossz.push(`ismeretlen sor: ${cimke}`); return; }
+    const vartBetuk = sor.from.map(k => XlsxWrite._colLetter(oszlop(data, k)));
+    const kapott = hivatkozottOszlopok(f);
+    if (kapott.join(',') !== vartBetuk.join(',')) {
+      rossz.push(`${cimke}: ${kapott.join(',')} ≠ ${vartBetuk.join(',')} (${sor.from.join(',')})`);
+    }
+    ellenorzott++;
+  });
+
+  assertEq(rossz.join(' | '), '', 'elcsúszott képlet');
+  assertEq(ellenorzott, varhato.length, 'nem minden sor került ki a nyomtatási lapra');
+});
+
+atest('a személy sorát a vezérlőcella választja ki', async () => {
+  // A Data lapon az adat a 3. sortól áll, tehát az 1. személy a labelRow+1.
+  const ws = G.wb.getWorksheet(PROFILE.printSheet.name);
+  const f = keplet(ws.getCell('B5'));
+  assert(f.includes(`$B$2+${PROFILE.labelRow}`), `rossz sorszámítás: ${f}`);
+  assertEq(ws.getCell('B2').value, 1, 'a vezérlőcella nem 1-ről indul');
+});
+
+atest('ismeretlen mezőkulcsú sor kimarad, nem hibázik', async () => {
+  const p = JSON.parse(JSON.stringify(PROFILE));
+  p.printSheet.sections = [{ title: 'Próba', rows: [
+    { label: 'Nincs ilyen:', from: ['nincs_ilyen_mezo'] },
+    { label: 'Van:',         from: ['surname'] },
+  ] }];
+  const buf = await XlsxWrite.toBuffer({ schema: SchemaStore.get(), profile: p, employees: [] });
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buf);
+  const ws = wb.getWorksheet(p.printSheet.name);
+  const cimkek = [];
+  ws.eachRow(r => { if (keplet(r.getCell(2))) cimkek.push(String(r.getCell(1).value)); });
+  assertEq(cimkek.join(','), 'Van:', 'a hiányzó mező sora nem maradt ki');
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -355,9 +480,9 @@ atest('a rekordok adatai a helyes oszlopokba kerülnek', async () => {
   const { wb } = await generalt(emp);
   const ws = wb.getWorksheet('Data');
   const r = ws.getRow(3);
-  assertEq(String(r.getCell(2).value), 'Kovács');
-  assertEq(String(r.getCell(3).value), 'Anna');
-  assertEq(String(r.getCell(4).value), '1990-03-15');
+  assertEq(String(r.getCell(oszlop(ws, 'surname')).value), 'Kovács');
+  assertEq(String(r.getCell(oszlop(ws, 'forename')).value), 'Anna');
+  assertEq(String(r.getCell(oszlop(ws, 'date_of_birth')).value), '1990-03-15');
 });
 
 atest('a választható értékek az import által várt kanonikus alakban mennek ki', async () => {
@@ -366,8 +491,10 @@ atest('a választható értékek az import által várt kanonikus alakban mennek
   const { wb } = await generalt(emp);
   const ws = wb.getWorksheet('Data');
   const r = ws.getRow(3);
-  assertEq(String(r.getCell(6).value), 'male', 'a nem nem kanonikus alakban ment ki');
-  assertEq(String(r.getCell(13).value), 'married', 'a családi állapot nem kanonikus');
+  assertEq(String(r.getCell(oszlop(ws, 'sex')).value), 'male',
+    'a nem nem kanonikus alakban ment ki');
+  assertEq(String(r.getCell(oszlop(ws, 'marital_status')).value), 'married',
+    'a családi állapot nem kanonikus');
 });
 
 atest('magyar kimeneti profil esetén magyarul kerülnek ki az értékek', async () => {
@@ -378,9 +505,10 @@ atest('magyar kimeneti profil esetén magyarul kerülnek ki az értékek', async
   });
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(buf);
-  const r = wb.getWorksheet('Data').getRow(3);
-  assertEq(String(r.getCell(6).value), 'Férfi');
-  assertEq(String(r.getCell(13).value), 'Házas');
+  const ws = wb.getWorksheet('Data');
+  const r = ws.getRow(3);
+  assertEq(String(r.getCell(oszlop(ws, 'sex')).value), 'Férfi');
+  assertEq(String(r.getCell(oszlop(ws, 'marital_status')).value), 'Házas');
 });
 
 // ════════════════════════════════════════════════════════════════════════════

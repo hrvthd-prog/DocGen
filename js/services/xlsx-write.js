@@ -56,6 +56,7 @@ const XlsxWrite = (() => {
     if (!employees.length) await protectSheet(ws, cols, profile);
 
     addGuideSheet(wb, schema, cols, profile);
+    addPrintSheet(wb, schema, cols, profile);
     return wb;
   }
 
@@ -356,6 +357,143 @@ const XlsxWrite = (() => {
     });
 
     ws.views = [{ state: 'frozen', ySplit: fejlecSor }];
+  }
+
+  // ── Nyomtatási lapfül (HR adatlap) ─────────────────────────────────────────
+
+  /**
+   * A HR „Personal Data Sheet"-je nyomtatható alakban, MAKRÓ NÉLKÜL.
+   *
+   * A lap tetején egyetlen írható cella áll: a személy sora a `Data` lapon.
+   * Minden érték INDEX-képlettel onnan jön, tehát a lap magától frissül, és a
+   * HR a szokásos Ctrl+P / „Mentés PDF-ként" úton kap kész dokumentumot.
+   *
+   * Miért képlet és nem VBA: a makrós munkafüzet `.xlsm`, azt a céges
+   * levélszűrők és a makróvédelem blokkolhatja, az ExcelJS pedig nem tud
+   * VBA-projektet írni – a sablon így nem lenne generálható. A képlet ugyanazt
+   * adja, nulla üzemeltetési kockázattal.
+   *
+   * Az elrendezés a profilból jön (`profile.printSheet`): ez a függvény csak
+   * lerendereli. Ismeretlen mezőkulcsú sor kimarad – ha valaki mezőt töröl a
+   * sémából, a lap nem törik el, csak rövidebb lesz.
+   */
+  function addPrintSheet(wb, schema, cols, profile) {
+    const p = profile.printSheet;
+    if (!p || !Array.isArray(p.sections)) return;
+
+    const ws = wb.addWorksheet(p.name);
+    ws.columns = [{ width: p.labelWidth || 46 }, { width: p.valueWidth || 54 }];
+
+    // A4, egy oldal szélességben – enélkül a hosszabb értékek átcsúsznak a
+    // második oldalra, és a HR két lapot nyomtat egy adatlap helyett.
+    ws.pageSetup = {
+      paperSize: 9, orientation: 'portrait',
+      fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+      margins: { left: 0.6, right: 0.4, top: 0.6, bottom: 0.5, header: 0.3, footer: 0.3 },
+    };
+
+    let r = 1;
+    ws.mergeCells(r, 1, r, 2);
+    const cim = ws.getCell(r, 1);
+    cim.value = p.title || 'Personal Data Sheet';
+    cim.font = { name: 'Arial', size: 14, bold: true };
+    cim.alignment = { horizontal: 'center' };
+    ws.getRow(r).height = 24;
+    r += 1;
+
+    // A vezérlőcella. Ez az EGYETLEN hely, ahova a HR ír.
+    const valasztoSor = r;
+    ws.getCell(r, 1).value = p.selectorLabel || 'Employee row (1–30):';
+    ws.getCell(r, 1).font = { name: 'Arial', size: 10, bold: true };
+    const valaszto = ws.getCell(r, 2);
+    valaszto.value = 1;
+    valaszto.font = { name: 'Arial', size: 12, bold: true };
+    valaszto.alignment = { horizontal: 'center' };
+    valaszto.fill = { type: 'pattern', pattern: 'solid', fgColor: argb('FFFFF2CC') };
+    valaszto.border = {
+      top: { style: 'medium' }, bottom: { style: 'medium' },
+      left: { style: 'medium' }, right: { style: 'medium' },
+    };
+    ws.getRow(r).height = 20;
+    r += 2;
+
+    const valasztoRef = `$B$${valasztoSor}`;
+    const lap = /^[A-Za-z0-9_]+$/.test(profile.sheetName) ? profile.sheetName
+                                                         : `'${profile.sheetName}'`;
+    const oszlopa = new Map(cols.map((f, i) => [f.key, colLetter(i + 1)]));
+
+    for (const szakasz of p.sections) {
+      ws.mergeCells(r, 1, r, 2);
+      const sc = ws.getCell(r, 1);
+      sc.value = szakasz.title;
+      sc.font = { name: 'Arial', size: 10, bold: true, color: argb('FFFFFFFF') };
+      sc.fill = { type: 'pattern', pattern: 'solid', fgColor: argb('FF1F3864') };
+      sc.alignment = { vertical: 'middle' };
+      ws.getRow(r).height = 18;
+      r += 1;
+
+      for (const sor of (szakasz.rows || [])) {
+        const mezok = (sor.from || []).filter(k => oszlopa.has(k));
+        if (!mezok.length) continue;   // a séma nem ismeri – kihagyjuk
+
+        const lc = ws.getCell(r, 1);
+        lc.value = sor.label;
+        lc.font = { name: 'Arial', size: 10 };
+        lc.alignment = { vertical: 'top', wrapText: true };
+        lc.border = { bottom: { style: 'hair' } };
+
+        const vc = ws.getCell(r, 2);
+        vc.value = { formula: kepletFor(mezok, lap, oszlopa, valasztoRef, profile) };
+        vc.font = { name: 'Arial', size: 10 };
+        vc.alignment = { vertical: 'top', wrapText: true };
+        vc.border = { bottom: { style: 'thin' } };
+
+        // Egyetlen dátum- vagy számmező esetén a cella formátuma is stimmeljen:
+        // az INDEX a tárolt értéket adja vissza, nem a megjelenítettet.
+        if (mezok.length === 1) {
+          const f = schema.fields.find(x => x.key === mezok[0]);
+          if (f && f.type === 'date')   vc.numFmt = 'yyyy-mm-dd';
+          if (f && f.type === 'number') vc.numFmt = '#,##0';
+        }
+        r += 1;
+      }
+      r += 1;
+    }
+
+    ws.headerFooter = {
+      oddFooter: '&L&9Aumovio · Personal Data Sheet&C&9&D&R&9&P / &N',
+    };
+
+    // Védelem: a vezérlőcella kivételével minden zárolt, hogy a képletek ne
+    // sérüljenek. Ugyanaz a jelszó, mint a Data lapon.
+    const prot = profile.protection;
+    if (prot && prot.enabled) {
+      valaszto.protection = { locked: false };
+      ws.protect(prot.password || '', {
+        selectLockedCells: true, selectUnlockedCells: true, formatColumns: true,
+      });
+    }
+  }
+
+  /**
+   * INDEX-képlet egy adatlap-sorhoz.
+   *
+   * Egy mező: `IF(INDEX(...)="","",INDEX(...))` – az üres cellát az INDEX
+   * nullaként adná vissza, abból „0" vagy „1900-01-00" lenne a nyomtatványon.
+   *
+   * Több mező: szóközzel fűzzük és TRIM-elünk. A `&` operátor az üres cellát
+   * üres szöveggé alakítja, a TRIM pedig a maradék szóközöket – így hiányzó
+   * adatnál sem lesz lyuk vagy lógó elválasztó a sorban.
+   */
+  function kepletFor(mezok, lap, oszlopa, valasztoRef, profile) {
+    const idx = k => {
+      const b = oszlopa.get(k);
+      return `INDEX(${lap}!$${b}:$${b},${valasztoRef}+${profile.labelRow})`;
+    };
+    if (mezok.length === 1) {
+      return `IF(${idx(mezok[0])}="","",${idx(mezok[0])})`;
+    }
+    return `TRIM(${mezok.map(idx).join('&" "&')})`;
   }
 
   // ── Kimenet ────────────────────────────────────────────────────────────────
