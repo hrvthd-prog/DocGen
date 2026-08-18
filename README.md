@@ -266,8 +266,8 @@ Hungarian Address                      — magyarországi lakcím
 Data of Employment                     — munkakör, FEOR, bér, kezdés/vég
 Skills and Experience                  — végzettség, szakképzettség, nyelvtudás
 Address Abroad                         — korábbi (külföldi) lakcím
-Information for HR                     — sürgősségi kontakt, bankszámla, gyerekek, HR belső rovatai
-Contacts                               — e-mail, telefon
+Information for HR                     — bankszámla, gyerekek, HR belső rovatai
+Contacts                               — e-mail, telefon, sürgősségi kontakt
 ```
 
 **2026-08-18-ig** a sorrend a **9. sz. tartózkodási engedély iránti kérelem** és
@@ -294,7 +294,9 @@ adatait. Azok a rovatok, amiknek **nincs párja** az idegenrendészeti adatkörb
 `hr_` előtagú oszlopként vannak benne — jórészt az „Information for HR"
 szakaszban, de van, ami a hozzá tartozó témánál szerepel: a kettős
 állampolgárság a személyes adatoknál, az iskola és az oklevél adatai a
-végzettségnél. A bankszámlaszám és a bank neve **külön** rovat
+végzettségnél, a sürgősségi kontakt (`hr_emergency_contact_name` /
+`hr_emergency_contact_phone`) pedig a `Contacts` szakaszban, az e-mail és a
+telefon mellett. A bankszámlaszám és a bank neve **külön** rovat
 (`hr_bank_account` / `hr_bank_name`), a HR által kitöltendő három rovattal
 együtt az „Information for HR" szakaszban.
 
