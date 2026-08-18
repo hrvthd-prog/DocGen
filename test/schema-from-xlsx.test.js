@@ -90,9 +90,15 @@ test('mind a 44 oszlop kulcsa kiolvasható', () => {
   assertEq(analysis.columns[43].key, 'previous_street');
 });
 
-test('az angol címkék is kiolvasódnak a 2. sorból', () => {
+test('a régi (2026-08-05-i) fájlban a 3. sor üres – ez a formátumváltás tudott mellékhatása', () => {
+  // A SchemaFromXlsx a 2026-08-18 utáni ÉLŐ sablonformátum szerint olvas:
+  // 1. sor kulcs, 2. sor szakaszcím, 3. sor angol címke, 4. sortól adat. Ez a
+  // minta-xlsx viszont ennél korábbi, abban a 2. sor volt a címkéké, a 3.
+  // pedig üres (nem volt még fenntartva adatsornak). A `labelEn` ezért erre a
+  // régi fájlra most üresen jön vissza – szándékos, nem hiba, ugyanúgy, ahogy
+  // a sorrend-eltérést is tudottan jelezzük lejjebb.
   const s = analysis.columns.find(c => c.key === 'surname');
-  assertEq(s.labelEn, 'Surname (as in passport)');
+  assertEq(s.labelEn, '');
 });
 
 if (JSDOM) {
@@ -117,7 +123,8 @@ section('Összevetés a kiinduló sémával');
 const FORMANYOMTATVANY_MEZOK = [
   'occupation_before_arrival', 'other_accommodation', 'pp_issuance_place',
   'stairway', 'topographical_number',
-  'hr_bank_account', 'hr_children', 'hr_computer_skills', 'hr_degree_document_number',
+  'hr_bank_account', 'hr_bank_name', 'hr_children', 'hr_computer_skills',
+  'hr_degree_document_number',
   'hr_department_cost_center', 'hr_direct_leader', 'hr_dual_citizenship',
   'hr_education_completion_date', 'hr_education_institution', 'hr_education_specialization',
   'hr_emergency_contact_name', 'hr_emergency_contact_phone',
@@ -149,7 +156,9 @@ test('hiányzó mezőt észlel, ha a sémából kivesszük', () => {
   const d = SchemaFromXlsx.diff(analysis, SchemaStore.get());
   assertEq(d.added.length, 1);
   assertEq(d.added[0].key, 'telephone');
-  assertEq(d.added[0].labelEn, 'Telephone Number');
+  // labelEn üres: a régi fájl 3. sora (ahonnan a SchemaFromXlsx ma olvas)
+  // nem tartalmaz címkét, lásd a fenti, formátumváltásról szóló tesztet.
+  assertEq(d.added[0].labelEn, '');
   SchemaStore.loadFrom(SEED_SCHEMA);
 });
 

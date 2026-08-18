@@ -18,7 +18,7 @@
  * „ffi"/„noeoe"-t említ, a tényleges legördülő viszont „male"/„female".
  */
 const SEED_SCHEMA = {
-  version: 1,
+  version: 2,
 
   // Angol↔magyar szótár a szabad szöveges mezőkhöz (ország, munkakör,
   // szakképesítés…). Ez csak a KIINDULÓ készlet: az első betöltés után az
@@ -435,8 +435,12 @@ const SEED_SCHEMA = {
     // nem a munkavállaló (az útmutatójuk ezt ki is írja).
 
     { key: 'hr_bank_account', group: 'hr_belso', type: 'text',
-      label: { hu: 'Bankszámlaszám és a bank neve', en: 'Bank Account Number and Name of Bank' },
-      hint: { en: 'The account your salary should be paid to, and the name of the bank.\nIBAN is preferred.\nExample: HU42 1177 3016 1111 1018 0000 0000 - OTP Bank' } },
+      label: { hu: 'Bankszámlaszám', en: 'Bank Account Number' },
+      hint: { en: 'The account your salary should be paid to.\nIBAN is preferred.\nExample: HU42 1177 3016 1111 1018 0000 0000' } },
+
+    { key: 'hr_bank_name', group: 'hr_belso', type: 'text',
+      label: { hu: 'A bank neve', en: 'Name of Bank' },
+      hint: { en: 'The name of the bank holding the account above.\nExample: OTP Bank' } },
 
     { key: 'hr_department_cost_center', group: 'hr_belso', type: 'text',
       label: { hu: 'Szervezeti egység, költséghely', en: 'Department and Cost Center (filled by HR)' },

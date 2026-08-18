@@ -20,25 +20,82 @@ const DEFAULT_EXPORT_PROFILES = [
     guideSheetName: 'Útmutató',
     keyRow: 1,          // gépi kulcsok sora – a programnak kell, a kitöltőnek nem
     hideKeyRow: true,   // ezért alapból rejtett
-    labelRow: 2,        // angol címkék sora – ide kerül a kitöltést segítő komment
-    firstDataRow: 3,
-    columns: null,      // null → a séma sorrendje
+    sectionRow: 2,       // szakaszcímek (Personal Data, Contacts…) – a kitöltőnek segít tájékozódni
+    labelRow: 3,        // angol címkék sora – ide kerül a kitöltést segítő komment
+    firstDataRow: 4,
+    columns: null,      // null → a `sections` sorrendje (lásd lent), ha nincs `sections`, a séma sorrendje
     enumEncoding: 'id', // az import a kanonikus értéket várja (male/female)
     dateFormat: 'iso',  // ÉÉÉÉ-HH-NN szövegként
 
     /**
+     * Az oszlopok sorrendje és a 2. sori szakaszcímek — TÉMA szerint, nem a
+     * hatósági nyomtatvány rovatsorrendje szerint (ezt 2026-08-18-án
+     * szándékosan váltottuk le a 2026-08-17-i „hatósági sorrend" elvről: a
+     * kitöltőnek ez könnyebben áttekinthető). Minden mezőkulcsnak PONTOSAN
+     * egy szakaszban kell szerepelnie – a `columnsOf` innen építi az
+     * oszloprendet, a `writeHeader` pedig ugyaninnen a 2. sor összevont
+     * fejléceit.
+     */
+    sections: [
+      { title: 'Personal Data', keys: [
+        'surname', 'forename', 'surname_at_birth', 'forename_at_birth',
+        'mothers_surname_at_birth', 'mothers_forename_at_birth', 'date_of_birth',
+        'citizenship', 'hr_dual_citizenship', 'place_of_birth_country',
+        'place_of_birth_locality', 'sex', 'marital_status',
+      ] },
+      { title: 'Data of Travel and Residence Documents', keys: [
+        'pp_number', 'pp_issuance_date', 'pp_issuance_place', 'pp_validity',
+        'passport_type', 'number_of_rp', 'expiration_of_rp',
+      ] },
+      { title: 'Identification Numbers', keys: [
+        'personnel_reg_number', 'tax_number', 'TAJ',
+      ] },
+      { title: 'Hungarian Address', keys: [
+        'postal_code', 'locality', 'name_of_public_place', 'type_of_public_place',
+        'street_number', 'building', 'stairway', 'floor', 'door',
+      ] },
+      { title: 'Data of Employment', keys: [
+        'position', 'feor', 'employment_start', 'employment_end',
+        'gross_salary', 'residence_purpose',
+      ] },
+      { title: 'Skills and Experience', keys: [
+        'occupation_before_arrival', 'hr_previous_employer', 'hr_previous_employment_end',
+        'educational_attainment', 'professional_qualification', 'hr_education_completion_date',
+        'hr_education_institution', 'hr_education_specialization', 'hr_degree_document_number',
+        'mother_tongue', 'speaks_hungarian', 'hr_computer_skills', 'hr_language_skills',
+      ] },
+      { title: 'Address Abroad', keys: [
+        'previous_country', 'previous_town', 'previous_street',
+      ] },
+      { title: 'Information for HR', keys: [
+        'hr_emergency_contact_name', 'hr_emergency_contact_phone', 'hr_bank_account',
+        'hr_bank_name', 'hr_children', 'hr_department_cost_center', 'hr_direct_leader',
+        'hr_sg_category',
+      ] },
+      { title: 'Contacts', keys: [
+        'email', 'telephone',
+      ] },
+    ],
+
+    /**
+     * Mezők, amik a SÉMÁBAN maradnak, de az adatbekérő-exportból szándékosan
+     * kimaradnak: ezeket a HR viszi fel utólag, kézzel, a kitöltő nem adja meg
+     * őket. (2026-08-18-i döntés – korábban mindkettő benne volt a lakcím-
+     * szakaszban.)
+     */
+    excludeColumns: ['topographical_number', 'other_accommodation'],
+
+    /**
      * Lapvédelem az ÜRES sablonhoz.
      *
-     * Nem biztonsági eszköz – az xlsx lapvédelem percek alatt megkerülhető.
-     * Egyetlen célja, hogy a kitöltő véletlenül se fedje fel a gépi kulcsok
-     * sorát, és ne írja át a fejlécet. A jelszó ezért nyugodtan cserélhető
-     * Excelben (Korrektúra → Lapvédelem feloldása).
-     *
-     * A `fillableRows` sor marad írhatóvá – védelem mellett a cellák
-     * alapból zároltak, e nélkül a táblázat kitölthetetlen lenne.
+     * 2026-08-18-tól KIKAPCSOLVA – szándékos döntés, nem hiba: a védelem soha
+     * nem volt biztonsági eszköz (percek alatt megkerülhető), és a kitöltők
+     * körében inkább akadályt jelentett, mint hasznot. A `password` és a
+     * `fillableRows` a struktúra megtartása végett maradt – ha valaha vissza
+     * kell kapcsolni, csak az `enabled`-et kell igazra állítani.
      */
     protection: {
-      enabled: true,
+      enabled: false,
       password: 'Aumovio2026',
       fillableRows: 30,
     },
@@ -65,6 +122,10 @@ const DEFAULT_EXPORT_PROFILES = [
       name:  'HR adatlap',
       title: 'Personal Data Sheet',
       selectorLabel: 'Employee row on the "Data" sheet (1–30) / A munkavállaló sora:',
+      // A Data lap védelmétől FÜGGETLEN: ez a képletcellákat óvja a véletlen
+      // felülírástól, nem a kitöltőt zavarja – 2026-08-18 után is bekapcsolva
+      // marad, még úgy is, hogy a Data lap lapvédelme kikapcsolt.
+      protected: true,
       labelWidth: 46,
       valueWidth: 54,
       sections: [
@@ -89,7 +150,7 @@ const DEFAULT_EXPORT_PROFILES = [
           // munkavállalónak nincs magyar személyi igazolványa.
           { label: 'ID number (passport):',     from: ['pp_number'] },
           { label: 'TAJ number:',               from: ['TAJ'] },
-          { label: 'Bank account number and name of bank:', from: ['hr_bank_account'] },
+          { label: 'Bank account number and name of bank:', from: ['hr_bank_account', 'hr_bank_name'] },
         ] },
         { title: 'Education  ·  Végzettség', rows: [
           { label: 'Highest completed education:',            from: ['educational_attainment'] },
@@ -127,10 +188,12 @@ const DEFAULT_EXPORT_PROFILES = [
       requiredFill:  'FFC00000',
       optionalFill:  'FF1F3864',
       labelFill:     'FF1F3864',
-      keyRowHeight:   30,
-      labelRowHeight: 34,
+      keyRowHeight:     30,
+      sectionRowHeight: 20,
+      labelRowHeight:   34,
       defaultWidth:   18,
       validationRows: 200,   // meddig terjedjenek a legördülők
+      sectionFill:    'FF17375E',   // a 2. sor (szakaszcím) sávjának színe
 
       /**
        * Fejlécszín csoportonként.
@@ -139,12 +202,11 @@ const DEFAULT_EXPORT_PROFILES = [
        * hol ér véget a lakcím és hol kezdődik a foglalkoztatás. A szín a
        * séma CSOPORTJÁT jelöli, a színváltásnál pedig vastag vonal is van.
        *
-       * A csoportok NEM egybefüggő blokkok: az oszlopsorrend a hatósági
-       * nyomtatványé (lásd a séma szakasz-kommentjeit), abban pedig pl. a
-       * szakképzettség a személyes adatok közé esik, a nyelvismeret viszont
-       * csak a betétlapon szerepel. A szín tehát jelmagyarázat, nem
-       * szakaszhatár – az Útmutató lap „Csoport" oszlopa ugyanezt a színt
-       * viseli, így a kettő összeolvasható.
+       * A csoportok nem mindig esnek egybe a 2. sori SZAKASZOKKAL (`profile.
+       * sections`): pl. a „Personal Data" szakasz az `alap` és a `szuletes`
+       * csoportot is összefogja. A szín tehát finomabb felbontású jelmagyarázat
+       * a szakaszcímen belül – az Útmutató lap „Csoport" oszlopa ugyanezt a
+       * színt viseli, így a kettő összeolvasható.
        *
        * A KÖTELEZŐ mező ettől függetlenül piros marad – az a jelzés erősebb,
        * mint a csoporté, és nem szabad elveszíteni. Aminek nincs színe itt,
@@ -168,13 +230,11 @@ const DEFAULT_EXPORT_PROFILES = [
        * Ennyi oszlop marad állva vízszintes görgetéskor. Enélkül a 60. oszlop
        * kitöltésénél már nem látszik, kinek a sorában járunk.
        *
-       * A 7 nem esetleges: a **vezeték- és keresztnévvel bezárólag** áll meg,
-       * mert a hatósági rovatsorrendben a név csak a 6–7. oszlop (a nyomtatvány
-       * borítója — engedélyszám, lejárat, telefon, e-mail — előbbre van).
-       * Ha a mezősorrend változik, ezt a számot is igazítani kell, különben a
-       * fagyasztás pont a nevet vágja le.
+       * A `sections` szerinti sorrendben a vezeték- és keresztnév már az 1–2.
+       * oszlop, ezért elég ennyit fagyasztani – nem kell hét oszlopot állva
+       * hagyni, mint a korábbi, hatósági sorrendű elrendezésben.
        */
-      freezeColumns: 7,
+      freezeColumns: 2,
     },
   },
 ];
@@ -220,13 +280,37 @@ const ExportProfiles = (() => {
   /**
    * A profil oszloprendje mezőobjektumokként.
    * Számított mezők alapból kimaradnak: az adatbekérő tárolt oszlopokat vár.
+   *
+   * A sorrend forrása – ebben a sorrendben próbálkozunk:
+   *   1. `profile.columns`     – explicit kulcslista, ha van (semmi mást nem told hozzá)
+   *   2. `profile.sections`    – a szakaszok kulcsai összefűzve (ez adja a 2.
+   *                              sori szakaszcímeket is, lásd `writeSectionRow`),
+   *                              a szakaszokba még be nem sorolt mezők a VÉGÉRE
+   *                              kerülnek, hogy egy új sémamező sose vesszen el
+   *                              csak azért, mert még nincs szakasza
+   *   3. a séma mezősorrendje  – ha egyik sincs
+   *
+   * Így a `sections` a fő hely, ahol az oszlopsorrendet karban kell tartani –
+   * nem kell két, egymástól függő listát (sorrend + szakaszcím) szinkronban
+   * tartani. A `profile.excludeColumns` a kivétel: olyan mező, aminek szándékosan
+   * NINCS helye az exportban (pl. amit a HR utólag, kézzel visz fel) – ezt a
+   * sémából nem törli, csak az adatbekérőből hagyja ki.
    */
   function columnsOf(profile, schema) {
     const stored = schema.fields.filter(f => f.type !== 'computed');
-    if (!profile.columns) return stored;
-    return profile.columns
-      .map(key => stored.find(f => f.key === key))
-      .filter(Boolean);
+
+    if (profile.columns) {
+      return profile.columns.map(key => stored.find(f => f.key === key)).filter(Boolean);
+    }
+    if (Array.isArray(profile.sections)) {
+      const kizart = new Set(profile.excludeColumns || []);
+      const besorolt = profile.sections.flatMap(s => s.keys);
+      const rendezett = besorolt.map(key => stored.find(f => f.key === key)).filter(Boolean);
+      const lefedve = new Set(besorolt);
+      const tobbi = stored.filter(f => !lefedve.has(f.key) && !kizart.has(f.key));
+      return rendezett.concat(tobbi);
+    }
+    return stored;
   }
 
   return {

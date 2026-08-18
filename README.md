@@ -217,8 +217,10 @@ A **Nyilvántartás** fülön két xlsx tölthető le:
 - **feltöltött export** → `adatbekero-adatok-ÉÉÉÉHHNN.xlsx` — pillanatkép az adatokról
 
 Az üres sablonban az **1. sor rejtett**: az a gépi kulcsokat tartalmazza, ami az
-importhoz kell, a kitöltőnek nem. A kitöltő a **2. sort** látja, angol
-címkékkel, és minden cellán ott a kitöltést segítő komment — angolul, példákkal.
+importhoz kell, a kitöltőnek nem. A **2. sor** összevont szakaszcímeket mutat
+(Personal Data, Contacts…), hogy a kitöltő lássa, hol tart a táblázatban. A
+**3. sor** az angol címkéké, és minden cellán ott a kitöltést segítő komment —
+angolul, példákkal, kellően nagy kommentablakban (l. lejjebb).
 
 Böngésző nélkül, a parancssorból is legenerálható — ugyanaz a séma és ugyanaz a
 kód fut, mint a gomb mögött:
@@ -231,55 +233,65 @@ node tools/adatbekero.js ../ki.xlsx
 A szkript a kiírás után **visszaolvassa** a fájlt az éles importálóval, és csak
 akkor írja ki, ha minden oszlop mezőhöz kötődik és nincs címke-ütközés.
 
-### Tájékozódás hetven oszlopban
+> Az ExcelJS minden kommentnek ugyanazt az apró, kb. 2 oszlop × 4 sor VML-dobozt
+> írja, ezt a publikus API-ból nem lehet állítani. A `toBuffer()` ezért a kiírt
+> fájl nyers XML-jét utólag igazítja (`enlargeNoteBoxes` a
+> `js/services/xlsx-write.js`-ben) — 5 oszlop × 9 sorra, hogy a 6–9 soros
+> kommentek olvashatók legyenek felnyitás nélkül is.
+
+### Tájékozódás 64 oszlopban
 
 A fejléc színe a mező **csoportját** jelöli (lakcím, okmányok, foglalkoztatás…),
-színváltásnál vastag vonal van, és az első három oszlop görgetéskor is állva
-marad. A **kötelező** mező ettől függetlenül piros: az erősebb jelzés.
+színváltásnál vastag vonal van, és az első két oszlop (vezeték- és keresztnév)
+görgetéskor is állva marad. A **kötelező** mező ettől függetlenül piros: az
+erősebb jelzés.
 
-A csoportok nem egybefüggő blokkok, mert az oszlopsorrend a hatósági
-nyomtatványé: abban pl. a szakképzettség és az iskolai végzettség a személyes
-adatok között van, a nyelvismeret viszont csak a betétlapon. A szín tehát
-jelmagyarázat; az `Útmutató` lap *Csoport* oszlopa ugyanezt a színt viseli.
+A csoportszín nem mindig esik egybe a 2. sori SZAKASZcímmel: pl. a „Personal
+Data" szakasz a személyes adatok és a születési adatok csoportját is összefogja.
+A szín tehát finomabb felbontású jelmagyarázat; az `Útmutató` lap *Csoport*
+oszlopa ugyanezt a színt viseli.
 
-### Az oszlopsorrend a hatósági nyomtatványé
-
-A sorrend a **9. sz. tartózkodási engedély iránti kérelem** és a betétlapjai
-(9.7. Vendégmunkás, 9.9. EU Kék Kártya) rovatsorrendje:
+### Az oszlopsorrend TÉMA szerinti, nem hatósági
 
 ```
-borító (engedélyszám, lejárat, telefon, e-mail)
-1. pont  személyes adatok → szakképzettség → végzettség → korábbi foglalkozás
-2. pont  útlevél: szám → kiállítás ideje → kiállítás HELYE → típus → érvényesség
-3. pont  szálláshely: helyrajzi szám → irányítószám → … → ajtó → jogcím
-6. pont  eltartott hozzátartozók
-7. pont  az érkezést megelőző lakcím
-betétlap bér → munkakör (FEOR) → nyelvismeret → korábbi magyar munkahely
-──────── innentől, ami egyik nyomtatványon sincs: adóazonosító, TAJ,
-         vészhelyzeti kapcsolattartó, és a HR saját rovatai
+Personal Data                          — név, születés, állampolgárság, nem, családi állapot
+Data of Travel and Residence Documents — útlevél, tartózkodási engedély
+Identification Numbers                 — törzsszám, adóazonosító, TAJ
+Hungarian Address                      — magyarországi lakcím
+Data of Employment                     — munkakör, FEOR, bér, kezdés/vég
+Skills and Experience                  — végzettség, szakképzettség, nyelvtudás
+Address Abroad                         — korábbi (külföldi) lakcím
+Information for HR                     — sürgősségi kontakt, bankszámla, gyerekek, HR belső rovatai
+Contacts                               — e-mail, telefon
 ```
 
-Így az ügyintéző fentről lefelé haladva vezeti át az adatokat, nem ugrál a
-táblázatban. A sorrend **szerződés**: a `schema.test.js`-ben egy felsorolás
-(`HATOSAGI_SORREND`) őrzi, és a teszt bukik, ha elcsúszik.
+**2026-08-18-ig** a sorrend a **9. sz. tartózkodási engedély iránti kérelem** és
+betétlapjai rovatsorrendje volt, hogy az ügyintéző fentről lefelé haladva tudja
+átvezetni az adatokat a nyomtatványra. Ezt tudatosan váltottuk le a fenti, téma
+szerinti sorrendre — a kitöltőnek ez könnyebben áttekinthető. A sorrend
+**szerződés**: a `js/schema/export-profiles.js` `PROFILE.sections` tömbje adja,
+a `test/xlsx.test.js`-ben egy felsorolás (`ADATBEKERO_SORREND`) őrzi, és a
+teszt bukik, ha elcsúszik.
 
-> Korábban az eredeti 44 oszlopos adatbekérő sorrendje volt a szerződés. Ezért
-> a tesztek nem oszlopszám, hanem **kulcs szerint** keresik a cellákat — így egy
-> újabb átrendezés nem buktat el tizenhat tesztet ok nélkül.
-
-Az első hét oszlop görgetéskor is áll: a névvel bezárólag. Ez ~145 karakternyi
-szélesség — ha sok, a `style.freezeColumns` lejjebb vehető, de a névnél
-kevesebbnek nincs értelme.
+> A `topographical_number` (Helyrajzi szám) és az `other_accommodation` (Egyéb
+> jogcím a szálláson) mező a SÉMÁBAN megvan, de az adatbekérőből szándékosan
+> kimaradt (`profile.excludeColumns`) — ezt a két rovatot a HR viszi fel
+> kézzel, a kitöltő nem adja meg.
+>
+> Egy séma-mező, ami még nincs besorolva egyik `sections` szakaszba sem, NEM
+> vész el: a `columnsOf` a lista VÉGÉRE illeszti, hogy egy új mező felvétele
+> után az export magától kövesse, külön beállítás nélkül.
 
 ### HR-oszlopok: egy táblázat menjen ki, ne kettő
 
 A HR korábban külön, álló „Personal Data Sheet" űrlapon kérte be a maga
 adatait. Azok a rovatok, amiknek **nincs párja** az idegenrendészeti adatkörben,
-`hr_` előtagú oszlopként vannak benne — de nem egy blokkban a végén, hanem
-**annál a hatósági rovatnál, amelyikhez tartoznak**: a kettős állampolgárság az
-állampolgárság mellett, az iskola és az oklevél adatai a végzettségnél, a
-nyelvtudás a betétlap nyelvismeret-rovatánál, a gyerekek a kérelem 6. pontjánál.
-A bankszámla és a HR által kitöltendő három rovat a tábla végén marad.
+`hr_` előtagú oszlopként vannak benne — jórészt az „Information for HR"
+szakaszban, de van, ami a hozzá tartozó témánál szerepel: a kettős
+állampolgárság a személyes adatoknál, az iskola és az oklevél adatai a
+végzettségnél. A bankszámlaszám és a bank neve **külön** rovat
+(`hr_bank_account` / `hr_bank_name`), a HR által kitöltendő három rovattal
+együtt az „Information for HR" szakaszban.
 
 **Egyetlen dokumentum-jelölő és számított mező sem hivatkozik rájuk** — a DocGen
 tárolja és visszaexportálja őket, de iratba nem kerülnek. Amit a HR-lap és az
@@ -301,16 +313,20 @@ gyerekek) egy „egy sor = egy ember" táblába nem férnek: egy-egy szabad szö
 cellába kerültek, gépi feldolgozásra nem alkalmasak. Ha a hatósági kitöltéshez
 ez kevés lesz, fix rekeszekre kell bontani őket (`hr_child_1_name`, …).
 
-A lap **jelszóval védett**, hogy a rejtett sor véletlenül se kerüljön elő:
+A `Data` lap **2026-08-18 óta NEM védett** — korábban jelszóval védtük, hogy a
+rejtett kulcssor véletlenül se kerüljön elő, de ez inkább akadályozta a
+kitöltőt, mint segített (az xlsx-lapvédelem amúgy sem biztonsági eszköz, percek
+alatt megkerülhető). Ha valaha mégis kellene, a `protectSheet()` kód megvan —
+csak a `js/schema/export-profiles.js`-ben a `protection.enabled`-et kell
+igazra állítani (a `protection.password` és `protection.fillableRows` a
+struktúra megtartása végett ott maradt).
 
-> **Jelszó: `Aumovio2026`** — Excelben: *Korrektúra → Lapvédelem feloldása*.
-> A `js/schema/export-profiles.js`-ben (`protection.password`) átírható.
->
-> Ez **nem biztonsági eszköz** — az xlsx-lapvédelem percek alatt megkerülhető.
-> Egyetlen célja, hogy a kitöltő ne bolygassa meg a fejlécet.
+A legördülők ettől függetlenül csak `style.validationRows` (200) sorig
+terjednek, tehát 200 munkavállalónál többet egy fájlban nem érdemes kitölteni.
 
-A kitölthető sorok száma 30. A védelem tiltja a sorbeszúrást, ezért ennél több
-munkavállaló nem fér bele egy fájlba — a `protection.fillableRows` állítja.
+A **„HR adatlap"** (nyomtatási lapfül, lásd lejjebb) VÉDETT MARADT — az a
+képletcellákat óvja a véletlen felülírástól, ehhez nincs köze a `Data` lap
+védelmének (`profile.printSheet.protected`).
 
 ### „HR adatlap" — nyomtatható lap makró nélkül
 
