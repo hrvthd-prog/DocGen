@@ -56,7 +56,58 @@ sablonnal. Röviden, de úgy, hogy a *következő* session ebből folytatni tudj
 
 # Napló
 
-## 2026-08-18 (2.) — Új adatbekérő-sablon: téma szerinti sorrend, szakaszcím-sor, kikapcsolt lapvédelem, nagyobb kommentek
+## 2026-08-19 — Fejlécszín a szakaszé, nem a csoporté/kötelezőségé; kisebb kommentdoboz
+
+**Cél:** Az előző session (2026-08-18 (2.)) után a felhasználó egy
+szemléltető fájlt küldött: az általa kézzel megformázott adatbekérő 1-2-3.
+sorát a mi generált fájlunk 1-2-3. sora ALÁ másolta (4-5-6. sor), hogy
+összehasonlítható legyen. Két eltérést jelzett: (1) az eredeti fájlban a
+cellaszín ÉS a szegélyek is a csoportosításhoz (nálunk: szakaszhoz) tartoztak,
+nálunk nem stimmelt; (2) a kommentdoboz magasságát („szélességét") túl nagyra
+(9-re) állítottuk, csökkentsük legalább 3-mal.
+
+**Változás:** (a commit után várhatóan `v41`)
+- `js/schema/export-profiles.js` — minden `sections[i]`-hez `fill` szín (a
+  szemléltető fájlból kiolvasva, cellánként ellenőrizve: Personal Data
+  `FFC00000`, Documents `FF7030A0`, Identification Numbers / Information for
+  HR `FF1F3864` (a kettő UGYANAZ), Hungarian Address `FF806000`, Employment
+  `FFC55A11`, Skills `FF1F6B5C`, Address Abroad `FFA6761D`, Contacts
+  `FF2E75B6`); a `style`-ból törölve a mostantól használaton kívüli
+  `requiredFill`/`labelFill`/`sectionFill`.
+- `js/services/xlsx-write.js` — `sectionFillOf()`: kulcs → szakaszszín térkép;
+  `writeHeader()` és `writeSectionRow()` ezt használja mind a 3 fejlécsoron,
+  a `required`-alapú piros felülírás és az „új csoport = vastag bal szegély"
+  logika törölve (a szemléltető fájlban a szakaszhatárt PUSZTÁN a színváltás
+  jelzi, nincs külön szegély) — a szegély mostantól egységesen vékony,
+  vízszintes vonal a sorok között; `NOTE_ROW_SPAN`: 9 → 6 (a szélesség/
+  `NOTE_COL_SPAN` maradt 5), a VML style-hint magassága 160pt → 110pt.
+
+**Miért / döntés:**
+- A színt és a szegélyt NEM feltételezésből, hanem a szemléltető fájl nyers
+  cella-formázásából (openpyxl: `fill.fgColor`, `border.left/top/bottom.
+  style`) olvastam ki, oszloponként végigmenve mindhárom sorban — ez adta ki
+  pontosan az „egy szín/szakasz, se szegély, se kötelezőség-kiemelés" mintát.
+- A **kötelezőség fejléc-szín szerinti jelzése megszűnt** — a 4 kötelező mező
+  (surname, forename, date_of_birth, citizenship) mind a „Personal Data"
+  szakaszban van, aminek a színe véletlenül piros, DE a szakaszon belül a nem
+  kötelező surname_at_birth is ugyanolyan piros. A `REQUIRED` jelzés mostantól
+  kizárólag a cellakommentben van. Ezt nem kérdeztem vissza — a szemléltető
+  fájl egyértelmű volt, és a felhasználó a „mehet a commit push" utasítással
+  gyors végrehajtást kért.
+- A kommentdoboz „szélesség 9→csökkentés" kérését a `NOTE_ROW_SPAN`
+  (magasság-span) csökkentéseként értelmeztem, mert a kódban/dokumentációban
+  kizárólag ott szerepelt a „9" szám (a `NOTE_COL_SPAN` mindig 5 volt) — a
+  felhasználó valószínűleg ezt a számot idézte vissza, nem a pt-értéket.
+
+**Tesztek:** `node test/run-all.js` → mind a 14 készlet zöld. A generált fájlt
+oszloponként, mindhárom fejlécsoron összevetettem a szemléltető fájllal
+(script, nem kézzel) — pontos egyezés. A kommentdoboz-anchor span 6 sorra
+csökkent (nyers VML-ből ellenőrizve).
+
+**Nyitott / következő:**
+- Az `Útmutató` lap „Csoport" oszlopa TOVÁBBRA IS a régi, `group`-alapú színt
+  viseli (`style.groupFill`), nem a szakaszszínt — ezt a felhasználó nem
+  jelezte problémának, szándékosan nem nyúltam hozzá.
 
 **Cél:** A felhasználó egy kézzel átszerkesztett adatbekérőt (`adatbekero (2).
 xlsx`) adott át mint a végleges, kiküldendő verziót, és kérte, hogy az app

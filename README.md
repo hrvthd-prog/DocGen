@@ -236,20 +236,25 @@ akkor írja ki, ha minden oszlop mezőhöz kötődik és nincs címke-ütközés
 > Az ExcelJS minden kommentnek ugyanazt az apró, kb. 2 oszlop × 4 sor VML-dobozt
 > írja, ezt a publikus API-ból nem lehet állítani. A `toBuffer()` ezért a kiírt
 > fájl nyers XML-jét utólag igazítja (`enlargeNoteBoxes` a
-> `js/services/xlsx-write.js`-ben) — 5 oszlop × 9 sorra, hogy a 6–9 soros
+> `js/services/xlsx-write.js`-ben) — 5 oszlop × 6 sorra, hogy a 6–9 soros
 > kommentek olvashatók legyenek felnyitás nélkül is.
 
 ### Tájékozódás 64 oszlopban
 
-A fejléc színe a mező **csoportját** jelöli (lakcím, okmányok, foglalkoztatás…),
-színváltásnál vastag vonal van, és az első két oszlop (vezeték- és keresztnév)
-görgetéskor is állva marad. A **kötelező** mező ettől függetlenül piros: az
-erősebb jelzés.
+A fejléc színe a mező **szakaszát** jelöli (lakcím, okmányok, foglalkoztatás…),
+egyformán mind a 3 fejlécsoron (gépi kulcs, szakaszcím, angol címke). Nincs
+külön szín a kötelező mezőnek — azt a cellakomment „REQUIRED" szövege jelzi —,
+és nincs vastag oszlophatár-szegély sem: a szakaszhatárt a színváltás önmagában
+mutatja. Az első két oszlop (vezeték- és keresztnév) görgetéskor is állva marad.
 
-A csoportszín nem mindig esik egybe a 2. sori SZAKASZcímmel: pl. a „Personal
-Data" szakasz a személyes adatok és a születési adatok csoportját is összefogja.
-A szín tehát finomabb felbontású jelmagyarázat; az `Útmutató` lap *Csoport*
-oszlopa ugyanezt a színt viseli.
+> A színséma egy valódi, a felhasználó által kézzel megformázott mintafájlból
+> származik (2026-08-19), nem tetszőleges választás — l. `PROFILE.sections[i].
+> fill` a `js/schema/export-profiles.js`-ben.
+
+Az `Útmutató` lap *Csoport* oszlopa ettől függetlenül a séma belső `group`
+színét viseli (`style.groupFill`) — az néha finomabb felbontású, mint a
+szakasz: pl. a „Personal Data" szakasz a személyes adatok és a születési
+adatok csoportját is összefogja.
 
 ### Az oszlopsorrend TÉMA szerinti, nem hatósági
 
