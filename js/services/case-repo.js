@@ -631,7 +631,7 @@ const CaseRepo = (() => {
     EmployeeRepo.addIdentifier(c.employeeId, {
       type: tipus, value: ertek, validFrom: validFrom || today(),
       validTo: expiresAt || null, current: true,
-    });
+    }, { source: 'ugy' });
 
     // Az ÚJ engedély lejárata a dolgozó adatai közé is bekerül – enélkül a
     // következő meghosszabbítás benyújtási ablaka a RÉGI, már lejárt engedély
@@ -639,6 +639,7 @@ const CaseRepo = (() => {
     if (expiresAt && EXPIRY_FIELD_MAP[tipus]) {
       EmployeeRepo.update(c.employeeId, {
         fields: { [EXPIRY_FIELD_MAP[tipus]]: expiresAt },
+        source: 'ugy',
       });
     }
 

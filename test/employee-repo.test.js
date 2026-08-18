@@ -468,6 +468,121 @@ atest('a sérülés-hiba megkülönböztethető a többitől', async () => {
   assertEq(Repo.isCorruptError(null), false);
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+asection('Változásnapló');
+
+atest('megváltozott mező egy bejegyzést hoz, helyes from/to párral', async () => {
+  await fresh();
+  const e = Repo.create({ fields: { surname: 'Kovács', locality: 'Fő u. 1.' } });
+  Repo.update(e.id, { fields: { locality: 'Rákóczi út 5.' } });
+
+  const h = Repo.get(e.id).history;
+  const utolso = h[h.length - 1];
+  assertEq(utolso.action, 'modositas');
+  assertEq(utolso.changes.length, 1, 'nem csak a változott mező került be');
+  assertEq(utolso.changes[0].key, 'locality');
+  assertEq(utolso.changes[0].from, 'Fő u. 1.');
+  assertEq(utolso.changes[0].to, 'Rákóczi út 5.');
+});
+
+atest('azonos értékkel mentés nem hoz új bejegyzést', async () => {
+  await fresh();
+  const e = Repo.create({ fields: { surname: 'Kovács' } });
+  const elotte = Repo.get(e.id).history.length;
+  Repo.update(e.id, { fields: { surname: 'Kovács' } });
+  assertEq(Repo.get(e.id).history.length, elotte,
+    'egy változtatás nélküli mentés is naplózott – ez tömeges importnál zajt okozna');
+});
+
+atest('létrehozáskor a bejegyzés üres changes-szel jön, nem a kezdőértékek diffjével', async () => {
+  await fresh();
+  const e = Repo.create({ fields: { surname: 'Kovács', forename: 'Anna', locality: 'Bp' } });
+  const h = Repo.get(e.id).history;
+  assertEq(h.length, 1, 'nem pontosan egy bejegyzés jött létre');
+  assertEq(h[0].action, 'letrehozas');
+  assertEq(h[0].changes.length, 0, 'a felvitel a kezdőértékeket is diffként naplózta');
+});
+
+atest('addIdentifier bejegyzése tartalmazza a tükrözött mező diffjét', async () => {
+  await fresh();
+  const e = Repo.create({
+    fields: { surname: 'Kovács' },
+    identifiers: [{ type: 'sap', value: 'SAP-111' }],
+  });
+  Repo.addIdentifier(e.id, { type: 'sap', value: 'SAP-222' });
+
+  const h = Repo.get(e.id).history;
+  const utolso = h[h.length - 1];
+  assertEq(utolso.action, 'azonosito_uj');
+  const mezo = utolso.changes.find(c => c.key === 'personnel_reg_number');
+  assert(mezo, 'a tükrözött mező diffje hiányzik a naplóból');
+  assertEq(mezo.from, 'SAP-111');
+  assertEq(mezo.to, 'SAP-222');
+});
+
+atest('removeIdentifier bejegyzést hoz, bár a mezőt nem üríti', async () => {
+  await fresh();
+  const e = Repo.create({
+    fields: { surname: 'Kovács' },
+    identifiers: [{ type: 'taj', value: '123456789' }],
+  });
+  Repo.removeIdentifier(e.id, '123456789', 'taj');
+
+  const h = Repo.get(e.id).history;
+  const utolso = h[h.length - 1];
+  assertEq(utolso.action, 'azonosito_torles');
+  assertEq(utolso.changes.length, 1, 'a törlés ténye nem került be, mert a mező nem változott');
+  assertEq(utolso.changes[0].from, '123456789');
+});
+
+atest('kilépés és visszavétel is naplózott bejegyzés', async () => {
+  await fresh();
+  const e = Repo.create({ fields: { surname: 'Kovács' } });
+  Repo.setExited(e.id, true, '2026-08-10');
+  let h = Repo.get(e.id).history;
+  assertEq(h[h.length - 1].action, 'kilepes');
+  assert(h[h.length - 1].changes.some(c => c.key === 'employment_end' && c.to === '2026-08-10'),
+    'a kilépés napjának mezőváltozása hiányzik');
+
+  Repo.setExited(e.id, false);
+  h = Repo.get(e.id).history;
+  assertEq(h[h.length - 1].action, 'visszavetel',
+    'a visszavétel nem naplózódott, pedig önmagában is tény (a mező nem változik)');
+});
+
+atest('a source alapértelmezetten „urlap", de átadható', async () => {
+  await fresh();
+  const e = Repo.create({ fields: { surname: 'Kovács' }, source: 'import' });
+  assertEq(Repo.get(e.id).history[0].source, 'import');
+
+  Repo.update(e.id, { fields: { surname: 'Kovács Éva' } });   // nincs source megadva
+  const h = Repo.get(e.id).history;
+  assertEq(h[h.length - 1].source, 'urlap', 'a hiányzó source nem az alapértelmezésre esett');
+});
+
+atest('régi, history nélküli rekord betöltése üres tömböt kap, nem hibát', async () => {
+  const backend = Repo.createMemoryBackend({
+    version: 1,
+    employees: [{ id: 'x1', fields: { surname: 'Régi' } }],   // nincs history mező
+  });
+  Repo.useBackend(backend);
+  await Repo.load();
+  assert(Array.isArray(Repo.get('x1').history), 'nem lett history tömb');
+  assertEq(Repo.get('x1').history.length, 0);
+});
+
+atest('MAX_HISTORY felett a legrégebbi bejegyzés esik ki', async () => {
+  await fresh();
+  const e = Repo.create({ fields: { surname: 'Kovács', counter: '0' } });
+  for (let i = 1; i <= 210; i++) {
+    Repo.update(e.id, { fields: { counter: String(i) } });
+  }
+  const h = Repo.get(e.id).history;
+  assert(h.length <= 200, `a napló túlnőtt a korláton: ${h.length}`);
+  // A legfrissebb bejegyzésnek meg kell maradnia
+  assertEq(h[h.length - 1].changes[0].to, '210');
+});
+
 (async () => {
   for (const item of queue) {
     if (item.section) { console.log(`

@@ -315,3 +315,33 @@
 .rg-backup__count { color: var(--c-muted); white-space: nowrap; }
 .rg-backup.is-broken { opacity: .55; cursor: not-allowed; }
 .rg-backup.is-broken .rg-backup__count { color: var(--c-red); }
+
+/* ── Változásnapló ──────────────────────────────────────────────────────── */
+
+.eh-empty { font-size: 12px; color: var(--c-muted); padding: 4px 0; }
+
+.eh-list {
+  display: flex; flex-direction: column; gap: var(--sp-3);
+  min-width: 480px; max-width: 640px; max-height: 60vh; overflow-y: auto;
+}
+
+.eh-item { border: 1px solid var(--c-border); border-radius: var(--radius-sm); padding: 8px 10px; }
+
+.eh-head {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 4px; font-size: 11.5px;
+}
+.eh-action { font-weight: 600; color: var(--c-text); }
+.eh-date   { color: var(--c-muted); font-variant-numeric: tabular-nums; }
+.eh-user   { color: var(--c-muted); margin-left: auto; }
+.eh-source {
+  font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--c-muted); background: var(--c-bg); border-radius: 8px; padding: 1px 6px;
+}
+
+.eh-diff { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.eh-diff td { padding: 2px 4px; vertical-align: top; }
+.eh-diff-key   { color: var(--c-muted); white-space: nowrap; padding-right: 8px; }
+.eh-diff-from  { color: var(--c-muted); text-decoration: line-through; text-decoration-color: var(--c-red); }
+.eh-diff-arrow { color: var(--c-muted); padding: 0 4px; }
+.eh-diff-to    { color: var(--c-text); font-weight: 500; }

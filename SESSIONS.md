@@ -56,6 +56,56 @@ sablonnal. Röviden, de úgy, hogy a *következő* session ebből folytatni tudj
 
 # Napló
 
+## 2026-08-18 — Változásnapló a munkavállalói adatokhoz
+
+**Cél:** Követhető legyen az UI-n, ha egy dolgozó bármely adata átíródik –
+ki, mikor, honnan és mit változtatott.
+
+**Változás:** `v10.39`
+- `js/services/employee-repo.js` — a napló a rekordon belül él
+  (`emp.history[]`), nem külön fájlban, így a meglévő biztonsági mentés és
+  visszaállítás automatikusan viszi. Mind az öt mutátor (`create`, `update`,
+  `addIdentifier`, `removeIdentifier`, `setExited`) naplóz; `source` jelzi,
+  honnan jött a változás (`urlap` | `import` | `ugy`).
+- `js/modules/registry/employee-history.js` — új modul, a napló dialógusban:
+  legfrissebb elöl, mezőnkénti előtte→utána párral, nyers érték helyett
+  megjelenítéskor fordítva a sémán át.
+- `js/modules/registry/registry-view.js` — „Előzmények (N)" gomb minden
+  sorban; a darabszám csak akkor látszik, ha van bejegyzés.
+- `js/services/xlsx-read.js`, `js/services/case-repo.js` — a `source` most
+  már `'import'`, illetve `'ugy'` értékkel hívja a mutátorokat.
+- `css/registry.css`, `README.md`, `index.html` — stílus, dokumentáció,
+  bekötés.
+
+**Miért / döntés:**
+- **A rekordon belül, nem külön fájlban.** Nincs új tároló-háttér, nincs
+  második sérülés-kezelés és visszaállító párbeszéd ugyanazért a funkcióért –
+  a meglévő 20 biztonsági mentés automatikusan viszi. Következmény: a
+  végleges törlés a történetet is törli (ez GDPR-szempontból helyes).
+- **Nyers értéket tárolunk, nem megjelenítettet.** A kanonikus enum-azonosító
+  és az ISO-dátum megy a naplóba; a fordítás (magyar címke, dátumformátum)
+  megjelenítéskor történik a sémán át. Így a napló nem hazudik, ha később
+  átnevezik egy séma-érték címkéjét.
+- **Valódi eltérés nélkül nincs bejegyzés.** Enélkül egy újraimportált
+  táblázat minden érintetlen sora zajt ütne a naplóba. A létrehozás, a
+  kilépés és a visszavétel viszont önmagában is tény – azok mezőváltozás
+  nélkül is bekerülnek.
+- **`removeIdentifier` a mezőt szándékosan nem üríti** (lásd
+  `syncIdentifierFields`), ezért a törölt azonosítót a bejegyzés `extra`
+  mezőn viszi be, nem a diffen.
+- **`MAX_HISTORY = 200`, fix korlát.** Ha kevés lesz, a következő lépés külön
+  `docgen-audit.json`, nem nagyobb szám.
+
+**Tesztek:** `node test/run-all.js` mind a 14 csomag zöld; 9 új teszt a
+`test/employee-repo.test.js`-ben (diff, no-op szűrés, azonosító-csere,
+kilépés/visszavétel, régi rekord migrációja, 200-as korlát). Böngészőben
+végigvíve: létrehozás → „Előzmények (1)", mezőmódosítás → helyes
+`Vezetéknév: Teszt → Tesztelt` diff, konzolhiba nélkül.
+
+**Nyitott / következő:** Globális (nem személyhez kötött) változásnapló a
+Beállítások fülön nincs megépítve – szándékosan, nem volt rá kérés; a
+per-személy adatból utólag összeállítható, ha kell.
+
 ## 2026-08-17 (4.) — Frissítés ZIP-ből a céges gépen, törlés nélkül
 
 **Cél:** A GitHubról letöltött ZIP-pel lehessen frissíteni az izolált céges
