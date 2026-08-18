@@ -343,6 +343,25 @@ test('Az összesítő nevet mutat, nem belső azonosítót', () => {
     'a chip-sor nyers azonosítókat listáz');
 });
 
+// A nyilvántartás-tábla a ClientPicker beágyazott módja: kijelölhető sorok,
+// oszlopválasztó, és a rekord-műveletek EGY helyen, a tábla alatti sávban —
+// nem soronként ismételve, ami szűk ablakban levágódott.
+test('A nyilvántartás-tábla kijelölhető és a műveletek a tábla alatt vannak', () => {
+  const rg = fs.readFileSync(path.join(__dirname, '../js/modules/registry/registry-view.js'), 'utf8');
+  assert(/ClientPicker\.inline\(/.test(rg), 'a tábla nem a ClientPicker beágyazott módja');
+  assert(/onSelectionChange/.test(rg), 'nincs kijelölés-visszajelzés');
+  assert(!/rowActions/.test(rg), 'maradt soronkénti gombsor');
+  // A műveleti sáv a lista UTÁN áll a markupban
+  assert(rg.indexOf('id="rg-list"') < rg.indexOf('id="rg-bulk"'),
+    'a műveleti sáv nem a táblázat alatt van');
+  for (const m of ['history', 'edit', 'exit', 'export', 'destroy']) {
+    assert(new RegExp(`data-bulk="${m}"`).test(rg), `hiányzó művelet a sávban: ${m}`);
+  }
+  const cp = fs.readFileSync(path.join(__dirname, '../vendor/client-picker.js'), 'utf8');
+  assert(/inline\(opts\)/.test(cp), 'a ClientPickernek nincs inline belépőpontja');
+  assert(/Picker\.prototype\.setRows/.test(cp), 'nincs setRows: minden rajzolás elveszítené a kijelölést');
+});
+
 /** Egy modul-szintű függvény törzse (2 szóköz behúzás → `\n  }` a vége). */
 function fvTorzs(src, nev) {
   const start = src.indexOf(`function ${nev}(`);

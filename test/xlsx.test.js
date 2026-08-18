@@ -645,6 +645,26 @@ atest('a kiexportált adat visszaolvasva ugyanaz', async () => {
   assertEq(rows[0].problems.length, 0, 'váratlan olvasási gond: ' + rows[0].problems.join('; '));
 });
 
+// Valódi hibából született: a nyilvántartás importálója a beépített
+// alapértelmezéssel (firstDataRow=3) olvasott, az élő sablonban viszont a
+// 3. sor még az angol címkesor — így minden import létrehozott egy
+// „címkesor” nevű személyt. A profil sorszámait kötelező átadni.
+atest('az üres sablon csak a profil szerinti első adatsortól olvas', async () => {
+  const { buf } = await generalt([]);
+
+  const jo = XlsxRead.readRows(buf, {
+    schema: SchemaStore.get(),
+    keyRow: PROFILE.keyRow, firstDataRow: PROFILE.firstDataRow,
+  });
+  assertEq(jo.rows.length, 0, 'üres sablonból adatsor keletkezett');
+
+  // A vesszőparaszt: alapértelmezéssel a címkesor bejönne személyként
+  const rossz = XlsxRead.readRows(buf, { schema: SchemaStore.get() });
+  assert(rossz.rows.length > 0,
+    'a teszt elavult: a profil firstDataRow-ja már egyezik az alapértelmezéssel');
+  assert(PROFILE.firstDataRow > 3, 'a profil firstDataRow-ja 3 vagy kisebb lett');
+});
+
 atest('az eredeti adatbekérő üres sablonja gond nélkül beolvasható', async () => {
   const buf = fs.readFileSync(EREDETI);
   const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);

@@ -18,9 +18,29 @@
 .rg-arch-toggle { flex-shrink: 0; white-space: nowrap; }
 
 .rg-table-wrap { max-height: calc(100vh - 260px); }
+/* A munkavállaló-tábla a ClientPicker beágyazott módja — a magasságát itt
+   szabályozzuk, hogy a műveleti sávval együtt is kiférjen. */
+#rg-list .cp-table-wrap { max-height: calc(100vh - 330px); }
 
 .rg-actions { white-space: nowrap; text-align: right; }
 .rg-actions .btn { margin-left: 4px; }
+
+/* Műveleti sáv a táblázat alatt — a gombok a kijelölésre vonatkoznak */
+.rg-bulk {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-md);
+  background: var(--c-bg);
+}
+.rg-bulk-count { font-size: 12px; margin-right: auto; color: var(--c-muted); }
+.rg-bulk-count b { color: var(--c-text); }
+.rg-bulk .btn[disabled] { opacity: .4; cursor: default; }
+.rg-bulk .rg-del[disabled]:hover { background: transparent; color: var(--c-red); }
 /* A törlés visszafordíthatatlan – ne nézzen ki ugyanúgy, mint a kilépés */
 .rg-del { color: var(--c-red); }
 .rg-del:hover { background: var(--c-red); color: #fff; }
