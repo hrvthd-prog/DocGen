@@ -16,6 +16,8 @@ const RegistryModule = (() => {
   const KILEPES_UGYTIPUS = 'munkaviszony_kijelentes';
 
   let container = null;
+  let picker    = null;   // a beágyazott ClientPicker-tábla példánya
+  let byId      = new Map();
   let state = {
     ready:           false,
     dirHandle:       null,
@@ -23,6 +25,7 @@ const RegistryModule = (() => {
     query:           '',
     showExited:      false,
     selectedId:      null,
+    selectedIds:     [],        // tömeges műveletekhez kijelölt rekordok
     // Sérült adatfájl esetén ide kerül a hiba – ilyenkor NEM indulunk üresen
     corruptError:    null,
   };
@@ -208,6 +211,7 @@ const RegistryModule = (() => {
                 <span class="rg-io-note" id="rg-export-note"></span>
               </div>
               <div id="rg-list"></div>
+              <div class="rg-bulk" id="rg-bulk"></div>
             </div>
           </div>
         </div>
@@ -274,6 +278,36 @@ const RegistryModule = (() => {
     if (s) s.textContent = SchemaStore.version();
   }
 
+  /**
+   * A tábla oszlopnevei: a séma magyar címkéi. Ütköző címkét a gépi kulcs
+   * választ szét — az oszlopnév a ClientPickerben egyben az objektumkulcs is,
+   * tehát egyedinek kell lennie.
+   */
+  function columnLabels() {
+    const map = new Map();      // fieldKey -> oszlopnév
+    const foglalt = new Set();
+    for (const f of SchemaStore.fields()) {
+      let nev = f.label.hu || f.key;
+      if (foglalt.has(nev)) nev = `${nev} (${f.key})`;
+      foglalt.add(nev);
+      map.set(f.key, nev);
+    }
+    return map;
+  }
+
+  /** Egy rekord a táblának: címke szerinti értékek + azonosító + állapot. */
+  function tableRow(emp, labels) {
+    const v = SchemaStore.resolveValues(emp.fields, 'hu');
+    const sap = EmployeeRepo.currentIdentifier(emp, 'sap');
+    const rp  = EmployeeRepo.currentIdentifier(emp, 'residence_permit');
+    const idf = sap || rp || (emp.identifiers.find(i => i.current) || null);
+    const row = { __id: emp.id };
+    for (const [key, nev] of labels) row[nev] = v[key] || '';
+    row['Azonosító'] = idf ? idf.value : '';
+    row['Állapot']   = emp.exited ? 'kilépett' : 'aktív';
+    return row;
+  }
+
   function renderList() {
     const box = document.getElementById('rg-list');
     if (!box || !state.ready) return;
@@ -291,68 +325,76 @@ const RegistryModule = (() => {
         : '';
     }
 
-    if (!rows.length) {
+    // Teljesen üres nyilvántartás: ide táblázat helyett útba igazítás kell
+    if (!rows.length && !state.query && !EmployeeRepo.count({ includeExited: true })) {
+      picker = null;
+      state.selectedIds = [];
+      renderBulkBar();
       box.innerHTML = bevEmptyState(
-        state.query ? 'Nincs találat erre a keresésre.'
-                    : 'Még nincs felvett munkavállaló. Kezdd az „Új munkavállaló" gombbal, vagy importálj egy adatbekérő táblázatot.');
+        'Még nincs felvett munkavállaló. Kezdd az „Új munkavállaló" gombbal, vagy importálj egy adatbekérő táblázatot.');
       return;
     }
 
-    const cols = LIST_COLUMNS.map(k => SchemaStore.field(k)).filter(Boolean);
-    box.innerHTML = `
-      <div class="data-table-wrap rg-table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              ${cols.map(f => `<th>${escHtml(f.label.hu)}</th>`).join('')}
-              <th>Azonosító</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows.map(renderRow(cols)).join('')}
-          </tbody>
-        </table>
-      </div>`;
+    const labels   = columnLabels();
+    const oszlopok = [...labels.values()].concat(['Azonosító', 'Állapot']);
+    byId = new Map(rows.map(e => [e.id, e]));
+    const tRows = rows.map(e => tableRow(e, labels));
 
-    box.querySelectorAll('[data-history]').forEach(b =>
-      b.addEventListener('click', () => EmployeeHistory.open(EmployeeRepo.get(b.dataset.history))));
-    box.querySelectorAll('[data-edit]').forEach(b =>
-      b.addEventListener('click', () => openForm(b.dataset.edit)));
-    box.querySelectorAll('[data-exit]').forEach(b =>
-      b.addEventListener('click', () => toggleExit(b.dataset.exit)));
-    box.querySelectorAll('[data-destroy]').forEach(b =>
-      b.addEventListener('click', () => confirmDestroy(b.dataset.destroy)));
+    // A tábla életben marad két rajzolás között: a rendezés, a szűrők, az
+    // oszlopbeállítás és a kijelölés csak így éli túl egy mentést vagy importot.
+    if (picker && picker._oszlopok === oszlopok.join('|')) {
+      picker.setRows(tRows);
+      return;
+    }
+
+    picker = ClientPicker.inline({
+      container:  box,
+      rows:       tRows,
+      columns:    oszlopok,
+      visibleColumns: LIST_COLUMNS.map(k => labels.get(k)).filter(Boolean).concat(['Azonosító']),
+      rowKey:     r => r.__id,
+      storageKey: 'docgen-registry',
+      search:     false,          // a fenti rg-search a tárolóban keres, ez csak zavarna
+      rowClass:   r => (byId.get(r.__id) && byId.get(r.__id).exited ? 'rg-exited' : ''),
+      onSelectionChange: keys => { state.selectedIds = keys; renderBulkBar(); },
+    });
+    picker._oszlopok = oszlopok.join('|');
   }
 
-  function renderRow(cols) {
-    return emp => {
-      const v = SchemaStore.resolveValues(emp.fields, 'hu');
-      const sap = EmployeeRepo.currentIdentifier(emp, 'sap');
-      const rp  = EmployeeRepo.currentIdentifier(emp, 'residence_permit');
-      const idf = sap || rp || (emp.identifiers.find(i => i.current) || null);
-      const tobbi = emp.identifiers.length - (idf ? 1 : 0);
-      return `
-        <tr class="${emp.exited ? 'rg-exited' : ''}">
-          ${cols.map(f => `<td title="${escHtml(v[f.key] || '')}">${escHtml(v[f.key] || '')}</td>`).join('')}
-          <td title="${escHtml(idf ? EmployeeRepo.idTypeLabel(idf.type) : '')}">
-            ${idf ? escHtml(idf.value) : '<i class="rg-dim">—</i>'}
-            ${tobbi > 0 ? `<span class="rg-more" title="További ${tobbi} azonosító a történetben">+${tobbi}</span>` : ''}
-          </td>
-          <td class="rg-actions">
-            ${emp.exited ? `<span class="rg-exit-badge">kilépett: ${escHtml(emp.exitDate || '?')}</span>` : ''}
-            <button class="btn btn-ghost btn-sm" data-history="${emp.id}">
-              Előzmények${emp.history && emp.history.length ? ` (${emp.history.length})` : ''}
-            </button>
-            <button class="btn btn-ghost btn-sm" data-edit="${emp.id}">Szerkesztés</button>
-            <button class="btn btn-ghost btn-sm" data-exit="${emp.id}">
-              ${emp.exited ? 'Visszavétel' : 'Kilépettnek jelölés'}
-            </button>
-            <button class="btn btn-ghost btn-sm rg-del" data-destroy="${emp.id}"
-                    title="Végleges törlés – téves felvitel javítására">Törlés</button>
-          </td>
-        </tr>`;
-    };
+  /**
+   * Műveleti sáv a táblázat alatt.
+   *
+   * A gombok nem soronként ismétlődnek, hanem a kijelölésre vonatkoznak: egy
+   * soronkénti gombsor négy oszlopnyi helyet vitt el minden sorban, és tömeges
+   * munkára használhatatlan volt. Ami egyszerre csak egy rekordra értelmes
+   * (előzmények, szerkesztés), az egy kijelöltnél él, a többi bármennyinél.
+   */
+  function renderBulkBar() {
+    const bar = document.getElementById('rg-bulk');
+    if (!bar) return;
+    const emps = selectedEmployees();
+    const n    = emps.length;
+    const egy  = n === 1;
+    const mind = n > 0 && emps.every(e => e.exited);
+
+    bar.innerHTML = `
+      <span class="rg-bulk-count">${
+        n ? `<b>${n}</b> kijelölve` : 'Jelölj ki sorokat a művelethez'}</span>
+      <button class="btn btn-ghost btn-sm" data-bulk="history" ${egy ? '' : 'disabled'}
+              title="Egy kijelölt rekord előzményei">Előzmények</button>
+      <button class="btn btn-ghost btn-sm" data-bulk="edit" ${egy ? '' : 'disabled'}
+              title="Egy kijelölt rekord szerkesztése">Szerkesztés</button>
+      <button class="btn btn-ghost btn-sm" data-bulk="exit" ${n ? '' : 'disabled'}>${
+        mind ? 'Visszavétel' : 'Kilépettnek jelölés'}</button>
+      <button class="btn btn-ghost btn-sm" data-bulk="export" ${n ? '' : 'disabled'}>Export xlsx-be</button>
+      <button class="btn btn-ghost btn-sm rg-del" data-bulk="destroy" ${n ? '' : 'disabled'}
+              title="Végleges törlés – téves felvitel javítására">Törlés</button>
+      <button class="btn btn-ghost btn-sm" data-bulk="clear" ${n ? '' : 'disabled'}>Kijelölés törlése</button>`;
+  }
+
+  /** A kijelölt (és még létező) rekordok. */
+  function selectedEmployees() {
+    return state.selectedIds.map(id => EmployeeRepo.get(id)).filter(Boolean);
   }
 
   // ── Műveletek ──────────────────────────────────────────────────────────────
@@ -384,6 +426,31 @@ const RegistryModule = (() => {
     });
     document.getElementById('rg-export-template').addEventListener('click',
       () => RegistryXlsxIO.exportTemplate());
+
+    // Minden rekord-művelet a kijelölésre vonatkozik, egy helyről
+    document.getElementById('rg-bulk').addEventListener('click', ev => {
+      const b = ev.target.closest('[data-bulk]:not([disabled])');
+      if (!b) return;
+      if (b.dataset.bulk === 'clear') { if (picker) picker.clearSelection(); return; }
+      const emps = selectedEmployees();
+      if (!emps.length) { toast('Nincs kijelölt rekord.', 'warn'); return; }
+      switch (b.dataset.bulk) {
+        case 'history': EmployeeHistory.open(emps[0]); break;
+        case 'edit':    openForm(emps[0].id); break;
+        case 'export':  RegistryXlsxIO.exportData(emps); break;
+        case 'destroy': confirmDestroy(emps.map(e => e.id)); break;
+        case 'exit':
+          // Csupa kilépett kijelölés → visszavétel; különben a még aktívak jelölése
+          if (emps.every(e => e.exited)) {
+            emps.forEach(e => EmployeeRepo.setExited(e.id, false));
+            toast(`${emps.length} rekord visszavéve az aktív állományba`, 'success');
+            renderList();
+          } else {
+            openExitDialog(emps.filter(e => !e.exited));
+          }
+          break;
+      }
+    });
   }
 
   function openForm(id) {
@@ -391,36 +458,31 @@ const RegistryModule = (() => {
     EmployeeForm.open({ id, onSave: renderList });
   }
 
-  function toggleExit(id) {
-    const emp = EmployeeRepo.get(id);
-    if (!emp) return;
-    if (emp.exited) {
-      EmployeeRepo.setExited(id, false);
-      toast('Visszavéve az aktív állományba', 'success');
-      renderList();
-      return;
-    }
-    openExitDialog(emp);
-  }
-
   /**
-   * Kilépettnek jelölés.
+   * Kilépettnek jelölés — egy vagy több rekordra.
    *
    * A kilépés napját a program nem tudja kitalálni, viszont ebből fut a
    * bejelentési határidő – ezért kötelező, és ezért kérjük külön párbeszédben
    * ahelyett, hogy egy kattintással megtörténne a jelölés.
    *
    * Kiinduló érték a séma „Kilépés dátuma" mezője (a felvételkor tervezett
-   * utolsó munkanap), ha van; különben a mai nap.
+   * utolsó munkanap), ha van; különben a mai nap. Több rekordnál egy közös nap
+   * megy mindenkire – aki más napon lépett ki, azt egyesével kell jelölni.
    */
-  function openExitDialog(emp) {
-    const alap = emp.fields[EmployeeRepo.EXIT_DATE_FIELD] || CaseTypes.isoDate(new Date());
+  function openExitDialog(emps) {
+    const lista = [].concat(emps).filter(Boolean);
+    if (!lista.length) { toast('Minden kijelölt rekord már kilépett.', 'warn'); return; }
+    const tobb = lista.length > 1;
+    const alap = (!tobb && lista[0].fields[EmployeeRepo.EXIT_DATE_FIELD])
+      || CaseTypes.isoDate(new Date());
 
     showDialog({
       title: 'Kilépettnek jelölés',
       body: `
         <p style="font-size:13px;margin-bottom:10px">
-          <b>${escHtml(nevOf(emp))}</b> munkaviszonya megszűnt.
+          ${tobb
+            ? `<b>${lista.length} munkavállaló</b> munkaviszonya megszűnt.`
+            : `<b>${escHtml(nevOf(lista[0]))}</b> munkaviszonya megszűnt.`}
         </p>
         <div class="ef-field" style="max-width:200px">
           <span class="ef-label">Kilépés dátuma<span class="ef-req">*</span></span>
@@ -431,7 +493,7 @@ const RegistryModule = (() => {
           A rekord megmarad és bármikor visszavehető – csak kikerül az aktív
           listákból és a dokumentum-generálásból. A megadott nap a
           <b>Kilépés dátuma</b> mezőbe is bekerül, hogy az export a tényleges
-          napot vigye.
+          napot vigye.${tobb ? ' A megadott nap <b>mindegyik</b> kijelölt rekordra érvényes.' : ''}
         </p>`,
       footer: `
         <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Mégse</button>
@@ -440,15 +502,21 @@ const RegistryModule = (() => {
 
     document.getElementById('rg-exit-save').addEventListener('click', () => {
       const nap = document.getElementById('rg-exit-date').value.trim();
-      try {
-        EmployeeRepo.setExited(emp.id, true, nap);
-      } catch (e) {
-        document.getElementById('rg-exit-error').textContent = e.message;
-        return;
+      const kesz = [];
+      for (const emp of lista) {
+        try {
+          EmployeeRepo.setExited(emp.id, true, nap);
+          kesz.push(emp);
+        } catch (e) {
+          // Az első hibás dátum megállít: a többi rekordon sem lenne értelmesebb
+          document.getElementById('rg-exit-error').textContent = e.message;
+          if (!kesz.length) return;
+          break;
+        }
       }
-      BevLogger.info('KILEPES', `Kilépettnek jelölve: ${nevOf(emp)}`, '', `nap=${nap}`);
+      BevLogger.info('KILEPES', `Kilépettnek jelölve: ${kesz.map(nevOf).join(', ')}`, '', `nap=${nap}`);
       renderList();
-      showExitWarning(emp, nap);
+      showExitWarning(kesz, nap);
     });
   }
 
@@ -460,7 +528,10 @@ const RegistryModule = (() => {
    * hely, ahol a naptári napok számítása le van tesztelve. A `daysLeft` csak
    * a határidőt és a lezárást nézi, ezért adható át neki nyers dátum.
    */
-  function showExitWarning(emp, nap) {
+  function showExitWarning(emps, nap) {
+    const lista = [].concat(emps).filter(Boolean);
+    if (!lista.length) return;
+    const tobb     = lista.length > 1;
     const tipus    = CaseTypes.byKey(KILEPES_UGYTIPUS);
     const napszam  = tipus ? tipus.defaultDurationDays : 5;
     const hatarido = CaseTypes.suggestDueDate(KILEPES_UGYTIPUS, nap);
@@ -476,16 +547,19 @@ const RegistryModule = (() => {
           ? `A határidő <b>ma (${escHtml(hatarido)})</b> jár le.`
           : `Határidő: <b>${escHtml(hatarido)}</b> – ${hatra} nap van hátra.`;
 
-    // Ha már van nyitott kijelentési ügy, ne lehessen másodikat nyitni rá
-    let vanUgy = true;
-    try { vanUgy = CaseRepo.hasOpenCaseOfType(emp.id, KILEPES_UGYTIPUS); } catch {}
+    // Akinek már van nyitott kijelentési ügye, arra ne nyíljon másodszor
+    const ugyNelkul = lista.filter(e => {
+      try { return !CaseRepo.hasOpenCaseOfType(e.id, KILEPES_UGYTIPUS); } catch { return false; }
+    });
 
     showDialog({
       title: 'Bejelentési kötelezettség',
       body: `
         <div class="rg-exit-warn${lejart ? ' is-late' : ''}">
           <p>
-            <b>${escHtml(nevOf(emp))}</b> munkaviszonya
+            ${tobb
+              ? `<b>${lista.length} munkavállaló</b> munkaviszonya`
+              : `<b>${escHtml(nevOf(lista[0]))}</b> munkaviszonya`}
             <b>${escHtml(nap)}</b> napján szűnt meg. A megszűnést
             <b>be kell jelenteni az OIF-nak a megszűnéstől számított
             ${napszam} napon belül.</b>
@@ -497,22 +571,27 @@ const RegistryModule = (() => {
           kilépés dátumát.
         </p>`,
       footer: `
-        ${vanUgy ? '' :
-          '<button class="btn btn-ghost btn-sm" id="rg-exit-case">Bejelentési ügy megnyitása</button>'}
+        ${ugyNelkul.length
+          ? `<button class="btn btn-ghost btn-sm" id="rg-exit-case">Bejelentési ügy megnyitása${
+               ugyNelkul.length > 1 ? ` (${ugyNelkul.length})` : ''}</button>`
+          : ''}
         <button class="btn btn-primary btn-sm" onclick="closeDialog()">Rendben</button>`,
     });
 
     // Egy figyelmeztetés, amit nem lehet elintézni, pár nap múlva zaj lesz:
     // innen egy kattintással bekerül az Ügyek fülre, a saját határidejével.
     document.getElementById('rg-exit-case')?.addEventListener('click', () => {
-      try {
-        CaseRepo.create({ employeeId: emp.id, type: KILEPES_UGYTIPUS, triggerDate: nap });
-      } catch (e) {
-        toast('Az ügy megnyitása nem sikerült: ' + e.message, 'error');
-        return;
+      let db = 0;
+      for (const emp of ugyNelkul) {
+        try {
+          CaseRepo.create({ employeeId: emp.id, type: KILEPES_UGYTIPUS, triggerDate: nap });
+          db++;
+        } catch (e) {
+          toast('Az ügy megnyitása nem sikerült: ' + e.message, 'error');
+        }
       }
       closeDialog();
-      toast('Bejelentési ügy megnyitva – az Ügyek fülön követhető', 'success');
+      if (db) toast(`${db} bejelentési ügy megnyitva – az Ügyek fülön követhető`, 'success');
     });
   }
 
@@ -524,21 +603,28 @@ const RegistryModule = (() => {
    * azonosító-története és az ügyei. A visszaút a `data/backup/` mappa – a
    * mentés a törlés ELŐTTI állapotról készül, tehát visszaállítható.
    */
-  function confirmDestroy(id) {
-    const emp = EmployeeRepo.get(id);
-    if (!emp) return;
-    const nev = nevOf(emp);
+  function confirmDestroy(ids) {
+    const lista = [].concat(ids).map(id => EmployeeRepo.get(id)).filter(Boolean);
+    if (!lista.length) return;
+    const tobb  = lista.length > 1;
+    const nevek = lista.map(nevOf);
+    const azon  = lista.reduce((n, e) => n + e.identifiers.length, 0);
     let ugyek = 0;
-    try { ugyek = CaseRepo.forEmployee(id).length; } catch {}
+    for (const e of lista) {
+      try { ugyek += CaseRepo.forEmployee(e.id).length; } catch {}
+    }
 
     showDialog({
       title: 'Végleges törlés',
       body: `
         <p style="font-size:13px;margin-bottom:10px">
-          Biztosan véglegesen törlöd: <b>${escHtml(nev)}</b>?
+          Biztosan véglegesen törlöd:
+          <b>${escHtml(tobb ? `${lista.length} munkavállaló` : nevek[0])}</b>?
         </p>
+        ${tobb ? `<p class="ef-hint" style="margin-bottom:10px">${escHtml(
+          nevek.slice(0, 8).join(', ') + (nevek.length > 8 ? ` … (+${nevek.length - 8})` : ''))}</p>` : ''}
         <ul class="sv-warn-list">
-          <li><b>${emp.identifiers.length}</b> azonosító a történetével együtt elvész.</li>
+          <li><b>${azon}</b> azonosító a történetével együtt elvész.</li>
           ${ugyek ? `<li><b>${ugyek}</b> ügy is törlődik, az idővonalukkal együtt.</li>` : ''}
         </ul>
         <p class="ef-hint">
@@ -553,12 +639,15 @@ const RegistryModule = (() => {
 
     document.getElementById('rg-destroy-confirm').addEventListener('click', async () => {
       try {
-        try { CaseRepo.destroyForEmployee(id); } catch {}
-        EmployeeRepo.destroy(id);
+        for (const emp of lista) {
+          try { CaseRepo.destroyForEmployee(emp.id); } catch {}
+          EmployeeRepo.destroy(emp.id);
+        }
         await EmployeeRepo.flush();
         closeDialog();
-        BevLogger.info('SZEMELY_TORLES', `Végleges törlés: ${nev}`, '', `ugyek=${ugyek}`);
-        toast('Véglegesen törölve', 'success');
+        BevLogger.info('SZEMELY_TORLES', `Végleges törlés: ${nevek.join(', ')}`, '', `ugyek=${ugyek}`);
+        toast(tobb ? `${lista.length} rekord véglegesen törölve` : 'Véglegesen törölve', 'success');
+        if (picker) picker.clearSelection();
         renderList();
       } catch (e) {
         toast('A törlés nem sikerült: ' + e.message, 'error');

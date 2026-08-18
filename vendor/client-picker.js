@@ -24,12 +24,25 @@
 
   // ── Public API ────────────────────────────────────────────
   const ClientPicker = {
-    open(opts) { return new Picker(opts).mount(); }
+    open(opts) { return new Picker(opts).mount(); },
+
+    /**
+     * Beágyazott tábla — ugyanaz a komponens, csak nem modal.
+     *
+     *   ClientPicker.inline({
+     *     container,                     // ide kerül a tábla (a tartalmát felülírja)
+     *     rows, columns, rowKey, storageKey,
+     *     search: false,                 // opc. — sajat keresőmező elrejtése
+     *     onSelectionChange: (keys, rows) => {},
+     *   })  ->  picker  (`.setRows(rows)` újratölt, a kijelölést kulcs szerint megtartva)
+     */
+    inline(opts) { return new Picker(Object.assign({}, opts, { inline: true })).mount(); },
   };
 
   // ── Picker instance ───────────────────────────────────────
   function Picker(opts) {
     this.opts = opts || {};
+    this.inline = !!this.opts.inline;
     const rows = this.opts.rows || [];
 
     // Columns: ha nincs megadva, autodetect az első néhány sor kulcsaiból
@@ -101,9 +114,14 @@
   // ── DOM Mount ─────────────────────────────────────────────
   Picker.prototype.mount = function () {
     const overlay = document.createElement('div');
-    overlay.className = 'cp-overlay cp-root';
-    overlay.innerHTML = buildShellHTML(this.opts.title || 'Ügyfelek kiválasztása');
-    document.body.appendChild(overlay);
+    overlay.className = this.inline ? 'cp-inline cp-root' : 'cp-overlay cp-root';
+    overlay.innerHTML = buildShellHTML(this.opts.title || 'Ügyfelek kiválasztása', this.opts);
+    if (this.inline) {
+      this.opts.container.innerHTML = '';
+      this.opts.container.appendChild(overlay);
+    } else {
+      document.body.appendChild(overlay);
+    }
     this._overlay = overlay;
     this._dialog  = overlay.querySelector('.cp-dialog');
 
@@ -127,9 +145,35 @@
     this._wireEvents();
     this._render();
 
-    // Fókusz
-    setTimeout(() => this.el.search.focus(), 60);
+    // Fókusz — inline tábla nem rabolja el a fókuszt az oldaltól
+    if (!this.inline && this.el.search) setTimeout(() => this.el.search.focus(), 60);
     return this;
+  };
+
+  /**
+   * Új adathalmaz ugyanabba a táblába (inline használathoz).
+   * A kijelölés kulcs szerint marad meg, nem sorindex szerint — szűrés vagy
+   * törlés után az indexek elállnak, a kulcs viszont ugyanaz.
+   */
+  Picker.prototype.setRows = function (rows) {
+    const eddig = new Set([...this.state.selected].map(i => this.rowKeys[i]));
+    this.rows    = rows;
+    this.rowKeys = rows.map(this.rowKey);
+    this.state.selected  = new Set();
+    this.rowKeys.forEach((k, i) => { if (eddig.has(k)) this.state.selected.add(i); });
+    this.state.cursorIdx = null;
+    this._render();
+    return this;
+  };
+
+  /** A kijelölt sorok kulcsai (inline használathoz). */
+  Picker.prototype.selectedKeys = function () {
+    return [...this.state.selected].map(i => this.rowKeys[i]);
+  };
+
+  Picker.prototype.clearSelection = function () {
+    this.state.selected = new Set();
+    this._render();
   };
 
   Picker.prototype.destroy = function () {
@@ -146,18 +190,19 @@
   Picker.prototype._wireEvents = function () {
     const e = this.el;
 
-    // Bezárás
-    e.closeBtn.addEventListener('click',  () => this._cancel());
-    e.cancelBtn.addEventListener('click', () => this._cancel());
-    e.saveBtn.addEventListener('click',   () => this._save());
+    // Bezárás — inline módban nincs fejléc és nincs Mentés/Mégse
+    e.closeBtn?.addEventListener('click',  () => this._cancel());
+    e.cancelBtn?.addEventListener('click', () => this._cancel());
+    e.saveBtn?.addEventListener('click',   () => this._save());
 
     // Overlay-kattintásra ne záruljon — csak Esc / X / Mégse.
 
     // Toolbar
-    e.search.addEventListener('input', () => { this.state.quickSearch = e.search.value; this._render(); });
+    e.search?.addEventListener('input', () => { this.state.quickSearch = e.search.value; this._render(); });
     e.clearBtn.addEventListener('click', () => {
       this.state.filters = {}; this.state.sort = { col: null, dir: 'asc' };
-      this.state.quickSearch = ''; e.search.value = '';
+      this.state.quickSearch = '';
+      if (e.search) e.search.value = '';
       this._render();
     });
     e.onlySelBtn.addEventListener('click', () => {
@@ -258,6 +303,10 @@
     this._renderFilterBar();
     this._renderFooter(this._lastFiltered);
     this.el.onlySelBtn.classList.toggle('active', this.state.showOnlySelected);
+    if (this.opts.onSelectionChange) {
+      const idx = [...this.state.selected];
+      this.opts.onSelectionChange(idx.map(i => this.rowKeys[i]), idx.map(i => this.rows[i]));
+    }
   };
 
   Picker.prototype._renderHead = function () {
@@ -317,7 +366,8 @@
         const fmted = fmtVal(raw, types[col]);
         cells += `<td title="${esc(fmted)}">${esc(fmted)}</td>`;
       }
-      html += `<tr data-i="${i}" class="${sel ? 'cp-selected ' : ''}${cur ? 'cp-cursor' : ''}">
+      html += `<tr data-i="${i}" class="${sel ? 'cp-selected ' : ''}${cur ? 'cp-cursor' : ''}${
+          this.opts.rowClass ? ' ' + this.opts.rowClass(row) : ''}">
         <td class="cp-col-check"><input type="checkbox" ${sel ? 'checked' : ''}></td>
         <td class="cp-col-num">${r + 1}</td>
         ${cells}
@@ -748,17 +798,23 @@
   // ── Keyboard ──────────────────────────────────────────────
   Picker.prototype._onKey = function (e) {
     if (this._destroyed) return;
+    // Inline módban a tábla csak egy elem az oldalon: a billentyűk csak akkor
+    // az övéi, ha a fókusz benne van. Különben az Esc/Enter/Space az egész app
+    // többi feltületét is eltérítené.
+    if (this.inline && !this._overlay.contains(e.target)) return;
     if (e.key === 'Escape') {
       if (this._openedPopup) { this._closePopup(); return; }
-      this._cancel(); return;
+      if (!this.inline) this._cancel();
+      return;
     }
     const inField = e.target.matches('input, select, textarea');
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && this.el.search) {
       e.preventDefault();
       this.el.search.focus(); this.el.search.select();
       return;
     }
     if (e.key === 'Enter' && !inField) {
+      if (this.inline) return;
       e.preventDefault(); this._save(); return;
     }
     if (inField) return;
@@ -794,9 +850,9 @@
   };
 
   // ─── Shell HTML ───────────────────────────────────────────
-  function buildShellHTML(title) {
-    return `
-      <div class="cp-dialog" role="dialog" aria-modal="true">
+  function buildShellHTML(title, opts) {
+    const inline = !!(opts && opts.inline);
+    const fejlec = inline ? '' : `
         <div class="cp-header">
           <div class="cp-header-title">${esc(title)}</div>
           <div class="cp-header-spacer"></div>
@@ -805,8 +861,10 @@
               <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             </svg>
           </button>
-        </div>
-        <div class="cp-toolbar">
+        </div>`;
+    // A beágyazó felület gyakran hoz saját keresőt — két keresőmező egymás
+    // mellett csak zavar, ezért kikapcsolható.
+    const kereso = (opts && opts.search === false) ? '' : `
           <div class="cp-search">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
               <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/>
@@ -814,7 +872,22 @@
             </svg>
             <input type="text" placeholder="Keresés mindenben…">
             <kbd>Ctrl+F</kbd>
-          </div>
+          </div>`;
+    const mentes = inline ? '' : `
+          <div class="cp-dialog-actions">
+            <button class="cp-btn cp-btn-ghost" data-act="cancel">Mégse</button>
+            <button class="cp-btn cp-btn-primary" data-act="save">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                <path d="M3 8l3.5 3.5L13 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Kiválasztás
+            </button>
+          </div>`;
+    return `
+      <div class="cp-dialog"${inline ? '' : ' role="dialog" aria-modal="true"'}>
+        ${fejlec}
+        <div class="cp-toolbar">
+          ${kereso}
           <button class="cp-tb-btn" data-act="cols">
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
               <rect x="2" y="3" width="3" height="10" rx="1" stroke="currentColor" stroke-width="1.4"/>
@@ -850,15 +923,7 @@
         <div class="cp-footer">
           <div class="cp-footer-stats"></div>
           <div class="cp-footer-spacer"></div>
-          <div class="cp-dialog-actions">
-            <button class="cp-btn cp-btn-ghost" data-act="cancel">Mégse</button>
-            <button class="cp-btn cp-btn-primary" data-act="save">
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
-                <path d="M3 8l3.5 3.5L13 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              Kiválasztás
-            </button>
-          </div>
+          ${mentes}
         </div>
       </div>
     `;

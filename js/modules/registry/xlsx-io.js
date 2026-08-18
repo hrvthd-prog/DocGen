@@ -62,8 +62,15 @@ const RegistryXlsxIO = (() => {
   function importFile(file, onDone) {
     file.arrayBuffer().then(buf => {
       let olvasas;
+      // A fejléc három sor (kulcsok / szakaszcímek / angol címkék), az adat csak
+      // az után kezdődik — a sorszámokat a profil mondja meg, nem a beépített
+      // alapértelmezés. Ennélkül a címkesor is személyként jött be.
+      const p = profile();
       try {
-        olvasas = XlsxRead.readRows(buf, { schema: SchemaStore.get() });
+        olvasas = XlsxRead.readRows(buf, {
+          schema: SchemaStore.get(),
+          keyRow: p.keyRow, firstDataRow: p.firstDataRow,
+        });
       } catch (e) {
         toast('A fájl nem olvasható: ' + e.message, 'error');
         return;

@@ -426,3 +426,27 @@
 .cp-root ::-webkit-scrollbar-track { background: transparent; }
 .cp-root ::-webkit-scrollbar-thumb { background: var(--cp-border); border-radius: 4px; }
 .cp-root ::-webkit-scrollbar-thumb:hover { background: var(--cp-muted); }
+
+/* ══════════════════════════════════════════════════════════════
+   Beágyazott (nem modális) mód — ClientPicker.inline()
+   ══════════════════════════════════════════════════════════════ */
+.cp-inline {
+  display: block;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--cp-text);
+}
+.cp-inline .cp-dialog {
+  height: auto;
+  min-height: 0;
+  max-width: none;
+  border-radius: var(--cp-radius);
+  box-shadow: none;
+}
+.cp-inline .cp-table-wrap { max-height: 58vh; }
+
+/* Auto layout: a nowrap cellák kiszélesítik a táblát, ami vízszintes
+   görgetést ad — szűk ablakban az adatoszlopok a táblán belül csúsznak
+   ki, nem az egész oldal tágul. */
+.cp-inline .cp-table { table-layout: auto; }
+.cp-inline .cp-table tbody td { max-width: 280px; }

@@ -259,6 +259,9 @@ html, body { overflow: auto; }
 /* ── Workspace (jobb panel) ───────────────────────────── */
 .workspace {
   flex: 1;
+  /* Enged a zsugorodásnak: e nélkül egy széles táblázat a kártyában az egész
+     oldalt kitolja vízszintesen, a tábla saját görgetője helyett. */
+  min-width: 0;
   padding: 20px;
   display: flex;
   gap: var(--sp-4);

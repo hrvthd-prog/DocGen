@@ -56,6 +56,55 @@ sablonnal. Röviden, de úgy, hogy a *következő* session ebből folytatni tudj
 
 # Napló
 
+## 2026-08-19 (4.) — Import a 4. sortól; kijelölhető nyilvántartás-tábla
+
+**Cél:** (1) az adatbekérő-import a címkesort is személyként olvasta be;
+(2) a munkavállaló-táblázatban nem lehetett sorokat kijelölni, így nem volt
+tömeges adminisztráció; (3) szűk ablakban a sorbéli gombok levágódtak;
+(4) az oszlopok nem voltak átrendezhetők — a BEVapp táblázatát kérték vissza.
+
+**Változás** (`v10.44`):
+- `js/modules/registry/xlsx-io.js` — az import a profil `keyRow`/`firstDataRow`
+  értékeivel olvas (1: kulcsok, 2: szakaszcímek, 3: angol címkék, 4: első adatsor).
+- `vendor/client-picker.js` + `.css` — `ClientPicker.inline({ container, … })`:
+  ugyanaz a komponens, csak nem modal. Új: `setRows()` (kijelölés kulcs szerint
+  marad meg), `selectedKeys()`, `clearSelection()`, `onSelectionChange`, `rowClass`,
+  `search: false`. Inline módban nincs fejléc/Mentés-Mégse, és a billentyűk csak
+  akkor az övéi, ha a fókusz a táblában van.
+- `js/modules/registry/registry-view.js` — a `#rg-list` tábla erre állt át:
+  jelölőnégyzetek, Shift-tartomány, oszlopválasztó (74 sémamező), rendezés,
+  Excel-stílusú szűrők, mentett nézetek. A rekord-műveletek EGY helyen, a tábla
+  alatti sávban (Előzmények / Szerkesztés → 1 kijelöltnél; Kilépettnek jelölés ↔
+  Visszavétel / Export / Törlés → bármennyinél). `openExitDialog` és
+  `confirmDestroy` mostantól tömböt kap. A `toggleExit` és a `renderRow` kiesett.
+- `css/app.css` — `.workspace { min-width: 0 }`: e nélkül a széles tábla az egész
+  oldalt kitolta vízszintesen a saját görgetője helyett.
+
+**Miért / döntés:**
+- Az import gyökéroka nem az olvasóban volt: `XlsxRead.readRows` beépített
+  alapértelmezése `firstDataRow: 3`, az élő sablon viszont 2026-08-18 óta
+  szakaszcím-sort is tartalmaz. A `tools/adatbekero.js` már helyesen a profilból
+  vette a sorszámokat — az UI-import maradt le róla.
+- Új tábla helyett a már vendorolt (és a BEVapp-példánnyal bitre azonos)
+  ClientPickert bővítettük beágyazott móddal. Egy komponens, két használat.
+- Előbb ragadós akció-oszlop készült (adat csúszik ki, gomb marad), de a
+  soronkénti négy gomb ~380px-et vitt el minden sorból. A kijelölés-alapú sáv
+  ezt kiváltja, így az akció-oszlop támogatása kikerült a komponensből.
+
+**Tesztek:** `node test/run-all.js` — minden készlet zöld (új: az üres sablon
+csak a profil szerinti első adatsortól olvas; a tábla kijelölhető és a műveletek
+alatta vannak). Böngészőben végigpróbálva localhost-ról (`.claude/launch.json`,
+python http.server): kijelölés, gomb-tiltottsg, tömeges kiléptetés, visszavétel,
+előzmények, szerkesztés, oszlopválasztó, és hogy 1100px szélességnél az oldal
+nem tágul túl.
+
+**Nyitott / következő:**
+- `js/modules/docgen/merge.js:139` továbbra is `row['Vezetéknév']`-ként olvassa a
+  `clientRows` elemeit, pedig azok `{id, fields}` alakúak — a per-client
+  merge-előnézet fájlnevei valószínűleg üresek. Nem ehhez a kéréshez tartozik.
+- Az Ügyek fül táblázata még a régi `data-table` — ha kell, ugyanezzel a
+  `ClientPicker.inline` mintával átállítható.
+
 ## 2026-08-19 (3.) — Sablonmappa-váltás javítása + UUID-k elrejtése
 
 **Cél:** a „Másik sablonmappa választása” gomb megnyitja a megerősítő párbeszédet, de az
