@@ -332,22 +332,31 @@ atest('minden mező útmutatója a HELYES mezőn van', async () => {
   assert(rossz.length === 0, `${rossz.length} hibás mező:\n      ` + rossz.slice(0, 8).join('\n      '));
 });
 
-atest('a kommentdoboz nagyobb, mint az ExcelJS apró alapértelmezése', async () => {
+atest('a kommentdoboz mindenhol nagyjából ugyanakkora, nem oszlopszám szerint', async () => {
   // Az ExcelJS minden kommentnek ugyanazt az apró (kb. 2 oszlop × 4 sor) VML
-  // dobozt írja – ettől a legtöbb, 6-9 soros komment olvashatatlanul kicsi
-  // maradna. A toBuffer() ezt utólag, nyers XML-ben nagyítja (enlargeNoteBoxes).
-  // A magasságot (eredetileg 9 sor) 2026-08-19-én felhasználói kérésre 6
-  // sorra csökkentettük.
+  // dobozt írja; a toBuffer() ezt utólag, nyers XML-ben igazítja
+  // (enlargeNoteBoxes). Korábban FIX 5 oszlopot fogott át — csakhogy az
+  // oszlopok 10 és 38 karakter között váltakoznak, így ugyanaz az „5 oszlop"
+  // hol 200, hol 700 pont széles dobozt adott. A szerződés ezért pontban van.
   const zip = new sandbox.PizZip(G.buf);
   const vmlUt = Object.keys(zip.files).find(p => /^xl\/drawings\/vmlDrawing\d+\.vml$/.test(p));
-  assert(vmlUt, 'nincs vmlDrawing a kiírt fájlban – nincs mit nagyítani');
+  assert(vmlUt, 'nincs vmlDrawing a kiírt fájlban – nincs mit igazítani');
   const xml = zip.files[vmlUt].asText();
   const anchorok = [...xml.matchAll(/<x:Anchor>\s*([^<]+?)\s*<\/x:Anchor>/g)];
   assert(anchorok.length > 0, 'nincs egyetlen <x:Anchor> sem');
+
+  const ws = G.wb.getWorksheet('Data');
+  const pt = c => (((ws.getColumn(c) && ws.getColumn(c).width) || 8.43) * 7 + 5) * 0.75;
+
   for (const [, belso] of anchorok) {
     const [c1, , r1, , c2, , r2] = belso.split(',').map(s => Number(s.trim()));
-    assert(c2 - c1 >= 4, `túl keskeny kommentdoboz: ${belso}`);
-    assert(r2 - r1 === 6, `nem a várt 6 soros kommentdoboz: ${belso}`);
+    let szeles = 0;
+    for (let c = c1; c < c2; c++) szeles += pt(c + 1);
+    // A cél 200 pt; egy oszlop alá nem megyünk, ezért a határ nem hajszálpontos.
+    // A régi, fix 5 oszlopos doboz itt 600 pt fölé is elment.
+    assert(szeles >= 100 && szeles <= 300,
+      `kilóg a kommentdoboz szélessége: ${Math.round(szeles)} pt (${belso})`);
+    assertEq(r2 - r1, 6, `nem a várt 6 soros kommentdoboz: ${belso}`);
   }
 });
 

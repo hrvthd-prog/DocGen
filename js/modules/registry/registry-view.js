@@ -124,9 +124,10 @@ const RegistryModule = (() => {
   }
 
   /**
-   * Egyszeri séma-felhozatal: a `_hun` végű mezőkulcsok rövidítése, majd a
-   * kódba felvett új mezők pótlása. A rekordok adatai a kulccsal együtt
-   * mozognak, ezért a nyilvántartás betöltése UTÁN fut.
+   * Egyszeri séma-felhozatal: a `_hun` végű mezőkulcsok rövidítése, a kódba
+   * felvett új mezők pótlása, és a szándékosan visszavontak kiejtése. A
+   * rekordok adatai a kulccsal együtt mozognak, ezért a nyilvántartás
+   * betöltése UTÁN fut.
    *
    * A pótlás nélkül a mentett séma sosem kapná meg az új adatkört (a `load()`
    * a mentett configot használja, ha van), és az adatbekérőből is kimaradna.
@@ -136,11 +137,14 @@ const RegistryModule = (() => {
       const emps = EmployeeRepo.all({ includeExited: true });
       const rovidult = SchemaStore.migrateLegacyKeys(emps);
       const uj = SchemaStore.addMissingSeedFields();
-      if (!rovidult && !uj) return;
+      const kiesett = SchemaStore.removeRetiredFields();
+      if (!rovidult && !uj && !kiesett) return;
       await SchemaStore.save();
       await EmployeeRepo.flush();
       if (rovidult) BevLogger.info('SEMA_MIGRACIO', 'A _hun mezőkulcsok rövidültek', '', '');
       if (uj) BevLogger.info('SEMA_MIGRACIO', `${uj} új mező került a sémába`, '', '');
+      if (kiesett) BevLogger.info('SEMA_MIGRACIO',
+        `${kiesett} visszavont mező kikerült a sémából`, '', '');
     } catch (e) {
       BevLogger.warn('SEMA_MIGRACIO', 'A séma-felhozatal nem futott le', e.message, '');
     }

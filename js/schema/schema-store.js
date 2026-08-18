@@ -599,6 +599,43 @@ const SchemaStore = (() => {
     return hianyzo.length;
   }
 
+  /**
+   * Szándékosan visszavont seed-mezők.
+   *
+   * Az `addMissingSeedFields` párja: az csak HOZZÁAD, ezért egy kódból törölt
+   * mező a MÁR MENTETT sémában örökre bennmarad, és ott van az adatbekérő
+   * végén is — friss telepítésen viszont nincs. Ez az eltérés valódi
+   * hibabejelentésből jött: a `hr_id_number` és a `hr_professional_background`
+   * („Identity Card Number", „Professional Background") a 2026-08-18-i
+   * sémaátrendezéskor került ki a seedből — már van rájuk mező (`pp_number`,
+   * illetve `occupation_before_arrival`) —, mégis kimentek a BM/BN oszlopban.
+   *
+   * CSAK az itt felsorolt kulcsokat bántjuk; a felhasználó saját mezői nem
+   * es(het)nek áldozatul. A rekordokban levő értékeket szándékosan MEGHAGYJUK:
+   * a sémából kiesett kulcsot senki nem olvassa, viszont ha kiderül, hogy mégis
+   * kellett, visszahozható adatvesztés nélkül.
+   */
+  const RETIRED_KEYS = ['hr_id_number', 'hr_professional_background'];
+
+  /** @returns {number} az eltávolított mezők száma (0 = nem volt mit tenni) */
+  function removeRetiredFields() {
+    ensureLoaded();
+    const kiesik = schema.fields.filter(f => RETIRED_KEYS.includes(f.key));
+    if (!kiesik.length) return 0;
+
+    const szukitett = normalize({
+      version:    schema.version,
+      updatedAt:  schema.updatedAt,
+      groups:     schema.groups,
+      fields:     schema.fields.filter(f => !RETIRED_KEYS.includes(f.key)),
+      dictionary: schema.dictionary,
+    });
+    szukitett.version = schema.version + 1;
+    schema = szukitett;
+    emit();
+    return kiesik.length;
+  }
+
   /** Mező törlése előtti hatásvizsgálat – mi veszne el. */
   function usageOf(key, employees = []) {
     ensureLoaded();
@@ -616,7 +653,8 @@ const SchemaStore = (() => {
     resolveTag, renderTag, tagEquals, resolveValues, computeField, renderValue,
     dictionary, setDictionary, translate,
     validateValues, validateSchema,
-    migrateValues, renameFieldKey, migrateLegacyKeys, addMissingSeedFields, usageOf,
+    migrateValues, renameFieldKey, migrateLegacyKeys, addMissingSeedFields,
+    removeRetiredFields, usageOf,
     _normalize: normalize, _datePart: datePart,
   };
 })();

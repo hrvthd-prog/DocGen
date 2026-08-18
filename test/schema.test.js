@@ -74,6 +74,31 @@ test('a duplikált HR-rovatok nincsenek felvéve', () => {
   }
 });
 
+// Valódi hibából született: friss telepítésen nem, egy RÉGEBBI, már MENTETT
+// sémánál viszont bennmaradt ez a két mező, és kiment az adatbekérő BM/BN
+// oszlopában. Az `addMissingSeedFields` csak hozzáad, ezért kell a párja.
+test('a visszavont mezők a már mentett sémából is kiesnek', () => {
+  const regi = JSON.parse(JSON.stringify(SEED_SCHEMA));
+  regi.fields.push(
+    { key: 'hr_id_number', label: { hu: 'Személyi igazolvány száma', en: 'Identity Card Number' },
+      group: 'hr_belso', type: 'text' },
+    { key: 'hr_professional_background', label: { hu: 'Szakmai háttér', en: 'Professional Background' },
+      group: 'hr_belso', type: 'text' },
+    { key: 'sajat_mezo', label: { hu: 'Saját mező', en: 'Own field' }, group: 'hr_belso', type: 'text' });
+  SchemaStore.loadFrom(regi);
+  assert(SchemaStore.field('hr_id_number'), 'a teszt előfeltétele nem áll');
+
+  assertEq(SchemaStore.removeRetiredFields(), 2, 'nem két mező esett ki');
+  assertEq(SchemaStore.field('hr_id_number'), null);
+  assertEq(SchemaStore.field('hr_professional_background'), null);
+  assert(SchemaStore.field('sajat_mezo'), 'a felhasználó saját mezőjét is elvitte');
+  assert(SchemaStore.field('pp_number'), 'hatósági mező esett áldozatul');
+  assertEq(SchemaStore.removeRetiredFields(), 0, 'a második futás nem idempotens');
+
+  SchemaStore.loadFrom(SEED_SCHEMA);   // a többi teszt tiszta sémát vár
+  assertEq(SchemaStore.removeRetiredFields(), 0, 'friss seeden nincs mit törölni');
+});
+
 test('az eredeti 44 mező megvan, a formanyomtatvány és a HR mezőivel kiegészítve', () => {
   const kulcsok = SchemaStore.storedFields().map(f => f.key);
   assertEq(kulcsok.length, 44 + FORMANYOMTATVANY_MEZOK.length + HR_MEZOK.length);
