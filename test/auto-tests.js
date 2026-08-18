@@ -323,6 +323,26 @@ test('Switch dir confirm dialog (M5)', () => {
   assert(/elveszik|elvész/.test(docgenSrc), 'figyelmeztető szöveg hiányzik');
 });
 
+// Valódi hibából született: a mappaváltás visszakapta az IndexedDB-ben tárolt,
+// még érvényes engedélyű RÉGI handle-t, így a picker fel sem jött.
+test('Sablonmappa-váltás megkerüli a tárolt handle-t (force)', () => {
+  assert(/onSetTemplatesDir\(\{ force: true \}\)/.test(docgenSrc),
+    'a váltás nem force módban kéri az új mappát');
+  const fsSrc = fs.readFileSync(path.join(__dirname, '../js/services/fs-service.js'), 'utf8');
+  assert(/getOrRequestDir\(key, description, \{ force = false \} = \{\}\)/.test(fsSrc),
+    'getOrRequestDir nem fogad force opciót');
+  assert(/if \(!force\) \{/.test(fsSrc), 'a force nem ugorja át a tárolt handle-t');
+});
+
+// A kiválasztás kulcsa a rekord UUID-ja — az soha nem kerülhet a felületre.
+test('Az összesítő nevet mutat, nem belső azonosítót', () => {
+  assert(/function clientLabel\(id\)/.test(docgenSrc), 'clientLabel hiányzik');
+  assert(!/const clientNames = state\.selectedClients;/.test(docgenSrc),
+    'az összesítő kártya nyers azonosítókat listáz');
+  assert(!/const clients = state\.selectedClients;/.test(docgenSrc),
+    'a chip-sor nyers azonosítókat listáz');
+});
+
 /** Egy modul-szintű függvény törzse (2 szóköz behúzás → `\n  }` a vége). */
 function fvTorzs(src, nev) {
   const start = src.indexOf(`function ${nev}(`);

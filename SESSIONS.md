@@ -56,6 +56,37 @@ sablonnal. Röviden, de úgy, hogy a *következő* session ebből folytatni tudj
 
 # Napló
 
+## 2026-08-19 (3.) — Sablonmappa-váltás javítása + UUID-k elrejtése
+
+**Cél:** a „Másik sablonmappa választása” gomb megnyitja a megerősítő párbeszédet, de az
+„Igen, váltok” nem csinált semmit — csak az app újratöltése + engedély-megtagadás után
+lehetett másik mappát választani. Emellett az összesítő kártya a személyek belső
+azonosítóját (UUID) írta ki név helyett.
+
+**Változás** (`v10.43`):
+- `js/services/fs-service.js` — `getOrRequestDir(key, description, { force })`. `force: true`
+  esetén átugorja az IndexedDB-ben tárolt handle-t, így mindig feljön a mappaválasztó.
+- `js/modules/docgen.js` — `onSetTemplatesDir({ force })`; a váltás megerősítése
+  `force: true`-val hívja. Új `clientLabel(id)` helper; az összesítő kártya és a chip-sor
+  ezen keresztül névvel dolgozik. `loadFromRegistry()` az első `render()` ELŐTT fut,
+  hogy a névfeloldáshoz legyen `clientRows`.
+- `test/auto-tests.js` — két regressziós teszt mindkét hibára.
+
+**Miért / döntés:** a gyökérok nem a dialog-handler volt, hanem a `getOrRequestDir`
+„cache-first” viselkedése: a törlött `state.templatesDir` után a függvény a még érvényes
+engedélyű RÉGI handle-t adta vissza, tehát ugyanaz a mappa állt vissza. A kimeneti
+mappánál ez már meg volt oldva (`_pickAndSaveOutputDir` közvetlen picker) — itt nem
+másoltuk le a mintát, hanem a közös függvényt bővítettük, hogy egy helyen legyen.
+A `clientLabel` hiányzó rekordnál `(ismeretlen személy)`-t ad, nem az azonosítót — UUID
+semmilyen úton ne szivárogjon a felületre.
+
+**Tesztek:** `node test/run-all.js` — minden készlet zöld.
+
+**Nyitott / következő:** `js/modules/docgen/merge.js:139` a `clientRows` elemeit
+`row['Vezetéknév']`-ként olvassa, pedig azok `{id, fields}` alakúak — a per-client
+merge-előnézet fájlnevei valószínűleg üresek. Nem ehhez a hibához tartozik, nem
+nyúltunk hozzá.
+
 ## 2026-08-19 (2.) — Sürgősségi kontakt: Information for HR → Contacts
 
 **Cél:** A felhasználó egy újabb referenciafájlt küldött (`adatbekero (1).

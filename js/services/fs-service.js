@@ -60,16 +60,21 @@ const FsService = (() => {
     return u ? u + '_' + key : key;
   }
 
-  async function getOrRequestDir(key, description) {
+  // force = true: a tárolt handle-t átugorja, ezért mindig feljön a rendszer
+  // mappaválasztója. Mappa-váltáshoz kell — enélkül a még érvényes engedélyű
+  // régi handle-lel tér vissza, és a váltás látszólag nem csinál semmit.
+  async function getOrRequestDir(key, description, { force = false } = {}) {
     const storeKey = userKey(key);
     let handle = null;
-    try { handle = await loadHandle(storeKey); } catch {}
+    if (!force) {
+      try { handle = await loadHandle(storeKey); } catch {}
 
-    if (handle) {
-      try {
-        const ok = await verifyPermission(handle);
-        if (ok) return handle;
-      } catch {}
+      if (handle) {
+        try {
+          const ok = await verifyPermission(handle);
+          if (ok) return handle;
+        } catch {}
+      }
     }
 
     if (!hasFsApi) return null;
