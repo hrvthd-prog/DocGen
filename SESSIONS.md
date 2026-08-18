@@ -56,7 +56,28 @@ sablonnal. Röviden, de úgy, hogy a *következő* session ebből folytatni tudj
 
 # Napló
 
-## 2026-08-19 — Fejlécszín a szakaszé, nem a csoporté/kötelezőségé; kisebb kommentdoboz
+## 2026-08-19 (2.) — Sürgősségi kontakt: Information for HR → Contacts
+
+**Cél:** A felhasználó egy újabb referenciafájlt küldött (`adatbekero (1).
+xlsx`), amiben a `hr_emergency_contact_name`/`hr_emergency_contact_phone`
+mezőt átrakta az „Information for HR" szakaszból a „Contacts" szakasz
+végére (email, telephone után).
+
+**Változás:** (a commit után várhatóan `v42`)
+- `js/schema/export-profiles.js` — a két kulcs átkerült az „Information for
+  HR" `sections`-bejegyzés kulcslistájából a „Contacts"-éba (a végére).
+- `test/xlsx.test.js` — `ADATBEKERO_SORREND` frissítve.
+- `README.md` — a szakasz-összefoglaló és a HR-oszlopok leírása frissítve.
+
+**Miért / döntés:** Egyszerű, egyértelmű átrendezés, a kapott fájl oszlopkulcs-
+sorrendjével (`row 1`) automatikus szkripttel összevetve — pontos egyezés,
+nem kézzel ellenőriztem.
+
+**Tesztek:** `node test/run-all.js` → mind a 14 készlet zöld. A generált
+`adatbekero.xlsx` fejlécsora (kulcsok) szkripttel összevetve a kapott
+referenciafájléval: pontos egyezés.
+
+**Nyitott / következő:** —
 
 **Cél:** Az előző session (2026-08-18 (2.)) után a felhasználó egy
 szemléltető fájlt küldött: az általa kézzel megformázott adatbekérő 1-2-3.

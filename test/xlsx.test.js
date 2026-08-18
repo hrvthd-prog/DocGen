@@ -158,10 +158,9 @@ const ADATBEKERO_SORREND = [
   'hr_education_institution', 'hr_education_specialization', 'hr_degree_document_number',
   'mother_tongue', 'speaks_hungarian', 'hr_computer_skills', 'hr_language_skills',
   'previous_country', 'previous_town', 'previous_street',
-  'hr_emergency_contact_name', 'hr_emergency_contact_phone', 'hr_bank_account',
-  'hr_bank_name', 'hr_children', 'hr_department_cost_center', 'hr_direct_leader',
-  'hr_sg_category',
-  'email', 'telephone',
+  'hr_bank_account', 'hr_bank_name', 'hr_children', 'hr_department_cost_center',
+  'hr_direct_leader', 'hr_sg_category',
+  'email', 'telephone', 'hr_emergency_contact_name', 'hr_emergency_contact_phone',
 ];
 
 atest('az adatbekérő oszlopsorrendje a profil sections szerint', async () => {

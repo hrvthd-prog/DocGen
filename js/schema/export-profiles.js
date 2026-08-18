@@ -77,12 +77,13 @@ const DEFAULT_EXPORT_PROFILES = [
       // Ugyanaz a szín, mint az „Identification Numbers"-é – a mintafájlban
       // is így volt, és mivel a két szakasz nem szomszédos, nem okoz zavart.
       { title: 'Information for HR', fill: 'FF1F3864', keys: [
-        'hr_emergency_contact_name', 'hr_emergency_contact_phone', 'hr_bank_account',
-        'hr_bank_name', 'hr_children', 'hr_department_cost_center', 'hr_direct_leader',
-        'hr_sg_category',
+        'hr_bank_account', 'hr_bank_name', 'hr_children', 'hr_department_cost_center',
+        'hr_direct_leader', 'hr_sg_category',
       ] },
+      // 2026-08-19 (2.): a sürgősségi kontakt ide költözött az „Information
+      // for HR"-ből – a felhasználó szerint ide illik jobban.
       { title: 'Contacts', fill: 'FF2E75B6', keys: [
-        'email', 'telephone',
+        'email', 'telephone', 'hr_emergency_contact_name', 'hr_emergency_contact_phone',
       ] },
     ],
 
