@@ -567,25 +567,50 @@ const XlsxWrite = (() => {
    * kompatibilitási maradvány. Az ExcelJS viszont MINDEN kommentnek ugyanazt
    * az apró, kb. 2 oszlop × 4 sor tartományt írja (l. a könyvtár
    * V_SHAPE_ATTRIBUTES függvénye), és ezt a publikus API-ból nem lehet
-   * felülírni – ezért a kiírt fájl VML-jét utólag, nyers XML-ként igazítjuk,
+   * felülbírálni – ezért a kiírt fájl VML-jét utólag, nyers XML-ként igazítjuk,
    * ugyanúgy, ahogy a SchemaFromXlsx is nyers XML-ből olvassa ki azt, amit a
    * könyvtár nem ad vissza.
    *
-   * A span (hány oszloppal/sorral nagyobb a doboz, mint a cella) fix, nem a
-   * szöveg hosszából számolt. A magasságot (eredetileg 9 sor) 2026-08-19-én
-   * a felhasználó kérésére 6 sorra csökkentettük – 9 sor felhasználói
-   * visszajelzés szerint túl nagy volt.
+   * A doboz szélessége PONTBAN van megadva, nem oszlopszámban. Korábban fix
+   * 5 oszlopot fogott át, csakhogy az oszlopok 10 és 38 karakter között
+   * változnak: ugyanaz az „5 oszlop" hol 200, hol 700 pont széles dobozt
+   * jelentett — innen jött, hogy a kommentablak a kérés ellenére nagy maradt.
+   * A célszélességhez most a tényleges oszlopszélességekből keressük ki a
+   * záró oszlopot, tehát a doboz mindenhol ugyanakkora.
    */
-  const NOTE_COL_SPAN = 5;
+  const NOTE_WIDTH_PT = 200;   // ≈ 6 alapértelmezett oszlop
   const NOTE_ROW_SPAN = 6;
+  const DEFAULT_COL_WIDTH = 8.43;
 
-  async function enlargeNoteBoxes(buf) {
+  /** Excel-oszlopszélesség (karakter) → pont. */
+  function colWidthPt(chars) { return ((chars || DEFAULT_COL_WIDTH) * 7 + 5) * 0.75; }
+
+  /**
+   * A záró oszlop indexe: ott állunk meg, ahol a doboz szélessége a
+   * legközelebb van a célhoz. Nem „addig, amíg el nem éri" – egy 38 karakteres
+   * oszlop önmagában 229 pont, azzal a doboz messze túlszökne a célon.
+   * Legalább egy oszlop széles, és véges: a lap vége megfogja.
+   */
+  function noteEndColumn(start, szelessegek) {
+    let pt = 0, c = start;
+    while (c < start + 40) {
+      const kovetkezo = colWidthPt(szelessegek[c]);
+      // Az első oszlop mindig bekerul; onnantól csak ha közelebb visz a célhoz
+      if (c > start && Math.abs(pt + kovetkezo - NOTE_WIDTH_PT) > Math.abs(pt - NOTE_WIDTH_PT)) break;
+      pt += kovetkezo;
+      c++;
+      if (pt >= NOTE_WIDTH_PT) break;
+    }
+    return c;
+  }
+
+  async function enlargeNoteBoxes(buf, szelessegek = []) {
     if (typeof PizZip === 'undefined') return buf;
 
-    // Ez a lépés csak SZÉPÍT (nagyobb kommentdoboz) – ha bármi miatt nem
-    // megy (pl. teszt hamis puffert ad, vagy egy jövőbeli ExcelJS-verzió
-    // másképp írja a VML-t), essen vissza a nem nagyított, de valódi
-    // fájlra. Ugyanez az elv, mint a SchemaFromXlsx legördülő-olvasásánál.
+    // Ez a lépés csak SZÉPÍT (méretre igazított kommentdoboz) – ha bármi miatt
+    // nem megy (pl. teszt hamis puffert ad, vagy egy jövőbeli ExcelJS-verzió
+    // másképp írja a VML-t), essen vissza az igazítatlan, de valódi fájlra.
+    // Ugyanez az elv, mint a SchemaFromXlsx legördülő-olvasásánál.
     try {
       const zip = new PizZip(buf);
       const vmlUtak = Object.keys(zip.files).filter(p => /^xl\/drawings\/vmlDrawing\d+\.vml$/.test(p));
@@ -593,12 +618,13 @@ const XlsxWrite = (() => {
 
       for (const ut of vmlUtak) {
         let xml = zip.files[ut].asText();
-        xml = xml.replace(/width:[\d.]+pt;\s*height:[\d.]+pt/g, 'width:260pt;height:110pt');
+        xml = xml.replace(/width:[\d.]+pt;\s*height:[\d.]+pt/g,
+          `width:${NOTE_WIDTH_PT}pt;height:110pt`);
         xml = xml.replace(/<x:Anchor>\s*([^<]+?)\s*<\/x:Anchor>/g, (teljes, belso) => {
           const szamok = belso.split(',').map(s => Number(s.trim()));
           if (szamok.length !== 8 || szamok.some(Number.isNaN)) return teljes;
           const [oszlop1, oszlopEltolas1, sor1, sorEltolas1] = szamok;
-          const oszlop2 = oszlop1 + NOTE_COL_SPAN;
+          const oszlop2 = noteEndColumn(oszlop1, szelessegek);
           const sor2 = sor1 + NOTE_ROW_SPAN;
           return `<x:Anchor>${oszlop1}, ${oszlopEltolas1}, ${sor1}, ${sorEltolas1}, ` +
                  `${oszlop2}, ${szamok[5]}, ${sor2}, ${szamok[7]}</x:Anchor>`;
@@ -624,7 +650,10 @@ const XlsxWrite = (() => {
 
     try {
       const buf = await Promise.race([wb.xlsx.writeBuffer(), hatarido]);
-      return await enlargeNoteBoxes(buf);
+      // A kommentdoboz szélességéhez kellenek a tényleges oszlopszélességek
+      const lap = wb.getWorksheet(opts.profile.sheetName);
+      const szelessegek = lap ? (lap.columns || []).map(c => c && c.width) : [];
+      return await enlargeNoteBoxes(buf, szelessegek);
     } finally {
       clearTimeout(idozito);
     }

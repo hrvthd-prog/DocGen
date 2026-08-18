@@ -56,6 +56,49 @@ sablonnal. Röviden, de úgy, hogy a *következő* session ebből folytatni tudj
 
 # Napló
 
+## 2026-08-19 (5.) — Visszavont mezők kiejtése; kommentdoboz pontban méretezve
+
+**Cél:** (1) a friss telepítésen letöltött üres adatbekérő BM/BN oszlopában
+megjelent az „Identity Card Number" és a „Professional Background" — a
+fejlesztői gépen nem; (2) a cellakomment doboza a korábbi kérés ellenére nagy
+maradt.
+
+**Változás** (`v10.45`):
+- `js/schema/schema-store.js` — új `removeRetiredFields()` a `RETIRED_KEYS`
+  listával (`hr_id_number`, `hr_professional_background`). Az
+  `addMissingSeedFields` párja: az csak hozzáad.
+- `js/modules/registry/registry-view.js` — a séma-felhozatal ezt is futtatja.
+- `js/services/xlsx-write.js` — a kommentdoboz szélessége mostantól PONTBAN van
+  megadva (`NOTE_WIDTH_PT = 200`), és a záró oszlopot a tényleges
+  oszlopszélességekből keressük (`noteEndColumn`). A `toBuffer` átadja a lap
+  oszlopszélességeit az `enlargeNoteBoxes`-nak.
+- `test/schema.test.js`, `test/xlsx.test.js` — regressziós tesztek mindkettőre.
+
+**Miért / döntés:**
+- A BM/BN nem seed-hiba: a két mező a 2026-08-18-i sémaátrendezéskor ki lett
+  véve a `SEED_SCHEMA`-ból, de a `load()` a MENTETT configot használja, és eddig
+  csak hozzáadni tudtunk hozzá. Ezért látszott csak régi telepítésen. A
+  visszavonás CSAK a nevezett kulcsokra vonatkozik, tehát a felhasználó saját
+  mezői nem eshetnek áldozatul; a rekordokban levő értékeket szándékosan
+  meghagyjuk (a sémából kiesett kulcsot senki nem olvassa, viszont
+  visszahozható).
+- A kommentdoboz azert maradt nagy, mert a méret FIX 5 OSZLOP volt, az oszlopok
+  viszont 10 és 38 karakter között váltakoznak: ugyanaz az „5 oszlop" hol 200,
+  hol 700 pontot jelentett. A 2026-08-19-i „kisebb kommentdoboz" csak a
+  MAGASSÁGOT vitte 9-ről 6 sorra — a szélességhez nem nyúlt. Most a cél 200 pt,
+  és ott állunk meg, ahol a doboz a legközelebb van hozzá (nem „amíg el nem
+  éri": egy 38 karakteres oszlop önmagában 229 pt).
+
+**Tesztek:** `node test/run-all.js` — minden készlet zöld. Böngészőben, régi
+mentett sémát szimulálva: betöltéskor kiesik a két mező, az export 64 oszlop
+(utolsó komment BL3, nincs BM/BN). A kommentdobozok 109–286 pt, átlag 200 pt,
+egységesen 6 sor magasak.
+
+**Nyitott / következő:** ha a jövőben újabb seed-mezőt vonunk vissza, azt fel
+kell venni a `RETIRED_KEYS` listára — különben a régi telepítésekben marad.
+A `merge.js:139` (`row['Vezetéknév']` a `{id, fields}` alakú rekordon) továbbra
+is nyitott.
+
 ## 2026-08-19 (4.) — Import a 4. sortól; kijelölhető nyilvántartás-tábla
 
 **Cél:** (1) az adatbekérő-import a címkesort is személyként olvasta be;
