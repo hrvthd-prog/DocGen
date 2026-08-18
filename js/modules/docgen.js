@@ -53,6 +53,9 @@ const DocgenModule = (() => {
     DocgenMerge.init({ state, q, employeeName });
     DocgenGroups.init({ state, refreshTemplates, rebuildGroupFilterBtns, saveSettings });
 
+    // A nyilvántartás betöltése az első render ELŐTT: az összesítő a belső
+    // azonosítókból nevet old fel, ahhoz kell a clientRows.
+    loadFromRegistry({ silent: true });
     render();
     restoreHandles();
 
@@ -908,6 +911,12 @@ const DocgenModule = (() => {
     return v.full_name || v.surname || v.forename || '(névtelen)';
   }
 
+  /** Belső azonosítóból megjelenítendő név — a UUID sosem kerül a felületre. */
+  function clientLabel(id) {
+    const emp = state.clientRows.find(e => e.id === id);
+    return emp ? employeeName(emp) : '(ismeretlen személy)';
+  }
+
   /**
    * A sablonokba kerülő értékkészlet: a séma szerint magyarra renderelve,
    * a számított mezőkkel együtt, plusz a nem sémabeli extra jelölők.
@@ -981,8 +990,8 @@ const DocgenModule = (() => {
     return state.templatesDir ? onSwitchTemplatesDir() : onSetTemplatesDir();
   }
 
-  async function onSetTemplatesDir() {
-    const h = await FsService.getOrRequestDir('templates_dir', 'Sablonmappa');
+  async function onSetTemplatesDir({ force = false } = {}) {
+    const h = await FsService.getOrRequestDir('templates_dir', 'Sablonmappa', { force });
     if (!h) return;
     state.templatesDir = h;
     _rerenderTemplatesDirUI();
@@ -1022,8 +1031,8 @@ const DocgenModule = (() => {
       state.activeGroups.clear();
       saveSettings();
       BevLogger.info('TEMPLATE_DIR_SWITCH', `Sablonmappa-váltás indítva: ${oldName}`, '', '');
-      // Új mappa kérése
-      await onSetTemplatesDir();
+      // Új mappa kérése — force: a tárolt handle-t átugorva jöjjön fel a picker
+      await onSetTemplatesDir({ force: true });
       // Sidebar újrarajzolása, hogy a switch gomb is frissüljön
       const sidebar = q('#dg-sidebar');
       if (sidebar) {
@@ -1376,7 +1385,7 @@ const DocgenModule = (() => {
     const count = q('#dg-sum-count');
     if (!body) return;
 
-    const clientNames = state.selectedClients;
+    const clientNames = state.selectedClients.map(clientLabel);
     const tpls        = [...state.chosenTemplates];
 
     if (!clientNames.length || !tpls.length) {
@@ -1409,7 +1418,7 @@ const DocgenModule = (() => {
     // Kompakt chip-sor a Generálás kártyában
     const el = q('#dg-gen-summary');
     if (el) {
-      const clients = state.selectedClients;
+      const clients = state.selectedClients.map(clientLabel);
       const tpls    = [...state.chosenTemplates];
       if (!clients.length && !tpls.length) {
         el.innerHTML = '<span class="dg-summary-empty">Nincs kijelölve ügyfél vagy sablon</span>';
