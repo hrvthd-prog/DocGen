@@ -202,32 +202,38 @@ atest('a szakaszcím-sor összevonja a saját szakaszának oszlopait', async () 
   assertEq(utolso, 'Hungarian Address', 'a szakasz utolsó (összevont) oszlopán nem olvasható vissza a cím');
 });
 
-atest('a kötelező mezők piros, az opcionálisak kék fejlécet kapnak', async () => {
+atest('a fejléc színe a SZAKASZÉ, egyformán mind a 3 fejlécsoron', async () => {
+  // 2026-08-19: a szín nem a `group`-é és nem a kötelezőségé – egy valódi,
+  // a felhasználó által kézzel megformázott mintafájlból vettük át. A
+  // kötelezőséget a fejléc színe többé NEM jelzi (arra a cellakomment
+  // „REQUIRED" szövege szolgál).
   const ws = G.wb.getWorksheet('Data');
   const fill = c => (c.fill && c.fill.fgColor && c.fill.fgColor.argb) || '';
-  assertEq(fill(ws.getRow(1).getCell(oszlop(ws, 'surname'))), 'FFC00000', 'surname nem piros');
-  assertEq(fill(ws.getRow(1).getCell(oszlop(ws, 'personnel_reg_number'))), 'FF1F3864',
-    'törzsszám nem kék');
+  for (const r of [1, PROFILE.sectionRow, PROFILE.labelRow]) {
+    assertEq(fill(ws.getRow(r).getCell(oszlop(ws, 'postal_code'))), 'FF806000', `lakcím, ${r}. sor`);
+    assertEq(fill(ws.getRow(r).getCell(oszlop(ws, 'position'))), 'FFC55A11', `foglalkoztatás, ${r}. sor`);
+    // A hr_sg_category az „Information for HR" szakaszban van, aminek a
+    // színe UGYANAZ, mint az „Identification Numbers"-é a mintafájlban.
+    assertEq(fill(ws.getRow(r).getCell(oszlop(ws, 'hr_sg_category'))), 'FF1F3864', `csak HR, ${r}. sor`);
+  }
 });
 
-atest('a kötelezőség a LÁTHATÓ (label) soron is látszik', async () => {
-  // Az 1. sor rejtett, ezért ha csak ott lenne piros a kötelező mező, a
-  // kitöltő semmilyen jelzést nem kapna arról, mit nem hagyhat üresen.
+atest('a kötelező és az opcionális mező fejlécszíne AZONOS, ha egy szakaszban vannak', async () => {
+  // surname (kötelező) és surname_at_birth (nem kötelező) mindkettő a
+  // „Personal Data" szakaszban van – a mintafájlban is egyforma színnel.
   const ws = G.wb.getWorksheet('Data');
   const fill = c => (c.fill && c.fill.fgColor && c.fill.fgColor.argb) || '';
-  assertEq(fill(ws.getRow(PROFILE.labelRow).getCell(oszlop(ws, 'surname'))), 'FFC00000',
-    'a kötelező surname nem piros a label soron');
-  assertEq(fill(ws.getRow(PROFILE.labelRow).getCell(oszlop(ws, 'personnel_reg_number'))), 'FF1F3864',
-    'az opcionális törzsszám nem kék a label soron');
+  assertEq(fill(ws.getRow(1).getCell(oszlop(ws, 'surname'))),
+            fill(ws.getRow(1).getCell(oszlop(ws, 'surname_at_birth'))),
+            'a kötelező és az opcionális mező színe eltér, pedig egy szakaszban vannak');
 });
 
-atest('a fejlécszín a mező csoportját követi', async () => {
-  // A csoportszín a jelmagyarázat: enélkül hatvannégy egyforma fejléc van.
+atest('a fejléc szegélye vékony, vízszintes vonalakból áll – nincs oszlophatár-szegély', async () => {
+  // A szakaszhatárt a színváltás jelzi, nem egy vastag függőleges vonal –
+  // ez is a mintafájl alapján dőlt el.
   const ws = G.wb.getWorksheet('Data');
-  const fill = c => (c.fill && c.fill.fgColor && c.fill.fgColor.argb) || '';
-  assertEq(fill(ws.getRow(PROFILE.labelRow).getCell(oszlop(ws, 'postal_code'))), 'FF806000', 'lakcím');
-  assertEq(fill(ws.getRow(PROFILE.labelRow).getCell(oszlop(ws, 'position'))), 'FFC55A11', 'foglalkoztatás');
-  assertEq(fill(ws.getRow(PROFILE.labelRow).getCell(oszlop(ws, 'hr_sg_category'))), 'FF595959', 'csak HR');
+  const c = ws.getRow(1).getCell(oszlop(ws, 'postal_code'));   // szakaszhatár: X oszlop
+  assert(!c.border || !c.border.left, `a szakaszhatáron mégis van bal szegély: ${JSON.stringify(c.border)}`);
 });
 
 atest('a gépi kulcsok sora rejtett – a kitöltőnek nem kell látnia', async () => {
@@ -331,6 +337,8 @@ atest('a kommentdoboz nagyobb, mint az ExcelJS apró alapértelmezése', async (
   // Az ExcelJS minden kommentnek ugyanazt az apró (kb. 2 oszlop × 4 sor) VML
   // dobozt írja – ettől a legtöbb, 6-9 soros komment olvashatatlanul kicsi
   // maradna. A toBuffer() ezt utólag, nyers XML-ben nagyítja (enlargeNoteBoxes).
+  // A magasságot (eredetileg 9 sor) 2026-08-19-én felhasználói kérésre 6
+  // sorra csökkentettük.
   const zip = new sandbox.PizZip(G.buf);
   const vmlUt = Object.keys(zip.files).find(p => /^xl\/drawings\/vmlDrawing\d+\.vml$/.test(p));
   assert(vmlUt, 'nincs vmlDrawing a kiírt fájlban – nincs mit nagyítani');
@@ -340,7 +348,7 @@ atest('a kommentdoboz nagyobb, mint az ExcelJS apró alapértelmezése', async (
   for (const [, belso] of anchorok) {
     const [c1, , r1, , c2, , r2] = belso.split(',').map(s => Number(s.trim()));
     assert(c2 - c1 >= 4, `túl keskeny kommentdoboz: ${belso}`);
-    assert(r2 - r1 >= 8, `túl alacsony kommentdoboz: ${belso}`);
+    assert(r2 - r1 === 6, `nem a várt 6 soros kommentdoboz: ${belso}`);
   }
 });
 

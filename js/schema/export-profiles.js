@@ -28,51 +28,60 @@ const DEFAULT_EXPORT_PROFILES = [
     dateFormat: 'iso',  // ÉÉÉÉ-HH-NN szövegként
 
     /**
-     * Az oszlopok sorrendje és a 2. sori szakaszcímek — TÉMA szerint, nem a
-     * hatósági nyomtatvány rovatsorrendje szerint (ezt 2026-08-18-án
-     * szándékosan váltottuk le a 2026-08-17-i „hatósági sorrend" elvről: a
-     * kitöltőnek ez könnyebben áttekinthető). Minden mezőkulcsnak PONTOSAN
-     * egy szakaszban kell szerepelnie – a `columnsOf` innen építi az
-     * oszloprendet, a `writeHeader` pedig ugyaninnen a 2. sor összevont
-     * fejléceit.
+     * Az oszlopok sorrendje, a 2. sori szakaszcímek ÉS a fejléc színe —
+     * TÉMA szerint, nem a hatósági nyomtatvány rovatsorrendje szerint (ezt
+     * 2026-08-18-án szándékosan váltottuk le a 2026-08-17-i „hatósági
+     * sorrend" elvről: a kitöltőnek ez könnyebben áttekinthető). Minden
+     * mezőkulcsnak PONTOSAN egy szakaszban kell szerepelnie – a `columnsOf`
+     * innen építi az oszloprendet, a `writeHeader`/`writeSectionRow` pedig
+     * ugyaninnen a fejléc mindhárom sorának színét és a 2. sor összevont
+     * címeit.
+     *
+     * A `fill` egy valódi, a felhasználó által kézzel megformázott
+     * mintafájlból származik (2026-08-19), NEM tetszőleges választás –
+     * onnantól a kötelezőséget a fejléc színe többé NEM jelzi (arra a
+     * cellakomment „REQUIRED" szövege szolgál), a színt kizárólag a szakasz
+     * adja, minden mezőre és mindhárom fejlécsorra egyformán.
      */
     sections: [
-      { title: 'Personal Data', keys: [
+      { title: 'Personal Data', fill: 'FFC00000', keys: [
         'surname', 'forename', 'surname_at_birth', 'forename_at_birth',
         'mothers_surname_at_birth', 'mothers_forename_at_birth', 'date_of_birth',
         'citizenship', 'hr_dual_citizenship', 'place_of_birth_country',
         'place_of_birth_locality', 'sex', 'marital_status',
       ] },
-      { title: 'Data of Travel and Residence Documents', keys: [
+      { title: 'Data of Travel and Residence Documents', fill: 'FF7030A0', keys: [
         'pp_number', 'pp_issuance_date', 'pp_issuance_place', 'pp_validity',
         'passport_type', 'number_of_rp', 'expiration_of_rp',
       ] },
-      { title: 'Identification Numbers', keys: [
+      { title: 'Identification Numbers', fill: 'FF1F3864', keys: [
         'personnel_reg_number', 'tax_number', 'TAJ',
       ] },
-      { title: 'Hungarian Address', keys: [
+      { title: 'Hungarian Address', fill: 'FF806000', keys: [
         'postal_code', 'locality', 'name_of_public_place', 'type_of_public_place',
         'street_number', 'building', 'stairway', 'floor', 'door',
       ] },
-      { title: 'Data of Employment', keys: [
+      { title: 'Data of Employment', fill: 'FFC55A11', keys: [
         'position', 'feor', 'employment_start', 'employment_end',
         'gross_salary', 'residence_purpose',
       ] },
-      { title: 'Skills and Experience', keys: [
+      { title: 'Skills and Experience', fill: 'FF1F6B5C', keys: [
         'occupation_before_arrival', 'hr_previous_employer', 'hr_previous_employment_end',
         'educational_attainment', 'professional_qualification', 'hr_education_completion_date',
         'hr_education_institution', 'hr_education_specialization', 'hr_degree_document_number',
         'mother_tongue', 'speaks_hungarian', 'hr_computer_skills', 'hr_language_skills',
       ] },
-      { title: 'Address Abroad', keys: [
+      { title: 'Address Abroad', fill: 'FFA6761D', keys: [
         'previous_country', 'previous_town', 'previous_street',
       ] },
-      { title: 'Information for HR', keys: [
+      // Ugyanaz a szín, mint az „Identification Numbers"-é – a mintafájlban
+      // is így volt, és mivel a két szakasz nem szomszédos, nem okoz zavart.
+      { title: 'Information for HR', fill: 'FF1F3864', keys: [
         'hr_emergency_contact_name', 'hr_emergency_contact_phone', 'hr_bank_account',
         'hr_bank_name', 'hr_children', 'hr_department_cost_center', 'hr_direct_leader',
         'hr_sg_category',
       ] },
-      { title: 'Contacts', keys: [
+      { title: 'Contacts', fill: 'FF2E75B6', keys: [
         'email', 'telephone',
       ] },
     ],
@@ -185,32 +194,23 @@ const DEFAULT_EXPORT_PROFILES = [
     },
     style: {
       headerFont:    { name: 'Arial', size: 10, bold: true, color: 'FFFFFFFF' },
-      requiredFill:  'FFC00000',
+      // Tartalékszín annak a mezőnek, ami még nincs egyik `sections`
+      // szakaszban sem (l. `columnsOf` „végére illesztés") – ezért nincs
+      // saját szakaszszíne.
       optionalFill:  'FF1F3864',
-      labelFill:     'FF1F3864',
       keyRowHeight:     30,
       sectionRowHeight: 20,
       labelRowHeight:   34,
       defaultWidth:   18,
       validationRows: 200,   // meddig terjedjenek a legördülők
-      sectionFill:    'FF17375E',   // a 2. sor (szakaszcím) sávjának színe
 
       /**
-       * Fejlécszín csoportonként.
-       *
-       * Hetven oszlop egyforma fejléccel átláthatatlan: a kitöltő nem látja,
-       * hol ér véget a lakcím és hol kezdődik a foglalkoztatás. A szín a
-       * séma CSOPORTJÁT jelöli, a színváltásnál pedig vastag vonal is van.
-       *
-       * A csoportok nem mindig esnek egybe a 2. sori SZAKASZOKKAL (`profile.
-       * sections`): pl. a „Personal Data" szakasz az `alap` és a `szuletes`
-       * csoportot is összefogja. A szín tehát finomabb felbontású jelmagyarázat
-       * a szakaszcímen belül – az Útmutató lap „Csoport" oszlopa ugyanezt a
-       * színt viseli, így a kettő összeolvasható.
-       *
-       * A KÖTELEZŐ mező ettől függetlenül piros marad – az a jelzés erősebb,
-       * mint a csoporté, és nem szabad elveszíteni. Aminek nincs színe itt,
-       * az az `optionalFill`-t kapja.
+       * Fejlécszín csoportonként – ez CSAK az `Útmutató` munkalap „Csoport"
+       * oszlopát színezi (l. `addGuideSheet`). A `Data` lap fejlécének színe
+       * 2026-08-19-től a `sections[i].fill`-ből jön (l. `sectionFillOf` a
+       * xlsx-write.js-ben) – a kettő emiatt NEM feltétlenül azonos egy adott
+       * mezőnél, mert egy szakasz több csoportot is összefoghat (pl. a
+       * „Personal Data" az `alap`-ot és a `szuletes`-t is).
        */
       groupFill: {
         azonosito:      'FF1F3864',

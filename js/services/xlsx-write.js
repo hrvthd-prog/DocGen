@@ -100,36 +100,51 @@ const XlsxWrite = (() => {
    * 3. sor: angol címkék – ez az, amit a kitöltő lát, ezért a kitöltést segítő
    *         komment is IDE kerül, nem a rejtett sorba.
    */
+  /**
+   * Melyik mezőkulcshoz melyik `profile.sections`-beli szín tartozik.
+   *
+   * A fejléc SZÍNE 2026-08-19-től a SZAKASZÉ (`sections[i].fill`), nem a
+   * mező `group`-jáé és nem a kötelezőségé – ez egy valódi mintafájl alapján
+   * dőlt el (a felhasználó egy általa formázott táblázatot illesztett be a
+   * generált alá összehasonlításképp). Egy mezőnek, ami még nincs egyik
+   * szakaszban sem (l. `columnsOf` „végére illesztés"), nincs szakaszszíne –
+   * ilyenkor `st.optionalFill` a tartalék.
+   */
+  function sectionFillOf(profile) {
+    const terkep = new Map();
+    for (const szakasz of (profile.sections || [])) {
+      for (const kulcs of (szakasz.keys || [])) terkep.set(kulcs, szakasz.fill);
+    }
+    return terkep;
+  }
+
   function writeHeader(ws, cols, profile, st) {
     const keyRow   = ws.getRow(profile.keyRow);
     const labelRow = ws.getRow(profile.labelRow);
+    const szinter   = sectionFillOf(profile);
 
     cols.forEach((f, i) => {
       const c = i + 1;
-
-      // Csoportszín, de a kötelezőség erősebb jelzés: az piros marad.
-      const csoportSzin = (st.groupFill && st.groupFill[f.group]) || null;
-      // A csoport első oszlopát vastag vonal választja el az előzőtől.
-      const ujCsoport = i > 0 && cols[i - 1].group !== f.group;
-      const bal = ujCsoport ? { left: { style: 'medium' } } : {};
+      const szin = szinter.get(f.key) || st.optionalFill;
+      // Se oszlopszegély, se kötelezőség szerinti eltérő szín – a szakaszok
+      // közti határt a színváltás önmagában jelzi, a sorok közti határt egy
+      // vékony vízszintes vonal.
 
       const kc = keyRow.getCell(c);
       kc.value = f.key;
       kc.font = { name: st.headerFont.name, size: st.headerFont.size,
                   bold: st.headerFont.bold, color: argb(st.headerFont.color) };
-      kc.fill = { type: 'pattern', pattern: 'solid',
-                  fgColor: argb(f.required ? st.requiredFill : (csoportSzin || st.optionalFill)) };
+      kc.fill = { type: 'pattern', pattern: 'solid', fgColor: argb(szin) };
       kc.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      kc.border = Object.assign({ bottom: { style: 'thin' } }, bal);
+      kc.border = { bottom: { style: 'thin' } };
 
       const lc = labelRow.getCell(c);
       lc.value = f.label.en || f.label.hu;
       lc.font = { name: st.headerFont.name, size: st.headerFont.size,
                   bold: st.headerFont.bold, color: argb(st.headerFont.color) };
-      lc.fill = { type: 'pattern', pattern: 'solid',
-                  fgColor: argb(f.required ? st.requiredFill : (csoportSzin || st.labelFill)) };
+      lc.fill = { type: 'pattern', pattern: 'solid', fgColor: argb(szin) };
       lc.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      lc.border = Object.assign({ bottom: { style: 'medium' } }, bal);
+      lc.border = { top: { style: 'thin' }, bottom: { style: 'thin' } };
       lc.note = buildNote(f);
     });
 
@@ -142,7 +157,8 @@ const XlsxWrite = (() => {
   }
 
   /**
-   * 2. sor: a `profile.sections` szakaszcímei, egy-egy összevont cellában.
+   * 2. sor: a `profile.sections` szakaszcímei, egy-egy összevont cellában,
+   * a saját szakaszuk színével (ugyanaz a szín, mint az 1. és 3. soron).
    *
    * A szakaszhatárokat a `cols` tényleges sorrendjében keressük meg (nem
    * feltételezzük, hogy `profile.sections` pontosan lefedi `cols`-t) – így
@@ -168,9 +184,9 @@ const XlsxWrite = (() => {
       c.value = szakasz.title;
       c.font = { name: st.headerFont.name, size: st.headerFont.size,
                  bold: true, color: argb('FFFFFFFF') };
-      c.fill = { type: 'pattern', pattern: 'solid', fgColor: argb(st.sectionFill || 'FF17375E') };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: argb(szakasz.fill || st.optionalFill) };
       c.alignment = { horizontal: 'center', vertical: 'middle' };
-      c.border = { left: { style: 'medium' } };
+      c.border = { top: { style: 'thin' }, bottom: { style: 'thin' } };
     }
 
     sor.height = st.sectionRowHeight || 20;
@@ -556,11 +572,12 @@ const XlsxWrite = (() => {
    * könyvtár nem ad vissza.
    *
    * A span (hány oszloppal/sorral nagyobb a doboz, mint a cella) fix, nem a
-   * szöveg hosszából számolt – a kommentek 6–9 soros tartományban mozognak,
-   * ennyi hellyel mindegyik kényelmesen kiolvasható marad.
+   * szöveg hosszából számolt. A magasságot (eredetileg 9 sor) 2026-08-19-én
+   * a felhasználó kérésére 6 sorra csökkentettük – 9 sor felhasználói
+   * visszajelzés szerint túl nagy volt.
    */
   const NOTE_COL_SPAN = 5;
-  const NOTE_ROW_SPAN = 9;
+  const NOTE_ROW_SPAN = 6;
 
   async function enlargeNoteBoxes(buf) {
     if (typeof PizZip === 'undefined') return buf;
@@ -576,7 +593,7 @@ const XlsxWrite = (() => {
 
       for (const ut of vmlUtak) {
         let xml = zip.files[ut].asText();
-        xml = xml.replace(/width:[\d.]+pt;\s*height:[\d.]+pt/g, 'width:260pt;height:160pt');
+        xml = xml.replace(/width:[\d.]+pt;\s*height:[\d.]+pt/g, 'width:260pt;height:110pt');
         xml = xml.replace(/<x:Anchor>\s*([^<]+?)\s*<\/x:Anchor>/g, (teljes, belso) => {
           const szamok = belso.split(',').map(s => Number(s.trim()));
           if (szamok.length !== 8 || szamok.some(Number.isNaN)) return teljes;
