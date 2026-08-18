@@ -144,6 +144,52 @@ const EmployeeRepo = (() => {
     if (!cache) throw new Error('A nyilvántartás nincs betöltve (EmployeeRepo.load()).');
   }
 
+  // ── Változásnapló ──────────────────────────────────────────────────────────
+  /**
+   * Ki mit írt át, mikor és honnan – a rekordon belül (`emp.history`), nem
+   * külön fájlban. Így a meglévő biztonsági mentés és visszaállítás
+   * automatikusan viszi, nem kell hozzá második tároló-háttér.
+   *
+   * Nyers értéket tárolunk, nem a felületen megjelenítettet: a kanonikus
+   * enum-azonosító és az ISO-dátum megy be, a fordítás (magyar címke,
+   * dátumformátum) megjelenítéskor történik. Így a napló nem hazudik, ha
+   * később átnevezik egy séma-érték címkéjét.
+   */
+
+  const MAX_HISTORY = 200;   // fix felső korlát. Ha kevés lesz, a következő
+                              // lépés külön docgen-audit.json, nem nagyobb szám.
+
+  /** Mezőnkénti eltérés két `fields` objektum között. */
+  function diffFields(before = {}, after = {}) {
+    const out = [];
+    for (const k of new Set([...Object.keys(before), ...Object.keys(after)])) {
+      const a = before[k] == null ? '' : String(before[k]);
+      const b = after[k]  == null ? '' : String(after[k]);
+      if (a !== b) out.push({ key: k, from: a, to: b });
+    }
+    return out;
+  }
+
+  function pushHistory(emp, action, changes, source) {
+    if (!Array.isArray(emp.history)) emp.history = [];
+    emp.history.push({ at: nowIso(), user: currentUserName(), source, action, changes });
+    if (emp.history.length > MAX_HISTORY) emp.history.splice(0, emp.history.length - MAX_HISTORY);
+  }
+
+  /**
+   * Bejegyzés a `before` pillanatkép és a jelenlegi `emp.fields` eltéréséből.
+   *
+   * `always`: a tény önmagában bejegyzés (kilépés, azonosító-csere), akkor is,
+   * ha nincs mezőeltérés. `modositas`-nál viszont a szűrő a lényeg: „mentés
+   * változtatás nélkül" nem esemény – enélkül egy újraimportált táblázat
+   * minden érintetlen sora zajt ütne a naplóba.
+   */
+  function logChange(emp, action, before, { source = 'urlap', always = false, extra = [] } = {}) {
+    const changes = diffFields(before, emp.fields).concat(extra);
+    if (!changes.length && !always) return;
+    pushHistory(emp, action, changes, source);
+  }
+
   // ── Azonosítók ─────────────────────────────────────────────────────────────
 
   function normalizeIdentifier(raw) {
@@ -250,6 +296,7 @@ const EmployeeRepo = (() => {
     e.exited        = e.exited !== undefined ? !!e.exited : !!e.archived;
     delete e.archived;
     e.exitDate      = e.exitDate || null;
+    if (!Array.isArray(e.history)) e.history = [];
     e.createdAt     = e.createdAt || nowIso();
     e.updatedAt     = e.updatedAt || e.createdAt;
     e.updatedBy     = e.updatedBy || '';
@@ -367,7 +414,7 @@ const EmployeeRepo = (() => {
 
   // ── Módosítás ──────────────────────────────────────────────────────────────
 
-  function create({ fields = {}, identifiers = [], schemaVersion = SCHEMA_VERSION_UNKNOWN } = {}) {
+  function create({ fields = {}, identifiers = [], schemaVersion = SCHEMA_VERSION_UNKNOWN, source = 'urlap' } = {}) {
     ensureLoaded();
     const emp = {
       id: newId(),
@@ -375,6 +422,7 @@ const EmployeeRepo = (() => {
       fields: Object.assign({}, fields),
       exited: false,
       exitDate: null,
+      history: [],
       createdAt: nowIso(),
       updatedAt: nowIso(),
       updatedBy: currentUserName(),
@@ -383,13 +431,15 @@ const EmployeeRepo = (() => {
     syncIdentifierFields(emp);
     const problems = validate(emp, { employees: cache.employees });
     if (problems.length) throw new Error(problems.join(' '));
+    // A felvitel ténye a bejegyzés, nem a kezdőértékek diffje – üres changes.
+    pushHistory(emp, 'letrehozas', [], source);
     cache.employees.push(emp);
     scheduleSave();
     emit();
     return emp;
   }
 
-  function update(id, { fields, identifiers, schemaVersion } = {}) {
+  function update(id, { fields, identifiers, schemaVersion, source = 'urlap' } = {}) {
     ensureLoaded();
     const emp = get(id);
     if (!emp) throw new Error('Nincs ilyen azonosítójú személy.');
@@ -402,10 +452,12 @@ const EmployeeRepo = (() => {
     const problems = validate(next, { employees: cache.employees, ignoreId: id });
     if (problems.length) throw new Error(problems.join(' '));
 
+    const before = Object.assign({}, emp.fields);
     emp.fields       = next.fields;
     emp.identifiers  = next.identifiers;
     emp.schemaVersion = next.schemaVersion;
     if (identifiers) syncIdentifierFields(emp);
+    logChange(emp, 'modositas', before, { source });
     emp.updatedAt    = nowIso();
     emp.updatedBy    = currentUserName();
     scheduleSave();
@@ -417,7 +469,7 @@ const EmployeeRepo = (() => {
    * Új azonosító rögzítése – az azonos típusú korábbi automatikusan lezárul.
    * Ez az új tartózkodási engedély / új SAP-szám egylépéses útja.
    */
-  function addIdentifier(id, raw) {
+  function addIdentifier(id, raw, { source = 'urlap' } = {}) {
     ensureLoaded();
     const emp = get(id);
     if (!emp) throw new Error('Nincs ilyen azonosítójú személy.');
@@ -429,10 +481,13 @@ const EmployeeRepo = (() => {
       throw new Error(`A(z) „${idf.value}" azonosító már egy másik személyhez tartozik.`);
     }
 
+    const before = Object.assign({}, emp.fields);
     if (idf.current) closePrevious(emp, idf.type, idf.validFrom);
     if (!idf.validFrom) idf.validFrom = nowIso().slice(0, 10);
     emp.identifiers.push(idf);
     syncIdentifierFields(emp);
+    // A tükrözött mező diffje (pl. number_of_rp) magától bekerül a changes-be.
+    logChange(emp, 'azonosito_uj', before, { source, always: true });
     emp.updatedAt = nowIso();
     emp.updatedBy = currentUserName();
     scheduleSave();
@@ -440,15 +495,23 @@ const EmployeeRepo = (() => {
     return emp;
   }
 
-  function removeIdentifier(id, value, type) {
+  function removeIdentifier(id, value, type, { source = 'urlap' } = {}) {
     ensureLoaded();
     const emp = get(id);
     if (!emp) throw new Error('Nincs ilyen azonosítójú személy.');
     const before = emp.identifiers.length;
+    const torolt = emp.identifiers.filter(
+      i => normText(i.value) === normText(value) && (!type || i.type === type)
+    );
     emp.identifiers = emp.identifiers.filter(
       i => !(normText(i.value) === normText(value) && (!type || i.type === type))
     );
     if (emp.identifiers.length !== before) {
+      // A leképezés törléskor szándékosan nem üríti a mezőt (lásd
+      // syncIdentifierFields), ezért a fields nem változik – a törölt
+      // azonosítót az `extra` viszi a naplóba.
+      const extra = torolt.map(i => ({ key: 'azonosito_' + i.type, from: i.value, to: '' }));
+      logChange(emp, 'azonosito_torles', emp.fields, { source, always: true, extra });
       emp.updatedAt = nowIso();
       emp.updatedBy = currentUserName();
       scheduleSave();
@@ -475,11 +538,12 @@ const EmployeeRepo = (() => {
    * megszűnt munkaviszony napja. A séma-mezőben lévő érték viszont marad –
    * az a felhasználó adata, nem a mi jelölésünk.
    */
-  function setExited(id, exited, exitDate = null) {
+  function setExited(id, exited, exitDate = null, { source = 'urlap' } = {}) {
     ensureLoaded();
     const emp = get(id);
     if (!emp) throw new Error('Nincs ilyen azonosítójú személy.');
 
+    const before = Object.assign({}, emp.fields);
     if (exited) {
       const nap = String(exitDate || '').trim();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(nap) || isNaN(new Date(nap).getTime())) {
@@ -488,9 +552,11 @@ const EmployeeRepo = (() => {
       emp.exited   = true;
       emp.exitDate = nap;
       emp.fields[EXIT_DATE_FIELD] = nap;
+      logChange(emp, 'kilepes', before, { source, always: true });
     } else {
       emp.exited   = false;
       emp.exitDate = null;
+      logChange(emp, 'visszavetel', before, { source, always: true });
     }
     emp.updatedAt = nowIso();
     emp.updatedBy = currentUserName();

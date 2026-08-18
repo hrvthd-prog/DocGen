@@ -192,19 +192,21 @@ const XlsxRead = (() => {
           fields: t.row.fields,
           identifiers: t.identifiers.map(i => Object.assign({}, i, { current: true })),
           schemaVersion: SchemaStore.version(),
+          source: 'import',
         });
         letrehozva++;
       } else {
         EmployeeRepo.update(t.employee.id, {
           fields: t.row.fields,
           schemaVersion: SchemaStore.version(),
+          source: 'import',
         });
         // Új azonosító → a korábbi azonos típusú lezárul
         for (const idf of t.identifiers) {
           const meglevo = t.employee.identifiers.find(
             x => x.type === idf.type && ValueCodecEq(x.value, idf.value));
           if (!meglevo) {
-            try { EmployeeRepo.addIdentifier(t.employee.id, idf); ujAzonosito++; }
+            try { EmployeeRepo.addIdentifier(t.employee.id, idf, { source: 'import' }); ujAzonosito++; }
             catch { /* más személyhez tartozik – a validáció már jelezte */ }
           }
         }

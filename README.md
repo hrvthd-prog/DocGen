@@ -176,6 +176,18 @@ embert, és az ismételt import nem hoz létre duplikátumot.
 
 Új engedély rögzítése egy lépés: *Új azonosító* — a régi automatikusan lezárul.
 
+## Változásnapló
+
+Minden munkavállalónál az **Előzmények** gomb megmutatja, ki mit írt át, mikor
+és honnan: mezőnként az előző és az új érték, időbélyeggel, felhasználóval és
+azzal, hogy a változás űrlapról, xlsx-importból vagy egy ügy lezárásából jött.
+
+A napló a rekordon belül él (nem külön fájlban), ezért a meglévő biztonsági
+mentés és visszaállítás automatikusan viszi. **Valódi eltérés nélkül nincs
+bejegyzés** — egy változatlan adatokkal újramentett sor nem zajosítja a
+naplót; a létrehozás, a kilépés és a visszavétel viszont önmagában is
+esemény, mezőváltozás nélkül is bekerül.
+
 ## Kilépés és törlés
 
 **Kilépettnek jelölés** a normál út: az adat megmarad, csak kikerül a listákból

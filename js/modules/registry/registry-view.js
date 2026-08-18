@@ -315,6 +315,8 @@ const RegistryModule = (() => {
         </table>
       </div>`;
 
+    box.querySelectorAll('[data-history]').forEach(b =>
+      b.addEventListener('click', () => EmployeeHistory.open(EmployeeRepo.get(b.dataset.history))));
     box.querySelectorAll('[data-edit]').forEach(b =>
       b.addEventListener('click', () => openForm(b.dataset.edit)));
     box.querySelectorAll('[data-exit]').forEach(b =>
@@ -339,6 +341,9 @@ const RegistryModule = (() => {
           </td>
           <td class="rg-actions">
             ${emp.exited ? `<span class="rg-exit-badge">kilépett: ${escHtml(emp.exitDate || '?')}</span>` : ''}
+            <button class="btn btn-ghost btn-sm" data-history="${emp.id}">
+              Előzmények${emp.history && emp.history.length ? ` (${emp.history.length})` : ''}
+            </button>
             <button class="btn btn-ghost btn-sm" data-edit="${emp.id}">Szerkesztés</button>
             <button class="btn btn-ghost btn-sm" data-exit="${emp.id}">
               ${emp.exited ? 'Visszavétel' : 'Kilépettnek jelölés'}
