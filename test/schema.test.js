@@ -58,7 +58,7 @@ const FORMANYOMTATVANY_MEZOK = [
 // címke szerint egy idegenrendészeti mezőbe kösse őket.
 const HR_MEZOK = [
   'hr_emergency_contact_name', 'hr_emergency_contact_phone', 'hr_dual_citizenship',
-  'hr_bank_account', 'hr_education_completion_date',
+  'hr_bank_account', 'hr_bank_name', 'hr_education_completion_date',
   'hr_education_institution', 'hr_education_specialization', 'hr_degree_document_number',
   'hr_computer_skills', 'hr_language_skills', 'hr_children', 'hr_previous_employer',
   'hr_previous_employment_end',
@@ -126,16 +126,18 @@ test('számított mező nem épít HR-adatra', () => {
 });
 
 /**
- * AZ OSZLOPSORREND SZERZŐDÉSE.
+ * A SÉMA (schema.fields) BELSŐ TÁROLÁSI SORRENDJE.
  *
- * A sorrend a **9. sz. tartózkodási engedély iránti kérelem** és a hozzá tartozó
- * betétlapok (9.7. Vendégmunkás, 9.9. EU Kék Kártya) rovatsorrendje. Így az
- * ügyintéző fentről lefelé haladva tudja átvezetni az adatokat a nyomtatványra,
- * és a kitöltő is felismeri, melyik hatósági rovatnál tart.
+ * 2026-08-17-től 2026-08-18-ig ez a sorrend volt EGYBEN az adatbekérő xlsx
+ * exportjának oszlopsorrendje is – onnantól a kettő szétvált: az exportot a
+ * `js/schema/export-profiles.js` `sections` tömbje adja (téma szerinti
+ * sorrend, lásd `test/xlsx.test.js` → „az adatbekérő oszlopsorrendje a
+ * profil sections szerint"), a séma belső tárolási sorrendje viszont
+ * változatlanul ez maradt (nincs oka átrendezni, ami eddig sem volt hiba).
  *
- * Korábban az eredeti 44 oszlopos adatbekérő sorrendje volt a szerződés; ezt
- * 2026-08-17-én szándékosan váltottuk le. Ha a sorrend elcsúszik, ez a teszt
- * bukik — a listát csak tudatosan, a nyomtatvánnyal a kézben szabad átírni.
+ * Ez a teszt tehát MA MÁR CSAK azt őrzi, hogy a séma belső sorrendje ne
+ * csússzon el csendben – nem az exportét. Ha a sorrend elcsúszik, ez a teszt
+ * bukik — a listát csak tudatosan szabad átírni.
  */
 const HATOSAGI_SORREND = [
   // fejrész: engedélyszám, elérhetőség
@@ -164,12 +166,13 @@ const HATOSAGI_SORREND = [
   'hr_previous_employer', 'hr_previous_employment_end',
   // nem a nyomtatványról
   'tax_number', 'TAJ', 'hr_emergency_contact_name', 'hr_emergency_contact_phone',
-  'hr_bank_account', 'hr_department_cost_center', 'hr_direct_leader', 'hr_sg_category',
+  'hr_bank_account', 'hr_bank_name', 'hr_department_cost_center', 'hr_direct_leader',
+  'hr_sg_category',
 ];
 
-test('az oszlopsorrend a hatósági nyomtatvány rovatsorrendje', () => {
+test('a séma belső mezősorrendje nem csúszott el', () => {
   const kulcsok = SchemaStore.storedFields().map(f => f.key);
-  assertEq(kulcsok.join('\n'), HATOSAGI_SORREND.join('\n'), 'elcsúszott oszlopsorrend');
+  assertEq(kulcsok.join('\n'), HATOSAGI_SORREND.join('\n'), 'elcsúszott mezősorrend');
 });
 
 test('az útlevél kiállításának helye a kiállítás dátuma után áll', () => {

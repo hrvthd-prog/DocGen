@@ -284,7 +284,7 @@ atest('a nyilvántartásból kiírt xlsx visszaolvasva ugyanazt adja', async () 
   });
   const vissza = XlsxRead.readRows(
     buf.buffer ? buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) : buf,
-    { schema: SchemaStore.get() });
+    { schema: SchemaStore.get(), firstDataRow: PROFILE.firstDataRow });
 
   assertEq(vissza.rows.length, EmployeeRepo.all().length, 'eltérő sorszám');
 

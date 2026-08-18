@@ -39,6 +39,8 @@ vm.createContext(sandbox);
 
 vm.runInContext(fs.readFileSync(path.join(__dirname, '../vendor/xlsx.full.min.js'), 'utf8'),
   sandbox, { filename: 'xlsx.full.min.js' });
+vm.runInContext(fs.readFileSync(path.join(__dirname, '../vendor/pizzip.min.js'), 'utf8'),
+  sandbox, { filename: 'pizzip.min.js' });
 
 for (const [rel, name] of [
   ['../js/services/employee-repo.js', 'EmployeeRepo'],

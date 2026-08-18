@@ -47,6 +47,7 @@ const XlsxWrite = (() => {
     }));
 
     writeHeader(ws, cols, profile, st);
+    writeSectionRow(ws, cols, profile, st);
     writeDateFormats(ws, cols, profile);
     writeValidations(ws, cols, profile, st);
     writeRows(ws, cols, profile, schema, employees);
@@ -95,7 +96,8 @@ const XlsxWrite = (() => {
   /**
    * 1. sor: gépi kulcsok (kötelező = piros) – a programnak kell az importhoz,
    *         ezért alapból REJTETT (profile.hideKeyRow).
-   * 2. sor: angol címkék – ez az, amit a kitöltő lát, ezért a kitöltést segítő
+   * 2. sor: szakaszcímek (writeSectionRow) – a kitöltőnek segít tájékozódni.
+   * 3. sor: angol címkék – ez az, amit a kitöltő lát, ezért a kitöltést segítő
    *         komment is IDE kerül, nem a rejtett sorba.
    */
   function writeHeader(ws, cols, profile, st) {
@@ -137,6 +139,41 @@ const XlsxWrite = (() => {
     // A kulcssor a programé, nem a kitöltőé – ne kelljen ránéznie.
     // (Rejtve is beolvasható importáláskor.)
     if (profile.hideKeyRow) keyRow.hidden = true;
+  }
+
+  /**
+   * 2. sor: a `profile.sections` szakaszcímei, egy-egy összevont cellában.
+   *
+   * A szakaszhatárokat a `cols` tényleges sorrendjében keressük meg (nem
+   * feltételezzük, hogy `profile.sections` pontosan lefedi `cols`-t) – így
+   * akkor sem törik el, ha egy jövőbeli profil `columns`-szal felülírja a
+   * sorrendet, és a `sections` csak részlegesen fedi azt.
+   */
+  function writeSectionRow(ws, cols, profile, st) {
+    const sections = profile.sections;
+    if (!profile.sectionRow || !Array.isArray(sections) || !sections.length) return;
+
+    const oszlopIndex = new Map(cols.map((f, i) => [f.key, i + 1]));
+    const sor = ws.getRow(profile.sectionRow);
+
+    for (const szakasz of sections) {
+      const idxek = (szakasz.keys || []).map(k => oszlopIndex.get(k)).filter(Boolean);
+      if (!idxek.length) continue;
+
+      const elso = Math.min(...idxek);
+      const utolso = Math.max(...idxek);
+      if (utolso > elso) ws.mergeCells(profile.sectionRow, elso, profile.sectionRow, utolso);
+
+      const c = sor.getCell(elso);
+      c.value = szakasz.title;
+      c.font = { name: st.headerFont.name, size: st.headerFont.size,
+                 bold: true, color: argb('FFFFFFFF') };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: argb(st.sectionFill || 'FF17375E') };
+      c.alignment = { horizontal: 'center', vertical: 'middle' };
+      c.border = { left: { style: 'medium' } };
+    }
+
+    sor.height = st.sectionRowHeight || 20;
   }
 
   /**
@@ -465,11 +502,11 @@ const XlsxWrite = (() => {
     };
 
     // Védelem: a vezérlőcella kivételével minden zárolt, hogy a képletek ne
-    // sérüljenek. Ugyanaz a jelszó, mint a Data lapon.
-    const prot = profile.protection;
-    if (prot && prot.enabled) {
+    // sérüljenek. A `p.protected` FÜGGETLEN a Data lap `profile.protection`-jétől
+    // (lásd a `printSheet` megjegyzését) – csak a jelszót veszi onnan kölcsön.
+    if (p.protected) {
       valaszto.protection = { locked: false };
-      ws.protect(prot.password || '', {
+      ws.protect((profile.protection && profile.protection.password) || '', {
         selectLockedCells: true, selectUnlockedCells: true, formatColumns: true,
       });
     }
@@ -508,6 +545,55 @@ const XlsxWrite = (() => {
   // lassú gépen sem szólal meg tévesen.
   const IRAS_HATARIDO_MS = 30000;
 
+  /**
+   * A cellakomment (note) doboza Excelben az <x:Anchor> cellatartományból
+   * számolt méretet kapja, NEM a VML style pt-értékéből – az utóbbi csak
+   * kompatibilitási maradvány. Az ExcelJS viszont MINDEN kommentnek ugyanazt
+   * az apró, kb. 2 oszlop × 4 sor tartományt írja (l. a könyvtár
+   * V_SHAPE_ATTRIBUTES függvénye), és ezt a publikus API-ból nem lehet
+   * felülírni – ezért a kiírt fájl VML-jét utólag, nyers XML-ként igazítjuk,
+   * ugyanúgy, ahogy a SchemaFromXlsx is nyers XML-ből olvassa ki azt, amit a
+   * könyvtár nem ad vissza.
+   *
+   * A span (hány oszloppal/sorral nagyobb a doboz, mint a cella) fix, nem a
+   * szöveg hosszából számolt – a kommentek 6–9 soros tartományban mozognak,
+   * ennyi hellyel mindegyik kényelmesen kiolvasható marad.
+   */
+  const NOTE_COL_SPAN = 5;
+  const NOTE_ROW_SPAN = 9;
+
+  async function enlargeNoteBoxes(buf) {
+    if (typeof PizZip === 'undefined') return buf;
+
+    // Ez a lépés csak SZÉPÍT (nagyobb kommentdoboz) – ha bármi miatt nem
+    // megy (pl. teszt hamis puffert ad, vagy egy jövőbeli ExcelJS-verzió
+    // másképp írja a VML-t), essen vissza a nem nagyított, de valódi
+    // fájlra. Ugyanez az elv, mint a SchemaFromXlsx legördülő-olvasásánál.
+    try {
+      const zip = new PizZip(buf);
+      const vmlUtak = Object.keys(zip.files).filter(p => /^xl\/drawings\/vmlDrawing\d+\.vml$/.test(p));
+      if (!vmlUtak.length) return buf;
+
+      for (const ut of vmlUtak) {
+        let xml = zip.files[ut].asText();
+        xml = xml.replace(/width:[\d.]+pt;\s*height:[\d.]+pt/g, 'width:260pt;height:160pt');
+        xml = xml.replace(/<x:Anchor>\s*([^<]+?)\s*<\/x:Anchor>/g, (teljes, belso) => {
+          const szamok = belso.split(',').map(s => Number(s.trim()));
+          if (szamok.length !== 8 || szamok.some(Number.isNaN)) return teljes;
+          const [oszlop1, oszlopEltolas1, sor1, sorEltolas1] = szamok;
+          const oszlop2 = oszlop1 + NOTE_COL_SPAN;
+          const sor2 = sor1 + NOTE_ROW_SPAN;
+          return `<x:Anchor>${oszlop1}, ${oszlopEltolas1}, ${sor1}, ${sorEltolas1}, ` +
+                 `${oszlop2}, ${szamok[5]}, ${sor2}, ${szamok[7]}</x:Anchor>`;
+        });
+        zip.file(ut, xml);
+      }
+      return zip.generate({ type: 'arraybuffer' });
+    } catch {
+      return buf;
+    }
+  }
+
   async function toBuffer(opts) {
     const wb = await build(opts);
 
@@ -520,7 +606,8 @@ const XlsxWrite = (() => {
     });
 
     try {
-      return await Promise.race([wb.xlsx.writeBuffer(), hatarido]);
+      const buf = await Promise.race([wb.xlsx.writeBuffer(), hatarido]);
+      return await enlargeNoteBoxes(buf);
     } finally {
       clearTimeout(idozito);
     }

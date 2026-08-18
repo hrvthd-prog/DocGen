@@ -56,7 +56,87 @@ sablonnal. Röviden, de úgy, hogy a *következő* session ebből folytatni tudj
 
 # Napló
 
-## 2026-08-18 — Változásnapló a munkavállalói adatokhoz
+## 2026-08-18 (2.) — Új adatbekérő-sablon: téma szerinti sorrend, szakaszcím-sor, kikapcsolt lapvédelem, nagyobb kommentek
+
+**Cél:** A felhasználó egy kézzel átszerkesztett adatbekérőt (`adatbekero (2).
+xlsx`) adott át mint a végleges, kiküldendő verziót, és kérte, hogy az app
+generátora ezt állítsa elő ezután — oszlopsorrend, egy új, kitöltést segítő
+2. sor, kikapcsolt lapvédelem — valamint hogy a kommentablakok mérete miatt
+(a legtöbb komment 6–9 soros szöveg volt, a doboz 2 oszlop × 4 sorra futotta)
+a szövegek látszódjanak feltöltés előtt.
+
+**Változás:** (a commit után várhatóan `v40`)
+- `js/schema/export-profiles.js` — az `adatbekero` profilban: `sections`
+  tömb (9 szakasz, téma szerint: Personal Data → … → Contacts) adja az
+  oszlopsorrendet ÉS a 2. sori szakaszcímeket; `excludeColumns` zárja ki a
+  `topographical_number`/`other_accommodation` mezőt az exportból (a sémában
+  maradnak); `sectionRow: 2`, `labelRow: 3`, `firstDataRow: 4`;
+  `protection.enabled: false` (a `Data` lapon); a `printSheet`-nek önálló
+  `protected: true` jelzője (a „HR adatlap" a képletei miatt véve marad);
+  `columnsOf()` a `sections`-ban még be nem sorolt mezőket a lista végére
+  illeszti, hogy egy új séma-mező sose vesszen el.
+- `js/schema/seed-schema.js` — új mező: `hr_bank_name` (a korábbi, egybe írt
+  „Bank Account Number and Name of Bank" szétvált `hr_bank_account` +
+  `hr_bank_name`-re); `version: 2`.
+- `js/services/xlsx-write.js` — `writeSectionRow()`: a 2. sor összevont
+  szakaszcímei; `enlargeNoteBoxes()`: a kiírt fájl `vmlDrawing*.vml`-jét
+  utólag, nyers XML-ben nagyítja (5 oszlop × 9 sorra), mert az ExcelJS minden
+  kommentnek ugyanazt az apró, fix méretű VML-dobozt írja, és ezt a publikus
+  API nem teszi állíthatóvá; `addPrintSheet()` mostantól `profile.printSheet.
+  protected`-et nézi a Data-lap védelme helyett.
+- `tools/adatbekero.js` — a Node-sandboxba bekerült a `pizzip.min.js`
+  (`enlargeNoteBoxes`-hoz kell).
+- `test/xlsx.test.js`, `test/schema.test.js`, `test/schema-from-xlsx.test.js`,
+  `test/e2e.test.js`, `test/fixtures/adatbekero-hints.json` — a sor- és
+  oszlopeltolódás miatt frissültek (a `HATOSAGI_SORREND` teszt mostantól CSAK
+  a séma belső, változatlan sorrendjét őrzi; az export-sorrend új szerződését
+  `ADATBEKERO_SORREND` őrzi `xlsx.test.js`-ben); új tesztek: a két kizárt
+  mező tényleg a sémában marad, a szakaszcím-sor összevonása, a
+  kommentdoboz-nagyítás.
+- `README.md` — az „Az adatbekérő táblázat" szakasz átírva az új sorrendre,
+  szakaszcím-sorra, lapvédelem-állapotra és a kommentméret-javításra.
+
+**Miért / döntés:**
+- **A séma belső sorrendje NEM változott** — csak az EXPORT (a `columns`
+  helyett `sections`-ból számolt) sorrendje. Ezt a felhasználó kérdésemre
+  külön megerősítette: a téma szerinti sorrend legyen a végleges kontraktus,
+  a `HATOSAGI_SORREND` (2026-08-17-i döntés) lecserélve.
+- **`topographical_number` és `other_accommodation`** hiányzott az új
+  fájlból, és pont a lakcím-blokk két szélén ült — tipikus jele egy véletlen
+  kiesésnek kézi átrendezésnél. Rákérdeztem: a felhasználó válasza szerint
+  **szándékos** kihagyás, de a DB-sémából NEM törlendő (a HR viszi fel őket
+  kézzel) — innen az `excludeColumns` mechanizmus, nem törlés.
+- **Az 1. sor (gépi kulcsok) az új fájlban látható volt**, a korábbi rejtett
+  állapottal szemben. Rákérdezve: ez nem szándékos, csak szerkesztési
+  melléktermék — az app generálásakor továbbra is rejtett marad.
+- **A `Data` lap lapvédelme kikapcsolva, de a „HR adatlap" NEM** — ez nem
+  feltételezés, hanem az átadott fájl tényleges állapotából derült ki
+  (`ws.protection.sheet`: Data=False, HR adatlap=True). A két védelem ezért
+  szétválasztott kapcsoló lett (`profile.protection` vs. `profile.printSheet.
+  protected`), nem egy közös flag.
+- **A kommentdoboz-méretet nem lehet az ExcelJS `note` API-ján keresztül
+  állítani** — a könyvtár forrásában (`vendor/exceljs.min.js`,
+  `V_SHAPE_ATTRIBUTES`) hardcodeolt `width:97.8pt;height:59.1pt`. A tényleges
+  méretet Excelben nem ez a stílus, hanem a VML `<x:Anchor>` cellatartománya
+  szabja meg — ezt igazoltuk is: a stílus-pt átírása önmagában NEM változtatta
+  meg a visszaolvasott méretet, az `<x:Anchor>` átírása igen. Ezért a
+  `toBuffer()` a kiírt zip-et PizZip-pel újranyitja és a nyers VML-t igazítja
+  — ugyanaz a minta, mint a `SchemaFromXlsx` legördülő-olvasása.
+
+**Tesztek:** `node test/run-all.js` → mind a 14 készlet zöld (354 teszt).
+`node tools/adatbekero.js` → 64 oszlop, ellenőrzés zöld, a kiírt fájlban a
+kommentdoboz-anchorok 5×9-re nagyítva (kézzel is ellenőrizve nyers XML-lel és
+ExcelJS-szel visszaolvasva).
+
+**Nyitott / következő:**
+- A felhasználó `adatbekero (2).xlsx` fájlját magát NEM módosítottuk — az app
+  a schema/export-profiles.js alapján ÚJRAGENERÁLTA a sablont (`adatbekero.
+  xlsx`, gitignore-olt, ezért nincs a repóban), ami tartalmazza az összes
+  kért változtatást ÉS a nagyított kommenteket is. Ha a felhasználó mégis a
+  KÉZZEL szerkesztett fájlt akarja tovább használni (pl. a benne lévő
+  megjegyzés-szövegek miatt), azt még nem hasonlítottuk össze mezőnként az
+  új sémával.
+- Commit még nem történt — a munka a working tree-ben van.
 
 **Cél:** Követhető legyen az UI-n, ha egy dolgozó bármely adata átíródik –
 ki, mikor, honnan és mit változtatott.

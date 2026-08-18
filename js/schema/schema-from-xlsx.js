@@ -15,8 +15,8 @@
 const SchemaFromXlsx = (() => {
 
   const HEADER_ROW = 1;   // gépi kulcsok
-  const LABEL_ROW  = 2;   // angol címkék
-  const DATA_ROW   = 3;   // innen kezdődnek a kitöltött értékek
+  const LABEL_ROW  = 3;   // angol címkék (a 2. sor a szakaszcímeké, azt itt nem olvassuk)
+  const DATA_ROW   = 4;   // innen kezdődnek a kitöltött értékek
 
   // ── Beolvasás ──────────────────────────────────────────────────────────────
 
