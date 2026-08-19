@@ -221,6 +221,146 @@ test('a nyilvántartás változása frissíti a docgen listáját', () => {
   assert(/EmployeeRepo\.onChange/.test(docgenSrc), 'nincs feliratkozás a változásokra');
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+section('Szótár mindkét irányban');
+
+// A szótár PÁR, nem irány: mindegy, melyik nyelven van az adat a
+// nyilvántartásban. A nyelvet kizárólag a jelölő végződése választja.
+function szotarral(parok) {
+  SchemaStore.loadFrom(SEED_SCHEMA);
+  SchemaStore.setDictionary(SchemaStore.dictionary().concat(parok));
+}
+const PAR = [{ en: 'EU Blue Card', hu: 'EU Kék Kártya' }];
+
+test('magyarul tárolt érték: a végződés választ nyelvet', () => {
+  szotarral(PAR);
+  const v = { residence_purpose: 'EU Kék Kártya' };
+  assertEq(SchemaStore.renderTag('residence_purpose', v),    'EU Kék Kártya');
+  assertEq(SchemaStore.renderTag('residence_purpose_en', v), 'EU Blue Card');
+});
+
+test('ANGOLUL tárolt érték: ugyanaz a pár, ugyanaz az eredmény', () => {
+  szotarral(PAR);
+  const v = { residence_purpose: 'EU Blue Card' };
+  assertEq(SchemaStore.renderTag('residence_purpose', v),    'EU Kék Kártya');
+  assertEq(SchemaStore.renderTag('residence_purpose_en', v), 'EU Blue Card');
+});
+
+test('mind a négy végződés és a magyar címke egyezik', () => {
+  szotarral(PAR);
+  const v = { residence_purpose: 'EU Kék Kártya' };
+  for (const t of ['residence_purpose_hu', 'residence_purpose_hun', 'Tartózkodás célja'])
+    assertEq(SchemaStore.renderTag(t, v), 'EU Kék Kártya', t);
+  for (const t of ['residence_purpose_en', 'residence_purpose_eng', 'Tartózkodás célja_EN'])
+    assertEq(SchemaStore.renderTag(t, v), 'EU Blue Card', t);
+});
+
+test('az illesztés normalizál (ékezet, kis/nagybetű, elválasztó)', () => {
+  szotarral(PAR);
+  for (const nyers of ['eu kek kartya', 'EU-KÉK-KÁRTYA', '  Eu   Kék  Kártya  '])
+    assertEq(SchemaStore.renderTag('residence_purpose_en', { residence_purpose: nyers }),
+      'EU Blue Card', nyers);
+});
+
+test('nincs szótári pár: mindkét jelölő az eredetit adja', () => {
+  szotarral([]);
+  const v = { position: 'darukezelő' };
+  assertEq(SchemaStore.renderTag('position', v),    'darukezelő');
+  assertEq(SchemaStore.renderTag('position_en', v), 'darukezelő');
+});
+
+test('a szótár az ÉRTÉKRE illeszkedik, nem mezőre', () => {
+  szotarral(PAR);
+  // Ugyanaz az egy pár három különböző mezőn ugyanazt adja
+  for (const kulcs of ['residence_purpose', 'position', 'hr_dual_citizenship'])
+    assertEq(SchemaStore.renderTag(kulcs + '_en', { [kulcs]: 'EU Kék Kártya' }),
+      'EU Blue Card', kulcs);
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+section('Fordítatlan értékek felismerése');
+
+test('van adat, de nincs pár → fordítatlan', () => {
+  szotarral([]);
+  assert(SchemaStore.isUntranslated('position_en', { position: 'darukezelő' }),
+    'nem ismerte fel a fordítatlan értéket');
+});
+
+test('van pár → nem fordítatlan', () => {
+  szotarral(PAR);
+  assert(!SchemaStore.isUntranslated('residence_purpose_en',
+    { residence_purpose: 'EU Kék Kártya' }), 'lefordítottat jelölt meg');
+});
+
+test('üres adat és magyar jelölő nem fordítatlan', () => {
+  szotarral([]);
+  assert(!SchemaStore.isUntranslated('position_en', { position: '' }), 'üres érték');
+  assert(!SchemaStore.isUntranslated('position',    { position: 'darukezelő' }), 'magyar jelölő');
+  // Az enumnak saját értéklistája van, azt nem a szótár fordítja
+  assert(!SchemaStore.isUntranslated('sex_en', { sex: 'male' }), 'enum mező');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+section('Enum: angol fordítás nélkül se szivárogjon gépi azonosító');
+
+test('hiányzó angol alak a MAGYARRA esik vissza, sosem az id-re', () => {
+  const s = JSON.parse(JSON.stringify(SEED_SCHEMA));
+  s.fields.push({ key: 'permit_type', group: 'foglalkoztatas', type: 'enum',
+    label: { hu: 'Engedély típusa', en: 'Permit type' },
+    values: [{ id: 'eu_blue_card', hu: 'EU Kék Kártya' }] });
+  SchemaStore.loadFrom(s);
+  assertEq(SchemaStore.renderTag('permit_type',    { permit_type: 'eu_blue_card' }), 'EU Kék Kártya');
+  assertEq(SchemaStore.renderTag('permit_type_en', { permit_type: 'eu_blue_card' }), 'EU Kék Kártya');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+section('A szótár integritás-ellenőrzése');
+
+const dictHibak = d => SchemaStore.validateDictionary(d);
+
+test('a seed séma szótára tiszta', () => {
+  SchemaStore.loadFrom(SEED_SCHEMA);
+  assertEq(SchemaStore.validateSchema().length, 0,
+    'a seed sémán nem lehet ellentmondás: ' + SchemaStore.validateSchema().join(' | '));
+});
+
+test('ugyanaz a magyar alak két párban → jelez', () => {
+  assertEq(dictHibak([{ en: 'airplane', hu: 'repülő' },
+                      { en: 'plane',    hu: 'repülő' }]).length, 1);
+});
+
+test('fordítva felvitt pár → jelez', () => {
+  const p = dictHibak([{ en: 'EU Kék Kártya', hu: 'EU Blue Card' }]);
+  assertEq(p.length, 1);
+  assert(/fordítva/.test(p[0]), 'nem a fordított sorrendre panaszkodik: ' + p[0]);
+});
+
+test('helyes sorrendű pár nem ad hamis riasztást', () => {
+  assertEq(dictHibak([{ en: 'EU Blue Card', hu: 'EU Kék Kártya' },
+                      { en: 'welder',       hu: 'hegesztő' },
+                      { en: 'Serbia',       hu: 'Szerbia' }]).length, 0);
+});
+
+test('mindkét oldalon ékezetes pár nem ad hamis riasztást', () => {
+  assertEq(dictHibak([{ en: 'Malmö', hu: 'Malmö' }]).length, 0);
+});
+
+test('ugyanaz a szöveg az egyik pár angol, a másik magyar oldalán → jelez', () => {
+  assert(dictHibak([{ en: 'Serbia', hu: 'Szerbia' },
+                    { en: 'Srbija', hu: 'Serbia'  }]).length >= 1);
+});
+
+test('a szótár hibái a séma-ellenőrzésben is megjelennek', () => {
+  const s = JSON.parse(JSON.stringify(SEED_SCHEMA));
+  s.dictionary = [{ en: 'EU Kék Kártya', hu: 'EU Blue Card' }];
+  SchemaStore.loadFrom(s);
+  assert(SchemaStore.validateSchema().some(p => /Szótár/.test(p)),
+    'a validateSchema nem hozta át a szótár hibáit');
+});
+
+// A további tesztek a seed sémát várják
+SchemaStore.loadFrom(SEED_SCHEMA);
+
 // ── Összegzés ───────────────────────────────────────────────────────────────
 console.log('\n' + '='.repeat(60));
 console.log(`Eredmény: ${passed} sikeres / ${failed} hibás (összesen ${passed + failed})`);

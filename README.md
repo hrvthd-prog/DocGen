@@ -94,25 +94,67 @@ találgatunk, és a teljes dátumot sem írjuk át szebbnek látszó, de hamis a
 > Excel a beírt dátumot a kitöltő gépének területi beállítása szerint mutatná
 > (angol rendszeren `3/15/1990`), és a kitöltő azt hinné, elrontotta.
 
-### Szótár: angolul érkezik, magyarul kell
+### Szótár: ugyanaz az adat két nyelven
 
-Az ország, a munkakör vagy a szakképesítés angolul jön a kitöltőtől, a magyar
-iratba viszont magyarul kell. Ezt **nem** két oszloppal oldjuk meg: egy oszlop
-érkezik, a fordítást a **Beállítások → Szótár** adja.
+Az ország, a munkakör vagy a szakképesítés az egyik iratba magyarul, a másikba
+angolul kell. Ezt **nem** két oszloppal oldjuk meg: egy érték van tárolva, a
+másik nyelvet a **Beállítások → Szótár** adja.
 
-| Jelölő | Mit ad |
+**Egy adat = egy tárolt érték. A nyelvet a JELÖLŐ választja, sosem az adat.**
+
+| Végződés | Mit ad |
 |---|---|
 | `{{previous_country}}` | magyarul (ez az alapértelmezés) |
-| `{{previous_country_hun}}` | magyarul |
-| `{{previous_country_eng}}` | ahogy a táblázatban érkezett |
+| `{{previous_country_hu}}`, `{{previous_country_hun}}` | magyarul |
+| `{{previous_country_en}}`, `{{previous_country_eng}}` | angolul |
 
-A szótár soronként egy pár: `angol = magyar`. Tabulátor és pontosvessző is
-elválasztó, így két Excel-oszlop közvetlenül beilleszthető. Amire nincs pár, az
-változatlanul megy tovább — a hiányzó fordítás nem hiba, csak nem fordít.
+**A szótár PÁR, nem irány.** A keresés mindkét oldalon illeszkedik, tehát
+**mindegy, melyik nyelven van az adat a nyilvántartásban** — ugyanaz az egy pár
+mindkét irányban működik. Ez nem véletlen: a mezők vegyesen várnak magyar és
+angol bevitelt (az `Állampolgárság` magyarul, a `Születési hely ország` angolul).
 
-A szótár a **szabad szöveges** mezőkre hat, mezőtől függetlenül: egy
-„Serbia → Szerbia" pár mindenhol ugyanazt jelenti. A választható (enum) mezőket
-nem érinti, azoknak saját értéklistájuk van a sémában.
+```
+Szótár:  EU Blue Card = EU Kék Kártya
+Tárolva: "EU Kék Kártya"          Tárolva: "EU Blue Card"
+  {{residence_purpose}}    → EU Kék Kártya      → EU Kék Kártya
+  {{residence_purpose_en}} → EU Blue Card       → EU Blue Card
+```
+
+Soronként egy pár: **balra ANGOL, jobbra MAGYAR.** Tabulátor és pontosvessző is
+elválasztó, így két Excel-oszlop közvetlenül beilleszthető.
+
+> **A szoftver nem ismeri fel a nyelvet, csak a sorrendet nézi.** Fordítva
+> felvéve nem hibázik — felcseréli a két kimenetet. A szerkesztő ezért
+> figyelmeztet, ha egy sor gyanúsan fordítva áll, és a beviteli mező alatt élőben
+> mutatja, mit ad majd a két jelölő.
+
+Az illesztés az **érték szövegére** történik, nem mezőre: a szótárban nem kell
+(és nem is lehet) megadni, melyik mezőre vonatkozik a pár — egy
+„Serbia = Szerbia" mindenhol ugyanazt jelenti.
+
+### Melyik mezőnél mi fordít
+
+Ez dönti el, hogy a szótárba felvett pár hat-e egyáltalán. A **Beállítások →
+Séma** lapon minden soron ott van, melyik eset melyik:
+
+| Mezőtípus | Mi fordít | Hol szerkeszted |
+|---|---|---|
+| választható (enum) | a mező **saját értéklistája** | Beállítások → Séma → az adott mező |
+| szabad szöveg | a **globális szótár** | Beállítások → Szótár |
+| számított | a forrásmezők, a kimenet a szótáron megy át | mindkettő |
+| dátum, szám | semmi, csak formázás | — |
+
+Egy **választható** mezőhöz tehát hiába veszed fel a párt a szótárba: annak
+saját értéklistája van. Ha egy értékéhez nincs angol alak, a **magyar** kerül
+az angol rovatba (sosem a gépi azonosító), és a séma-szerkesztő jelzi a hiányt.
+
+### Amire nincs pár
+
+Amire nincs szótári pár, az **változatlanul** megy tovább — a hiányzó fordítás
+nem állítja meg a generálást. De nem is marad titok: a *Hiányzó adatok naplója*
+külön „Fordítatlan" rovatban mutatja, hol ment ki magyar szöveg angol rovatba.
+Előre is kideríthető: **Beállítások → Szótár → „Hiányzó párok keresése"**
+végigmegy az összes rekordon, és mezőnként kigyűjti, mihez nincs még pár.
 
 > A `_hun` végű mezőkulcsok (`previous_country_hun` stb.) emiatt lerövidültek.
 > A régi kulcs jelölőként megmarad, ezért a korábban kiküldött adatbekérők

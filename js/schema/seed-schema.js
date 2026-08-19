@@ -30,9 +30,11 @@ const SEED_SCHEMA = {
   dictionary: [
     // Hazautazás módja. Nem a kitöltő adja meg: a `transport_type` számított
     // mező az állampolgárságból származtatja, a kimenetet ez fordítja magyarra.
+    // `plane` szándékosan NINCS itt: ugyanarra a magyar alakra mutatott, mint
+    // az `airplane`, és a HU→EN irány így „első nyer" alapon dőlt el. A
+    // `transport_type` lookup amúgy is `airplane`-t ad ki.
     { en: 'bus',      hu: 'busz' },
     { en: 'airplane', hu: 'repülő' },
-    { en: 'plane',    hu: 'repülő' },
     { en: 'train',    hu: 'vonat' },
     { en: 'car',      hu: 'autó' },
 

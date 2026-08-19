@@ -50,26 +50,36 @@ const SettingsModule = (() => {
             <div class="ws-card-header">
               <span class="ws-card-title">Szótár</span>
               <span id="sv-dict-info" class="rg-count"></span>
+              <span id="sv-dict-problems" class="sv-problems"></span>
             </div>
             <div class="ws-card-body">
               <p class="sv-intro">
-                Angol↔magyar megfeleltetés a szabad szöveges mezőkhöz: ország,
-                munkakör, állampolgárság, szakképesítés. A kitöltő angolul írja
-                be, a magyar iratba a magyar alak kerül – ezért nem kell két
-                oszlop ugyanarra az adatra.
+                Ez a szótár <b>globális</b>: minden <b>szabad szöveges</b> mezőre
+                egyszerre hat, és <b>az ÉRTÉK szövegére illeszkedik, nem mezőre</b>.
+                Ezért nem kell (és nem is lehet) megadni benne, melyik mezőre vagy
+                melyik jelölőre vonatkozik a pár — a „Serbia = Szerbia" mindenhol
+                ugyanazt jelenti. A <b>választható (enum)</b> mezőket nem érinti:
+                azoknak saját értéklistájuk van a sémában.
               </p>
               <p class="ef-hint">
-                Soronként egy pár: <code>angol = magyar</code>.
-                Tabulátor és pontosvessző is elválasztó, így két Excel-oszlop
-                közvetlenül beilleszthető. A jelölők:
-                <code>{{previous_country}}</code> és
-                <code>{{previous_country_hun}}</code> magyarul,
-                <code>{{previous_country_eng}}</code> az eredeti beírás szerint.
+                Soronként egy pár. Tabulátor és pontosvessző is elválasztó, így két
+                Excel-oszlop közvetlenül beilleszthető.
+                <b>A szoftver nem ismeri fel a nyelvet, csak a sorrendet nézi:</b>
+                fordítva felvéve nem hibázik — felcseréli a két kimenetet.
+                Az adat a nyilvántartásban bármelyik nyelven állhat, a párt mindkét
+                oldalról megtalálja; a nyelvet a jelölő végződése választja
+                (<code>{{mező}}</code> magyarul, <code>{{mező_en}}</code> angolul).
               </p>
+              <div class="sv-dict-head">
+                <span>← BAL OLDAL: ANGOL</span>
+                <span>JOBB OLDAL: MAGYAR →</span>
+              </div>
               <textarea id="sv-dict" class="field-input sv-dict" rows="12" spellcheck="false"
                         placeholder="Serbia = Szerbia&#10;Ukraine = Ukrajna&#10;welder = hegesztő"></textarea>
+              <div id="sv-dict-preview" class="sv-dict-preview"></div>
               <div class="sv-toolbar">
                 <button class="btn btn-primary btn-sm" id="sv-dict-save">Szótár mentése</button>
+                <button class="btn btn-ghost btn-sm" id="sv-dict-scan">Hiányzó párok keresése…</button>
                 <span id="sv-dict-state" class="sv-problems"></span>
               </div>
             </div>
@@ -82,6 +92,10 @@ const SettingsModule = (() => {
     document.getElementById('sv-add').addEventListener('click', () => openFieldDialog(null));
     document.getElementById('sv-xlsx').addEventListener('change', onXlsxPicked);
     document.getElementById('sv-dict-save').addEventListener('click', saveDictionary);
+    document.getElementById('sv-dict-scan').addEventListener('click', showMissingPairs);
+    // A kurzor helye kattintásra és nyilazásra is változik, nem csak gépelésre
+    ['input', 'click', 'keyup'].forEach(ev =>
+      document.getElementById('sv-dict').addEventListener(ev, renderDictPreview));
     renderFieldList();
     renderDictionary();
   }
@@ -126,6 +140,39 @@ const SettingsModule = (() => {
     ta.value = parok.map(e => `${e.en} = ${e.hu}`).join('\n');
     const info = document.getElementById('sv-dict-info');
     if (info) info.textContent = `${parok.length} pár`;
+
+    // Ugyanaz a figyelmeztetés-csatorna, mint a Séma kártyán
+    const gondok = SchemaStore.validateDictionary(parok);
+    const pEl = document.getElementById('sv-dict-problems');
+    if (pEl) {
+      pEl.textContent = gondok.length ? `${gondok.length} ellentmondás` : '';
+      pEl.title = gondok.join('\n');
+    }
+    renderDictPreview();
+  }
+
+  /**
+   * Élő előnézet a kurzor alatti sorra: mit fog adni a két jelölő.
+   *
+   * Ez erősebb minden súgószövegnél, mert MEGMUTATJA a sorrend következményét
+   * ahelyett, hogy leírná – és logika sem kell hozzá: a két oldal maga az
+   * eredmény.
+   */
+  function renderDictPreview() {
+    const ta  = document.getElementById('sv-dict');
+    const box = document.getElementById('sv-dict-preview');
+    if (!ta || !box) return;
+
+    const sorok = ta.value.split(/\r?\n/);
+    const i     = ta.value.slice(0, ta.selectionStart || 0).split(/\r?\n/).length - 1;
+    const sor   = (sorok[i] || '').trim() || (sorok.find(s => s.trim()) || '').trim();
+    const m     = sor ? /^([^=\t;]+)[=\t;](.*)$/.exec(sor) : null;
+
+    if (!m || !m[1].trim() || !m[2].trim()) { box.innerHTML = ''; box.title = ''; return; }
+    box.title = 'A kurzor alatti sor eredménye';
+    box.innerHTML = `
+      <div><code>{{mező}}</code> → <b>${escHtml(m[2].trim())}</b></div>
+      <div><code>{{mező_en}}</code> → <b>${escHtml(m[1].trim())}</b></div>`;
   }
 
   /** „Serbia = Szerbia", „Serbia<TAB>Szerbia" és „Serbia;Szerbia" is jó. */
@@ -159,6 +206,102 @@ const SettingsModule = (() => {
     allapot.textContent = eldobott ? `${eldobott} ismétlődő angol alak kimaradt` : '';
     renderDictionary();
     toast(`Szótár mentve – ${mentett.length} pár`, 'success');
+
+    // A mentés sikerült, de lehet benne ellentmondás – erről külön szólunk,
+    // mert némán rossz oldalt adna vissza (pl. fordítva felvitt pár)
+    const gondok = SchemaStore.validateDictionary(mentett);
+    if (gondok.length) toast(`${gondok.length} ellentmondás a szótárban – nézd meg a kártya fejlécét`, 'warn');
+  }
+
+  /**
+   * „Hiányzó párok keresése": az összes rekord összes SZABAD SZÖVEGES mezőjén
+   * végigmegy, és kigyűjti azokat az értékeket, amikhez nincs szótári pár.
+   *
+   * MEZŐNKÉNT csoportosítva, mert a szkennelés a személyneveket, utcaneveket és
+   * irányítószámokat is „hiányzó fordításnak" látja – azok is `text` mezők.
+   * Csoportosítva a `locality` blokk egy pillanat átugrani, a `position` blokkot
+   * meg végigcsinálni; mezőnkénti konfiguráció (és új sémafogalom) nélkül.
+   */
+  function showMissingPairs() {
+    if (!schemaReady()) { toast('A séma még nem töltődött be.', 'error'); return; }
+    let emps;
+    try { emps = EmployeeRepo.all({ includeExited: true }); }
+    catch {
+      toast('A nyilvántartás még nincs betöltve. Nyisd meg egyszer a Nyilvántartás fület.', 'error');
+      return;
+    }
+
+    const blokkok = [];
+    for (const f of SchemaStore.fields().filter(x => x.type === 'text')) {
+      const db = new Map();                       // normalizált alak → { ertek, n }
+      for (const e of emps) {
+        const s = String((e.fields && e.fields[f.key]) ?? '').trim();
+        if (!s || SchemaStore.translate(s, 'en') !== null) continue;
+        const k = ValueCodec.normalize(s);
+        const v = db.get(k);
+        if (v) v.n++; else db.set(k, { ertek: s, n: 1 });
+      }
+      if (db.size) blokkok.push({ f, ertekek: [...db.values()].sort((a, b) => b.n - a.n) });
+    }
+
+    const szoveg = blokkok.map(b =>
+      `# ${b.f.label.hu} (${b.f.key}) — ${b.ertekek.length} érték\n` +
+      b.ertekek.map(v => `${v.ertek} = ${v.ertek}`).join('\n')
+    ).join('\n\n');
+
+    const osszes = blokkok.reduce((n, b) => n + b.ertekek.length, 0);
+
+    showDialog({
+      title: `Hiányzó szótári párok — ${osszes} érték ${blokkok.length} mezőben`,
+      body: osszes ? `
+        <p class="ef-hint" style="margin-top:0">
+          Ezekhez az értékekhez nincs szótári pár, tehát angol alakot kérő jelölőn
+          <b>változatlanul</b> mennek ki. <b>Mindkét oldalra az eredeti érték került</b> —
+          írd át azt az oldalt, amelyik a másik nyelv: <b>balra angol, jobbra magyar</b>.
+          A <code>#</code> kezdetű sorok csak tájékoztatók, ne másold be őket.
+        </p>
+        <p class="ef-hint">
+          A listában a személynevek, utcanevek és számok is megjelennek — azok is
+          szabad szöveges mezők. A nem fordítandó mezőblokkokat egyszerűen hagyd ki.
+        </p>
+        <textarea class="field-input sv-dict" rows="14" spellcheck="false" readonly
+                  id="sv-scan-out">${escHtml(szoveg)}</textarea>`
+        : `<p class="ef-hint" style="margin:0">
+             Minden szabad szöveges értékhez van szótári pár. Nincs teendő.
+           </p>`,
+      footer: `
+        ${osszes ? `<button class="btn btn-primary btn-sm" id="sv-scan-copy">Másolás vágólapra</button>` : ''}
+        <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Bezárás</button>`,
+    });
+
+    const copyBtn = document.getElementById('sv-scan-copy');
+    if (copyBtn) copyBtn.addEventListener('click', () => copyText(szoveg));
+  }
+
+  /**
+   * Szöveg vágólapra. Az app `file://`-ről fut, ahol a `navigator.clipboard`
+   * nem mindig elérhető – ezért a `execCommand` tartalék. Enélkül a másolás
+   * némán elmaradna, ami rosszabb, mint ha nem is lenne gomb.
+   */
+  function copyText(s) {
+    const kesz = () => toast('✓ Vágólapra másolva', 'success');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(s).then(kesz, () => execCopy(s) ? kesz() : toast('Nem sikerült a másolás', 'error'));
+      return;
+    }
+    execCopy(s) ? kesz() : toast('Nem sikerült a másolás', 'error');
+  }
+
+  function execCopy(s) {
+    const ta = document.createElement('textarea');
+    ta.value = s;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch { ok = false; }
+    ta.remove();
+    return ok;
   }
 
   function schemaReady() {
@@ -192,6 +335,8 @@ const SettingsModule = (() => {
         </div>
       </section>`).join('');
 
+    box.querySelectorAll('[data-copy]').forEach(b =>
+      b.addEventListener('click', () => copyText(b.dataset.copy)));
     box.querySelectorAll('[data-edit]').forEach(b =>
       b.addEventListener('click', () => openFieldDialog(b.dataset.edit)));
     box.querySelectorAll('[data-up]').forEach(b =>
@@ -200,11 +345,38 @@ const SettingsModule = (() => {
       b.addEventListener('click', () => moveField(b.dataset.down, 1)));
   }
 
+  /**
+   * Melyik mezőtípusnál MI fordít. Ez a séma-lapon eddig sehol nem látszott,
+   * pedig ez dönti el, hogy a szótárba felvett pár hat-e egyáltalán.
+   */
+  const FORDITAS = {
+    text:     { rovid: 'szöveg → szótár',
+                teljes: 'Szabad szöveg. Az angol alakot a globális szótár adja (Beállítások → Szótár).' },
+    enum:     { rovid: 'választható → értéklista',
+                teljes: 'Választható érték. A fordítás a mező SAJÁT értéklistájából jön, a szótár NEM hat rá.' },
+    computed: { rovid: 'számított → szótár',
+                teljes: 'Számított mező. A forrásmezőkből áll össze, a kimenet a szótáron megy át.' },
+    date:     { rovid: 'dátum',  teljes: 'Dátum. Nem fordul, csak formázódik (1988.04.12.).' },
+    number:   { rovid: 'szám',   teljes: 'Szám. Nem fordul.' },
+  };
+
+  /**
+   * A mező kész dokumentum-jelölői, kattintásra másolható chipként.
+   *
+   * Az angol változat rövidítve (`+_en`) jelenik meg: kiírva a két teljes
+   * jelölő új sorba törte a nevet, és 72 mezőnél ez megduplázta a lista
+   * magasságát. A chip felirata így egyben a szabályt is tanítja, a teljes
+   * alakot a tooltip és a vágólap adja. Ami nem fordul, annak nincs `_en`-je.
+   */
+  function fieldTags(f) {
+    const alap = { copy: `{{${f.key}}}`, felirat: `{{${f.key}}}`, cim: 'Másolás vágólapra' };
+    if (f.type === 'date' || f.type === 'number') return [alap];
+    return [alap, { copy: `{{${f.key}_en}}`, felirat: '+_en',
+                    cim: `{{${f.key}_en}} — másolás vágólapra` }];
+  }
+
   function renderFieldRow(f) {
-    const tipus = {
-      text: 'szöveg', date: 'dátum', number: 'szám',
-      enum: 'választható', computed: 'számított',
-    }[f.type] || f.type;
+    const ford = FORDITAS[f.type] || { rovid: f.type, teljes: '' };
 
     const reszlet = f.type === 'enum'
       ? f.values.map(v => escHtml(v.hu)).join(' · ')
@@ -216,9 +388,11 @@ const SettingsModule = (() => {
       <div class="sv-row">
         <span class="sv-row-label">
           ${escHtml(f.label.hu)}${f.required ? '<span class="ef-req">*</span>' : ''}
-          <span class="sv-key">${escHtml(f.key)}</span>
+          ${fieldTags(f).map(t =>
+            `<button type="button" class="sv-tag" data-copy="${escHtml(t.copy)}"
+                     title="${escHtml(t.cim)}">${escHtml(t.felirat)}</button>`).join('')}
         </span>
-        <span class="sv-type">${escHtml(tipus)}</span>
+        <span class="sv-type" title="${escHtml(ford.teljes)}">${escHtml(ford.rovid)}</span>
         <span class="sv-detail" title="${escHtml(reszlet)}">${escHtml(reszlet)}</span>
         <span class="sv-row-actions">
           <button class="sv-move" data-up="${escHtml(f.key)}" title="Előrébb">↑</button>
