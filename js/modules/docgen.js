@@ -947,11 +947,18 @@ const DocgenModule = (() => {
    * dátum-részek (`{{date_of_birth_year}}`) és a szótár is.
    *
    * Egy sablon ugyanazt a jelölőt többször is tartalmazza, ezért gyorsítótár.
+   *
+   * `fordItatlan` (opcionális Set): ide gyűlnek azok az ANGOL alakot kérő
+   * jelölők, amikhez van adat, de nincs szótári pár – vagyis a magyar szöveg
+   * megy ki az angol rovatba. Ez eddig némán történt.
    */
-  function makeSchemaResolver(emp) {
+  function makeSchemaResolver(emp, forditatlan) {
     const gyorsito = new Map();
     return (name) => {
-      if (!gyorsito.has(name)) gyorsito.set(name, SchemaStore.renderTag(name, emp.fields));
+      if (!gyorsito.has(name)) {
+        gyorsito.set(name, SchemaStore.renderTag(name, emp.fields));
+        if (forditatlan && SchemaStore.isUntranslated(name, emp.fields)) forditatlan.add(name);
+      }
       return gyorsito.get(name);
     };
   }
@@ -1721,17 +1728,20 @@ const DocgenModule = (() => {
           await _yieldFrame();   // ← böngésző repaint engedélyezése ELŐTTE, hogy a státusz látszódjon
           try {
             const enrichedRow = buildRenderRow(row);
+            const forditatlan = new Set();
             const { buffer: outBuf, emptyTags } = await DocxService.generateDocx(
               tmplBuf, enrichedRow,
-              { resolve: makeSchemaResolver(row), equals: makeSchemaMatcher(row) });
+              { resolve: makeSchemaResolver(row, forditatlan), equals: makeSchemaMatcher(row) });
             emptyTags.forEach(t => allEmptyTags.add(t));
-            if (emptyTags.length > 0) {
+            if (emptyTags.length > 0 || forditatlan.size > 0) {
               missingLogEntries.push({
                 ts:        new Date().toISOString(),
                 user:      currentUser || '',
                 client:    clientName,
                 template:  templateName,
                 emptyTags: emptyTags,
+                // Van adat, de nincs szótári pár → magyar szöveg az angol rovatban
+                untranslatedTags: [...forditatlan],
               });
             }
             const baseName = DocxService.outputFilename(templateName, enrichedRow, pattern);

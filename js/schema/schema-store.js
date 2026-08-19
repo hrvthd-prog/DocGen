@@ -87,10 +87,14 @@ const SchemaStore = (() => {
         hint:     { en: (f.hint && f.hint.en) || '', hu: (f.hint && f.hint.hu) || '' },
       };
       if (field.type === 'enum') {
+        // Az angol alak a MAGYARRA esik vissza, nem a gépi kulcsra: „EU Kék
+        // Kártya" egy angol rovatban rossz, de olvasható – `eu_blue_card`
+        // viszont hibásnak látszó gépi szemét egy hatósági iraton. A hiányt a
+        // séma-szerkesztő külön jelzi (validateSchema), tehát nem tűnik el.
         field.values = (f.values || []).map(v => ({
           id:      String(v.id),
           hu:      v.hu || v.id,
-          en:      v.en || v.id,
+          en:      v.en || v.hu || v.id,
           accepts: Array.isArray(v.accepts) ? v.accepts.slice() : [],
         }));
       }
@@ -347,6 +351,23 @@ const SchemaStore = (() => {
     return ValueCodec.normalize(ertek) === ValueCodec.normalize(expected);
   }
 
+  /**
+   * Igaz, ha a jelölő ANGOL alakot kér egy szabad szöveges mezőn, van is adat,
+   * de nincs hozzá szótári pár – vagyis a magyar szöveg megy ki az angol
+   * rovatba, némán.
+   *
+   * Ez a némaság volt a hiba: az üres mezőt a hiányzó-adat napló eddig is
+   * megfogta, a fordítatlant viszont senki. Csak `text` mezőre néz: az enumnak
+   * saját értéklistája van, a dátum/szám nem fordul.
+   */
+  function isUntranslated(tag, values = {}) {
+    const hit = resolveTag(tag);
+    if (!hit || hit.lang !== 'en' || hit.field.type !== 'text' || hit.part) return false;
+    const raw = values[hit.field.key];
+    if (raw == null || String(raw).trim() === '') return false;
+    return translate(raw, 'en') === null;
+  }
+
   // ── Számított mezők ────────────────────────────────────────────────────────
 
   /**
@@ -441,6 +462,56 @@ const SchemaStore = (() => {
     return problems;
   }
 
+  // Magyar-specifikus betűk. Ha az „angol" oldalon van ilyen, a magyaron meg
+  // nincs, a pár szinte biztosan fordítva került be.
+  const HU_BETU = /[áéíóöőúüű]/i;
+
+  /**
+   * A szótár belső ellentmondásai.
+   *
+   * Az `en` oldali ismétlődést a `normalizeDictionary` már kiejti (és a
+   * szerkesztő meg is mondja, hányat) – ami ott ÁTMEGY, azt kell itt elkapni:
+   *
+   *   – ugyanaz a MAGYAR alak két párban → HU→EN irányban „első nyer",
+   *     tehát esetleges, hogy melyik angol alak jön ki;
+   *   – ugyanaz a szöveg az egyik pár angol, a másik magyar oldalán → a
+   *     fordítás iránya kiszámíthatatlan;
+   *   – fordítva felvitt pár → nem hiba, csak felcseréli a két kimenetet,
+   *     ezért semmi nem szólna. Heurisztika, ezért „valószínűleg".
+   */
+  function validateDictionary(dict = []) {
+    const problems = [];
+    const huOwner = new Map();   // normalizált magyar alak → az első pár indexe
+    const enOwner = new Map();   // normalizált angol alak  → az első pár indexe
+
+    dict.forEach((e, i) => {
+      const hu = ValueCodec.normalize(e.hu);
+      const en = ValueCodec.normalize(e.en);
+
+      if (huOwner.has(hu)) {
+        problems.push(`Szótár: a(z) „${e.hu}" két angol alakhoz is tartozik: `
+          + `${dict[huOwner.get(hu)].en} / ${e.en} – a fordítás iránya esetleges.`);
+      } else {
+        huOwner.set(hu, i);
+      }
+      if (!enOwner.has(en)) enOwner.set(en, i);
+
+      if (HU_BETU.test(e.en) && !HU_BETU.test(e.hu)) {
+        problems.push(`Szótár: a(z) „${e.en} = ${e.hu}" sor valószínűleg fordítva van `
+          + `– balra az ANGOL, jobbra a MAGYAR alak kell.`);
+      }
+    });
+
+    for (const [forma, i] of enOwner) {
+      const j = huOwner.get(forma);
+      if (j !== undefined && j !== i) {
+        problems.push(`Szótár: a(z) „${dict[i].en}" az egyik pár angol, a másik `
+          + `(„${dict[j].en} = ${dict[j].hu}") magyar oldalán is szerepel.`);
+      }
+    }
+    return problems;
+  }
+
   /** A séma belső ellentmondásai – a szerkesztő ezzel figyelmeztet. */
   function validateSchema(s = schema) {
     const problems = [];
@@ -475,6 +546,7 @@ const SchemaStore = (() => {
         }
       }
     }
+    problems.push(...validateDictionary(s.dictionary || []));
     return problems;
   }
 
@@ -651,8 +723,8 @@ const SchemaStore = (() => {
     useBackend, onChange, load, loadFrom, save,
     get, version, fields, storedFields, groups, field, byGroup,
     resolveTag, renderTag, tagEquals, resolveValues, computeField, renderValue,
-    dictionary, setDictionary, translate,
-    validateValues, validateSchema,
+    dictionary, setDictionary, translate, isUntranslated,
+    validateValues, validateSchema, validateDictionary,
     migrateValues, renameFieldKey, migrateLegacyKeys, addMissingSeedFields,
     removeRetiredFields, usageOf,
     _normalize: normalize, _datePart: datePart,

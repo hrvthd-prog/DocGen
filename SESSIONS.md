@@ -56,6 +56,71 @@ sablonnal. Röviden, de úgy, hogy a *következő* session ebből folytatni tudj
 
 # Napló
 
+## 2026-08-19 (6.) — Szótár: kétirányúság kimondva, néma hibák láthatóvá téve
+
+**Cél:** a felhasználó nem tudta kitalálni, milyen jelölővel hivatkozzon
+ugyanarra az adatra magyarul és angolul (konkrét eset: „EU Kék Kártya" a DB-ben,
+„EU Blue Card" a szótárban). Kiderült, hogy **a funkció eddig is működött** — a
+dokumentáció tanított rossz modellt.
+
+**Változás** (`v10.46`, terv: [TERV-szotar.md](TERV-szotar.md)):
+- `js/schema/schema-store.js` — `normalize()`: az enum-érték angol alakja a
+  MAGYARRA esik vissza, nem a gépi `id`-re. Új `isUntranslated(tag, values)`:
+  angol alakot kérő jelölő szabad szöveges mezőn, adattal, szótári pár nélkül.
+  Új `validateDictionary(dict)`, a `validateSchema` is meghívja.
+- `js/schema/seed-schema.js` — `plane = repülő` törölve (ütközött az
+  `airplane = repülő`-vel, a HU→EN irány „első nyer" alapon dőlt el).
+- `js/modules/docgen.js` — `makeSchemaResolver(emp, forditatlan)` opcionális
+  Setbe gyűjti a fordítatlan jelölőket; a generálás átadja a naplónak.
+- `js/modules/docgen/missing-log.js` — új „Fordítatlan" oszlop.
+- `js/modules/settings/settings-view.js` — a séma-sorokon másolható jelölő
+  (`{{kulcs}}` + `+_en` chip) és a fordítás forrása (`szöveg → szótár` /
+  `választható → értéklista`); a szótár-kártyán oszlopfelirat, élő előnézet,
+  ellentmondás-számláló, „Hiányzó párok keresése" gomb, `copyText` segéd.
+- `css/registry.css` — `.sv-tag`, `.sv-dict-head`, `.sv-dict-preview`; a
+  `.sv-row` rács szélesebb (150px a típusoszlopnak).
+- `README.md` — a „Szótár" szakasz újraírva; új „Melyik mezőnél mi fordít".
+
+**Miért / döntés:**
+- **A szótár PÁR, nem irány.** A `translate()` mindkét oldalon illeszkedik,
+  tehát mindegy, melyik nyelven van az adat. A doksi viszont azt írta, hogy
+  `{{x_eng}}` „ahogy a táblázatban érkezett" — ebből egyirányú szótárra lehetett
+  következtetni. Ez volt a hiba gyökere, nem a kód.
+- **A sorrend viszont számít, és semmi nem védett ellene.** Nyelvfelismerés
+  nincs, csak pozíció: fordítva felvéve némán felcserélődik a két kimenet.
+  Ezért lett heurisztikus figyelmeztetés (magyar betű az „angol" oldalon, a
+  magyaron meg nem) — figyelmeztetés, nem hiba, mert heurisztika.
+- Az enum `en` fallbackje azért a magyar és nem az `id`: „EU Kék Kártya" egy
+  angol rovatban rossz, de olvasható; `eu_blue_card` hibásnak látszó gépi
+  szemét egy hatósági iraton.
+- A „Hiányzó párok" lista **mezőnként** csoportosít, mert a szkennelés a
+  személy- és utcaneveket is fordítatlannak látja (azok is `text` mezők).
+  A csoportosítás így zajszűrő — mezőnkénti konfiguráció és új sémafogalom
+  nélkül. Mindkét oldalra az eredeti érték kerül: nem találgatjuk, melyik
+  nyelvű az adat.
+- A séma-soron az `_en` jelölő rövidítve (`+_en`) jelenik meg: kiírva a két
+  teljes jelölő 72 mezőből mindnél új sorba tört, és megduplázta a lista
+  magasságát. Így 16 sor tördel, nem mind.
+
+**Tesztek:** `node test/run-all.js` — minden készlet zöld.
+`test/docgen-resolve.test.js` 21 → 34 eset (szótár mindkét irányban,
+normalizálás, fordítatlan-felismerés, enum-fallback, szótár-validáció).
+Böngészőben localhostról végigpróbálva: a jelölő-chipek másolása, a
+`+_en` hiánya dátum/szám mezőn, az élő előnézet a kurzor alatti sorra (fordított
+párnál látványosan felcserélt kimenet), a mentés utáni figyelmeztetés, és a
+„Hiányzó párok keresése" 8 értékkel 5 mezőben (a szótárban meglévő `welder`
+helyesen kimaradt).
+
+**Nyitott / következő:**
+- Az **angol címke jelölőként magyar értéket ad** (`{{Purpose of Residence}}` →
+  „EU Kék Kártya"), mert a közvetlen mezőtalálat mindig `lang='hu'`. Szándékosan
+  NEM nyúltunk hozzá: viselkedésváltozás, ami a már kiadott sablonokat érinti.
+  Indoklás és a 3 soros javítás: `TERV-szotar.md` 5. pont.
+- A szótár globális, mezőfüggetlen — `position="car"` → „autó". Ismert plafon,
+  felvezető út (opcionális harmadik oszlop) a tervben, G6.
+- A `merge.js:139` (`row['Vezetéknév']` a `{id, fields}` alakú rekordon)
+  továbbra is nyitott.
+
 ## 2026-08-19 (5.) — Visszavont mezők kiejtése; kommentdoboz pontban méretezve
 
 **Cél:** (1) a friss telepítésen letöltött üres adatbekérő BM/BN oszlopában

@@ -43,9 +43,16 @@ const DocgenMissingLog = (() => {
                 ).join('')}
               </div>
             </td>
+            <td style="font-size:11px">
+              <div style="display:flex;flex-wrap:wrap;gap:3px">
+                ${(e.untranslatedTags || []).map(t =>
+                  `<span style="background:var(--c-bg);border:1px solid var(--c-warn,#c90);border-radius:3px;padding:1px 5px">${escHtml(t)}</span>`
+                ).join('')}
+              </div>
+            </td>
           </tr>`;
         }).join('')
-      : `<tr><td colspan="${isAdmin ? 5 : 4}" style="text-align:center;padding:20px;color:var(--c-muted);font-size:12px">
+      : `<tr><td colspan="${isAdmin ? 6 : 5}" style="text-align:center;padding:20px;color:var(--c-muted);font-size:12px">
            Még nincs naplóbejegyzés${isAdmin ? '' : ' ehhez a fiókhoz'}.
          </td></tr>`;
 
@@ -53,7 +60,10 @@ const DocgenMissingLog = (() => {
       title: isAdmin ? 'Hiányzó adatok naplója — összes fiók' : `Hiányzó adatok naplója — ${currentUser}`,
       body: `
         <div style="font-size:11px;color:var(--c-muted);margin-bottom:10px">
-          Azon mezők listája, amelyekre a generáláskor nem volt adat az import táblában.
+          <b>Hiányzó mezők:</b> amikre a generáláskor nem volt adat.<br>
+          <b>Fordítatlan:</b> volt adat, de angol alakot kérő jelölőhöz nem volt
+          szótári pár — a MAGYAR szöveg került az angol rovatba.
+          Pótolható: Beállítások → Szótár.
           ${isAdmin ? '<br>Admin nézetként az összes fiók bejegyzése látható.' : ''}
         </div>
         <div class="data-table-wrap" style="max-height:480px">
@@ -65,6 +75,7 @@ const DocgenMissingLog = (() => {
                 <th style="min-width:120px">Ügyfél</th>
                 <th style="min-width:140px">Sablon</th>
                 <th>Hiányzó mezők</th>
+                <th>Fordítatlan</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
