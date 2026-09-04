@@ -56,6 +56,140 @@ sablonnal. Röviden, de úgy, hogy a *következő* session ebből folytatni tudj
 
 # Napló
 
+## 2026-09-04 — Enter Hungary kitöltés-segéd: terv + megvalósítás
+
+**Cél:** az EH űrlap kitöltése ma két ablak közti fejből-másolás. Kérés: az
+Ügyek fülön, megnyitott ügynél egy modul, ami a munkavállaló adatait az **EH
+sorrendjében** mutatja, egy kattintással vágólapra teszi, és helyben
+szerkeszthető (a DB-be visszaírva). Playwright/automatizáció most nem cél.
+Ezen felül két javítás az Ügyek fül bal sávján.
+
+**Változás** (`v10.47`, terv: [TERV-enterhungary.md](TERV-enterhungary.md)):
+- `js/schema/eh-forms.js` — **ÚJ**. Az EH űrlap adatként: fő űrlap 83 sor,
+  betétlap 103 sor (a három jogcím közös listában, `only:` jelöléssel),
+  plusz az `EH_EMPLOYER` cégadat-blokk. A vázat eldobható szkript nyerte ki a
+  négy mentett HTML-ből, a `key`/`employer` hozzárendelés kézi.
+- `js/modules/cases/case-eh.js` — **ÚJ**. A panel: értékfeloldás, másolás,
+  helyben szerkesztés, billentyűkezelés, eltérés- és hosszjelzés.
+- `js/modules/cases/cases-view.js` — két fül a részletezőn (Idővonal /
+  Enter Hungary); a javaslatlista `slice(0,5)`-je törölve, darabszám a címben;
+  `EmployeeRepo.onChange` nem rajzol újra, ha az EH-panelen áll a fókusz.
+- `js/utils.js` — a `copyText`/`execCopy` ide költözött a
+  `settings-view.js`-ből (−20 sor ott, +0 új logika).
+- `css/cases.css` — `.eh-*` panel, `.cv-tabs`, a `.cv-row` kétsorossá tétele,
+  `.cv-suggest__list` görgetése, `@media (max-width:1200px)` → 300 px-es bal
+  sáv, és a `#tab-cases.active` fix magassága.
+- `test/eh-forms.test.js` — **ÚJ**, 20 állítás; `test/run-all.js` bejegyzés.
+- `index.html` — két script-sor.
+
+**A négy mentett EH űrlap** (a felhasználótól, 2026-09-01 és 09-04):
+fő űrlap (`tipus=tartcelharm`, 90 mező + 8×19 hozzátartozó),
+Vendégmunkás (`-c7`, 103), EU Kék Kártya (`-c9`, 95), Nemzeti Kártya
+(`-c12`, 99). A mentések a `Downloads` mappában és a pyds-explorer
+`explorer-output`-jában vannak — **nem kerültek be a repóba**.
+
+**Miért / döntés:**
+- **A funkció lényege a MÁSOLÁS** — ez a terv gerince, a felhasználó
+  középen mondta ki, és átírta a felét. Az EH mezői két csoportra bomlanak:
+  **másolható** (`<input type=text>`) és **listás** (`<select>`, rádió,
+  checkbox). Legördülőbe a vágólapról nem lehet értéket tenni, tehát oda
+  **nem építünk átalakító logikát**. Ez törölt a tervből egy
+  formazó-függvénytáblát (`kozterulet_kicsi`/`emelet`/`utlevel_tipus`, ~60
+  sor), a tesztkészletét és egy megfeleltetési táblát. Számokban: fő űrlap
+  40 DB-s mezőjéből 30 másolható / 10 listás.
+- **A három munkavállalási lap 93 mezője azonos**, csak 10 / 2 / 6 az eltérés.
+  Ezért **egyetlen sorlista** `only: ['c7']` jelöléssel, nem háromszor másolt
+  tömb.
+- **A fő űrlap minden jogcímnél ugyanaz** — a rejtett mezők mutatják
+  (`tipus=tartcelharm` generikus, a jogcímet egy `tartcel` hidden hordozza).
+  A felhasználó elfogadta a következtetést, nem kérünk újabb mentést.
+- **A c7 lap 103 mezőjéből ~46 állandó cégadat.** Döntés: `EH_EMPLOYER`
+  **adatblokk** az `eh-forms.js`-ben — nem beállítás-felület (egy cég van),
+  és nem az EH saját „adatok beemelése" gombja (az egyszerre egy céget jegyez
+  meg, a böngészőben). Az értékek a cégkivonatból megvannak (hatályos
+  2026-08-30): `AUMOVIO Hungary Kft.`, adószám `10518869-2-19`, KSH-szám
+  `10518869 2611 113 19`, TEÁOR'25 `2611`, székhely `8200 Veszprém,
+  Házgyári út 6-8.`
+- **A blokkban EH-alak áll, nem a cégkivonaté** — ez a session konkrét
+  felfedezése. Az EH `pattern` attribútummal validál: a KSH-szám mintája
+  `\d{8} \d{4} \d{3} [012]\d`, tehát **szóközös**, míg a cégkivonat
+  kötőjellel írja — lemérve: a kötőjeles alak elbukik, a szóközös átmegy.
+  Az adószám viszont marad kötőjeles (`\d{10}|\d{8}-\d-\d\d`). Nincs
+  futásidejű átalakítás: egy adat, egy helyes alak, és egy teszt-állítás rá.
+- **A munkavégzés helye egyelőre mindig `1106 Budapest, Napmátka utca 6.`**
+  (a cégkivonat 7/2. fióktelepe) — egy érték, tehát a cégadat-blokkba való,
+  nem választóba. Az EH `munkavegzeshelye…` blokkjában **nincs `kerulet`
+  mező** (a székhely- és levelezési blokkban van), és nincs hossz-korlát sem.
+- **Billentyűkezelés** (TERV 6.7) — a felhasználó Alt+Tab-bal vált ablakot,
+  tehát a kéz a billentyűzeten van; ha a másoláshoz egérrel egy 28 px-es
+  gombra kell célozni, az ablakváltás nyeresége elvész. Egy teljes kérelem
+  (fő + c7) **~71 másolható mező**. Kiosztás: `Tab` csak a **másolható**
+  sorokat járja (a listások `tabindex="-1"`), `Enter` = **másol + továbblép**
+  (ez a kulcs: visszatéréskor már a következő mezőn állsz), `Ctrl+C` natívan
+  megy, `F2` nyitja a szerkesztést, `Esc` elveti.
+- **A mező `readonly` alapból.** Fókuszáláskor kijelöljük a tartalmát (ettől
+  működik a `Ctrl+C` saját kód nélkül) — egy kijelölt, szerkeszthető
+  mezőben viszont **egy véletlen leütés törli az egész értéket**, és 71
+  mezőn Tab-bal végighaladva ez nem elméleti kockázat. ~18 sor pluszkód,
+  cserébe a gyakori művelet (másolás) egy billentyű, a ritka (javítás)
+  kettő.
+- **Üzemi méret: 960 px széles ablak** (1920×1080, fele-fele dokkolva a
+  DocGen és az EH között) — a másolás csak így gyors. Három akadály
+  (TERV 6.6): az `.app-root { min-width: 920px }` mindössze 25 px tartalékot
+  hagy egy 945 px-es viewporton; a `.cv-side` fix 380 px-e a hely 40 %-a; és
+  a sorelrendezés nem volt megtervezve. Megoldás: a min-width feloldása az
+  Ügyek fülre, `@media (max-width:1200px)` → 300 px-es bal sáv, és
+  háromoszlopos rács (címke / érték / `⧉`) **tördelő, nem csonkoló**
+  címkével — az EH-n a címke alapján keresed a rovatot.
+- **A DB alakja nem változik.** Két helyen merült fel sémabővítés —
+  szálláshely jogcíme és részletes iskolai végzettség — mindkettő **listás
+  mező**, tehát a tárolt érték sem spórolna kattintást. Marad a jelzés.
+- Az iskolai végzettség **négy különböző listával** szerepel (fő űrlap 4,
+  c7 8, c9 11, c12 10 érték), a közterület jellege kettővel (fő űrlap 42
+  kisbetűs, betétlap 184 nagybetűs). Mind listás — a panel csak szűkítő
+  javaslatot ír ki, statikus szövegként.
+- A `copyText`/`execCopy` **nem íródik újra**: a `settings-view.js`-ből a
+  `js/utils.js`-be költözik (`file://` alatt kell az `execCommand`-tartalék).
+- Az Ügyek fül két hibája **egy ok két tünete**: a `cv-suggest` `slice(0,5)`-je
+  levágja a lejárat-listát, a `.cv-row__meta` `flex: 0 0 auto`-ja pedig a
+  hosszú `deadlineText` („Nincs határidő – add meg: …") miatt a névre tolódik.
+  Mindkettő CSS + egy sor törlés; a `sorHtml()` markupja marad.
+
+**Tesztek:** `node test/run-all.js` — minden készlet zöld (a függvénykönyvtár
+366 állítás + az új 20). Az `eh-forms.test.js` a cégadatokat az EH SAJÁT
+`pattern`-jein méri, ellenpróbával együtt (a kötőjeles KSH-szám helyesen
+bukik). Böngészőben, **945 × 950 px viewporton** végigpróbálva: Tab-lánc
+(70 fókuszalható elem, mind másolható mező), Enter = másol + továbblép,
+F2/Esc, readonly-védelem, cégadat-sor védettsége, mentés history-val
+(`source: eh-panel`), kötelező mező üresre törlésének elutasítása, rossz
+dátumformátum elutasítása, és hogy nincs vízszintes görgetősáv.
+
+**Három felfedezés a megvalósításból** (TERV 12. pont) — mindhárom némán
+rontott volna:
+1. **A dátumot nyersen kell adni.** A `resolveValues` magyar alakra formáz
+   (`1988.04.12.`), az EH viszont `ÉÉÉÉ-HH-NN`-t vár. A panel a `date`
+   mezőknél a tárolt értéket használja. Teszt rögzíti, hogy a kettő eltér.
+2. **Az `EmployeeRepo.update` nem őrzi a séma-szabályokat** — csak az
+   azonosítókat nézi. Az első próbán egy kötelező mező üresre törlése
+   némán átment. A panel ezért mentés előtt külön hívja a
+   `SchemaStore.validateValues()`-t. **Ez bármelyik jövőbeli szerkesztő
+   felületre igaz** — három teszt rögzíti a munkamegosztást.
+3. **Az egész oldal görgött, nem a panelek.** A `.tab-content.active` csak
+   `min-height`-ot kap, így 15 üggyel az oldal 3700 px, az EH-panellel 7300 px
+   lett, és a fejléc kicsúszott. A kérés így nem teljesült volna. Javítás:
+   `#tab-cases.active` fix magasság + `overflow: hidden`.
+
+**Nyitott / következő:**
+- **Ellenőrizendő élesben:** az EH irányítószám-mezői
+  `role="iranyitoszam" telepules="…" kerulet="…" megye="…"` attribútumokat
+  viselnek — alighanem **maguk töltik ki a települést**. Ha ez beillesztésre
+  is lefut (nem csak gépelésre), a `település` sor másolása kihagyható. A
+  mentett HTML-ből nem dönthető el.
+- Az űrlapleírás vázát eldobható szkript nyerje ki a mentett HTML-ekből
+  (`tools/eh-scrape.js`); a kimenet megy verziókövetésbe, nem a futtatás.
+- Ismert plafonok: hozzátartozók (`hr_children` szabad szöveg vs. 8 × 19
+  rovat), külföldi cím bontása, állampolgárság melléknévi alakja.
+
 ## 2026-08-19 (6.) — Szótár: kétirányúság kimondva, néma hibák láthatóvá téve
 
 **Cél:** a felhasználó nem tudta kitalálni, milyen jelölővel hivatkozzon

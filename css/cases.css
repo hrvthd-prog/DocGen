@@ -128,6 +128,24 @@
 
 /* ── Ügyek fül ───────────────────────────────────────────────────────────── */
 
+/* Az `.app-root { min-width: 920px }` (app.css) a Nyilvántartás táblázatáért
+   van. Az Ügyek fülön viszont fele-fele dokkolt böngészőben (~945 px) csak
+   25 px tartalékot hagy: egy 110%-os zoom vagy eltérő Windows-DPI azonnal
+   vízszintes görgetősávot ad. Itt nincs rá szükség, a panel maga görget. */
+.app-root:has(.tab-btn[data-tab="cases"].active) { min-width: 0; }
+
+/* A BELSŐ panelek görgetnek, nem az egész oldal.
+   A `.tab-content.active` csak `min-height`-ot kap (app.css), ezért a fül
+   tartalma korlátlanul nő: 15 nyitott ügynél az oldal 3700 px lett, az EH-panel
+   184 sorával ~6000 px – és ilyenkor a fejléc, a fülsáv és az EH ragadó
+   fejléce is kicsúszik felfelé. Fix magassággal a bal sáv listái és a jobb
+   oldali panel külön-külön görgethető, a keret pedig a helyén marad. */
+#tab-cases.active {
+  height: calc(100vh - var(--header-h) - var(--tabnav-h));
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* A .tab-content maga is flex-konténer, ezért a burkoló flex-ELEM: enélkül
    a tartalmához zsugorodna, és a részletező panel elkeskenyedne. */
 .cv-wrap { display: flex; flex: 1; width: 100%; min-width: 0; height: 100%; min-height: 0; }
@@ -157,10 +175,15 @@
 .cv-list { flex: 1; overflow-y: auto; min-height: 0; }
 .cv-empty { padding: 20px 14px; font-size: 12px; color: var(--c-muted); font-style: italic; }
 
+/* A sor KÉT SORBAN áll: fent a név + ügytípus, alatta a státusz + határidő.
+   Egy sorban a határidő szövege („Nincs határidő – add meg: OIF érkeztetés
+   napja (iktatószám megkapása)") a `flex: 0 0 auto` miatt nem zsugorodott,
+   és ~960 px-es ablakban (fele-fele dokkolt böngésző) a névre tolódott. */
 .cv-row {
   display: flex; align-items: flex-start; gap: 8px; width: 100%;
   padding: 8px 12px; border: 0; border-bottom: 1px solid var(--c-border);
   background: transparent; text-align: left; cursor: pointer;
+  flex-wrap: wrap;
 }
 .cv-row:hover { background: var(--c-bg); }
 .cv-row.is-selected { background: var(--c-bg); box-shadow: inset 3px 0 0 var(--c-teal); }
@@ -171,12 +194,16 @@
 .cv-row__dot--nyitott { background: var(--c-slate); }
 .cv-row__dot--lezart  { background: var(--c-border); }
 
-.cv-row__main { flex: 1; min-width: 0; }
+.cv-row__main { flex: 1 1 100%; min-width: 0; }
 .cv-row__name { display: block; font-size: 12px; font-weight: 600; color: var(--c-text); }
 .cv-row__type { display: block; font-size: 11px; color: var(--c-muted); }
-.cv-row__meta { flex: 0 0 auto; text-align: right; }
-.cv-row__status { display: block; font-size: 11px; color: var(--c-text); }
-.cv-row__due    { display: block; font-size: 10px; color: var(--c-muted); }
+/* Balra igazítva, teljes szélességben: szűk sávban a jobbra igazítás úgysem
+   ér semmit (a név is, a határidő is ugyanott kezdődne), a rátolódás viszont
+   ettől szűnik meg. A pötty szélessége miatt a behúzás 15px. */
+.cv-row__meta { flex: 1 1 100%; text-align: left; padding-left: 15px; margin-top: 2px; }
+.cv-row__status { display: inline; font-size: 11px; color: var(--c-text); }
+.cv-row__due    { display: inline; font-size: 10px; color: var(--c-muted); overflow-wrap: anywhere; }
+.cv-row__due::before { content: ' · '; color: var(--c-border); }
 .cv-row--lejart .cv-row__due { color: var(--c-red); font-weight: 600; }
 .cv-row--surgos .cv-row__due { color: var(--c-amber); font-weight: 600; }
 
@@ -191,19 +218,111 @@
   font-size: 10px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .04em; color: var(--c-amber); margin-bottom: 5px;
 }
+/* MIND a javaslat látszik, görgetve. A korlát azért `vh` és nem fix px:
+   a sáv magassága a képernyőé. A 30% felső korlát hagyja, hogy a nyitott
+   ügyek listája alatta se szoruljon ki. */
+.cv-suggest__list { max-height: 30vh; overflow-y: auto; }
 .cv-suggest__item {
-  display: flex; justify-content: space-between; width: 100%;
+  display: flex; justify-content: space-between; gap: 8px; width: 100%;
   font-size: 11px; padding: 3px 0; border: 0; background: transparent;
   color: var(--c-text); cursor: pointer; text-align: left;
 }
 .cv-suggest__item:hover { text-decoration: underline; }
-.cv-suggest__days { color: var(--c-muted); }
-.cv-suggest__more { font-size: 10px; color: var(--c-muted); margin-top: 3px; }
+.cv-suggest__nev  { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-suggest__days { color: var(--c-muted); flex: 0 0 auto; }
 
 .cv-actions {
   display: flex; gap: 8px; padding: 12px 14px;
   border-top: 1px solid var(--c-border);
 }
+
+/* ── Részletező fülei ────────────────────────────────────────────────────── */
+
+.cv-tabs {
+  display: flex; gap: 2px; padding: 6px 14px 0;
+  border-bottom: 1px solid var(--c-border);
+}
+.cv-tab {
+  font-size: 12px; padding: 5px 12px; border: 0; background: transparent;
+  color: var(--c-muted); cursor: pointer; border-bottom: 2px solid transparent;
+}
+.cv-tab:hover { color: var(--c-text); }
+.cv-tab.is-active { color: var(--c-teal); border-bottom-color: var(--c-teal); font-weight: 600; }
+
+/* ── Enter Hungary panel ─────────────────────────────────────────────────── */
+
+.eh-wrap { display: flex; flex-direction: column; min-height: 0; }
+
+.eh-head {
+  display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap;
+  padding: 10px 14px; border-bottom: 1px solid var(--c-border);
+  position: sticky; top: 0; background: var(--c-card); z-index: 2;
+}
+.eh-jogcim { display: flex; flex-direction: column; gap: 3px; flex: 1 1 260px; min-width: 0; }
+.eh-jogcim > span { font-size: 11px; color: var(--c-muted); }
+.eh-hint { font-size: 10px; color: var(--c-muted); padding-bottom: 5px; cursor: help; }
+
+.eh-rows { padding: 0 0 20px; }
+
+.eh-panel {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--c-teal);
+  padding: 14px 14px 5px; border-bottom: 1px solid var(--c-border);
+  margin-bottom: 4px;
+}
+
+/* A sor RÁCS: címke / érték / gomb. A címke TÖRDEL, nem csonkul – az EH-n a
+   címke alapján keresed a rovatot, ott az ellipszis kifejezetten káros.
+   ~645 px-en (fele-fele dokkolt ablak, 300 px-es bal sáv) a leghosszabb
+   címke is elfér egy sorban. */
+.eh-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) 26px;
+  align-items: center; gap: 4px 8px;
+  padding: 3px 14px;
+}
+.eh-row:hover { background: var(--c-bg); }
+.eh-label {
+  font-size: 11px; color: var(--c-text); line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.eh-req { color: var(--c-red); margin-left: 2px; }
+
+.eh-input {
+  width: 100%; min-width: 0; font-size: 12px; padding: 3px 6px;
+  border: 1px solid var(--c-border); border-radius: 4px;
+  background: var(--c-card); color: var(--c-text); font-family: inherit;
+}
+.eh-input:read-only { cursor: default; }
+.eh-input:focus { outline: 2px solid var(--c-teal); outline-offset: -1px; }
+.eh-row.is-editing .eh-input { background: var(--c-bg); border-color: var(--c-teal); }
+
+.eh-copy {
+  width: 24px; height: 24px; padding: 0; border-radius: 4px;
+  border: 1px solid var(--c-border); background: transparent;
+  color: var(--c-muted); cursor: pointer; font-size: 12px; line-height: 1;
+}
+.eh-copy:hover { background: var(--c-teal); border-color: var(--c-teal); color: #fff; }
+
+/* Listás sor: nincs mezőkeret és nincs gomb – oda a vágólapról úgysem lehet
+   értéket tenni. Ránézésre látszik, hol kell választani. */
+.eh-value { font-size: 12px; color: var(--c-text); min-width: 0; overflow-wrap: anywhere; }
+.eh-value--list { color: var(--c-muted); }
+.eh-chev { color: var(--c-amber); font-weight: 700; margin-right: 3px; }
+.eh-empty { color: var(--c-muted); font-style: italic; font-size: 11px; }
+.eh-btnslot { width: 24px; }
+
+.eh-row--manual .eh-label { color: var(--c-muted); }
+
+.eh-note {
+  grid-column: 1 / -1; font-size: 10px; color: var(--c-amber);
+  line-height: 1.35; padding-left: 2px;
+}
+.eh-row--list .eh-note, .eh-row--manual .eh-note { color: var(--c-muted); }
+
+.eh-row.is-copied  { box-shadow: inset 3px 0 0 var(--c-green); }
+.eh-row.is-missing .eh-label { color: var(--c-red); }
+.eh-row.is-missing .eh-input { border-color: var(--c-red); }
 
 /* ── Ügy-űrlap ───────────────────────────────────────────────────────────── */
 
@@ -213,6 +332,12 @@
 .cf-field > span { font-size: 11px; color: var(--c-muted); }
 .cf-field > small { font-size: 10px; color: var(--c-muted); }
 .cf-window:not(:empty) { margin-top: 12px; border: 1px solid var(--c-border); border-radius: 6px; }
+
+/* Fele-fele dokkolt böngésző 1920×1080-on = ~945 px viewport. A fix 380 px-es
+   bal sáv ott a hely 40%-a, miközben EH-kitöltés közben alig nézünk rá. */
+@media (max-width: 1200px) {
+  .cv-side { width: 300px; flex: 0 0 300px; }
+}
 
 @media (max-width: 780px) {
   .cv-wrap { flex-direction: column; }

@@ -15,6 +15,8 @@ const CasesModule = (() => {
     szuro:      'nyitott',      // nyitott | lejart | surgos | lezart | mind
     kereses:    '',
     kivalasztott: null,
+    lap:        'idovonal',     // idovonal | eh  – ügyváltáskor NEM áll vissza:
+                                // aki EH-t tölt, sorra veszi a dolgozókat
   };
 
   const SZUROK = [
@@ -33,7 +35,15 @@ const CasesModule = (() => {
       if (e.detail === 'cases') render();
     });
     CaseRepo.onChange(() => { render(); frissitJelzo(); });
-    EmployeeRepo.onChange(() => { render(); frissitJelzo(); });
+    // Az EH-panelen a mentés is ezt hívná, és a teljes újrarajzolás elvenné a
+    // fókuszt a mezőről, ami épp aktív. Ott a sor magát frissíti.
+    EmployeeRepo.onChange(() => { if (!ehPanelenDolgozunk()) render(); frissitJelzo(); });
+  }
+
+  /** Az EH-panel egyik mezőjén áll a fókusz? Akkor nem rajzolunk újra. */
+  function ehPanelenDolgozunk() {
+    const a = document.activeElement;
+    return !!(a && a.closest && a.closest('.eh-wrap'));
   }
 
   /**
@@ -183,8 +193,26 @@ const CasesModule = (() => {
     const c = CaseRepo.get(state.kivalasztott);
     if (!c) return '<div class="ct-empty">Az ügy már nem létezik.</div>';
 
+    const emp = EmployeeRepo.get(c.employeeId);
+    const fulek = `
+      <div class="cv-tabs">
+        <button class="cv-tab ${state.lap === 'idovonal' ? 'is-active' : ''}" data-lap="idovonal">Idővonal</button>
+        <button class="cv-tab ${state.lap === 'eh' ? 'is-active' : ''}" data-lap="eh">Enter Hungary</button>
+      </div>`;
+
+    // Az EH-panel a teljes magasságot kapja: kitöltés közben az idővonal
+    // alatt sosem látszana a lényeg, és pont ez a munkamenet a cél.
+    if (state.lap === 'eh') {
+      return `
+        <div class="cv-detail__person">${escHtml(dolgozoNeve(c.employeeId))}</div>
+        ${fulek}
+        ${emp ? CaseEh.render(c, emp)
+              : '<div class="ct-empty">A dolgozó rekordja nem található.</div>'}`;
+    }
+
     return `
       <div class="cv-detail__person">${escHtml(dolgozoNeve(c.employeeId))}</div>
+      ${fulek}
       ${CaseTimeline.render(c, dolgozoMezoi(c.employeeId))}
       <div class="cv-actions">
         <button class="btn btn-ghost btn-sm" id="cv-edit">Adatok szerkesztése</button>
@@ -195,6 +223,10 @@ const CasesModule = (() => {
   /**
    * Közelgő lejáratok, amikre még nincs nyitott meghosszabbítási ügy.
    * Csak felvet – nem hoz létre semmit magától.
+   *
+   * MIND látszik, görgethető listában. Korábban csak az első 5, alatta egy
+   * „és további N" sor – abból viszont nem lehetett dolgozni: aki a hatodik
+   * volt, arról csak annyi derült ki, hogy létezik.
    */
   function javaslatokHtml() {
     let javaslatok = [];
@@ -204,13 +236,14 @@ const CasesModule = (() => {
 
     return `
       <div class="cv-suggest">
-        <div class="cv-suggest__title">Közelgő lejárat, nyitott ügy nélkül</div>
-        ${javaslatok.slice(0, 5).map(j => `
-          <button class="cv-suggest__item" data-new-for="${escHtml(j.employee.id)}">
-            <span>${escHtml(dolgozoNeve(j.employee.id))}</span>
-            <span class="cv-suggest__days">${j.daysLeft < 0 ? `${-j.daysLeft} napja lejárt` : `${j.daysLeft} nap`}</span>
-          </button>`).join('')}
-        ${javaslatok.length > 5 ? `<div class="cv-suggest__more">… és további ${javaslatok.length - 5}</div>` : ''}
+        <div class="cv-suggest__title">Közelgő lejárat, nyitott ügy nélkül (${javaslatok.length})</div>
+        <div class="cv-suggest__list">
+          ${javaslatok.map(j => `
+            <button class="cv-suggest__item" data-new-for="${escHtml(j.employee.id)}">
+              <span class="cv-suggest__nev">${escHtml(dolgozoNeve(j.employee.id))}</span>
+              <span class="cv-suggest__days">${j.daysLeft < 0 ? `${-j.daysLeft} napja lejárt` : `${j.daysLeft} nap`}</span>
+            </button>`).join('')}
+        </div>
       </div>`;
   }
 
@@ -267,6 +300,16 @@ const CasesModule = (() => {
         onSaved: () => render(),
       }));
     });
+
+    container.querySelectorAll('.cv-tab').forEach(b => {
+      b.addEventListener('click', () => { state.lap = b.dataset.lap; render(); });
+    });
+
+    if (state.lap === 'eh' && state.kivalasztott) {
+      const c = CaseRepo.get(state.kivalasztott);
+      const emp = c && EmployeeRepo.get(c.employeeId);
+      if (emp) CaseEh.bind(container, c, emp, render);
+    }
   }
 
   return { init, _render: render, _badge: frissitJelzo };
