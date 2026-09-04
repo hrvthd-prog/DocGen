@@ -278,31 +278,7 @@ const SettingsModule = (() => {
     if (copyBtn) copyBtn.addEventListener('click', () => copyText(szoveg));
   }
 
-  /**
-   * Szöveg vágólapra. Az app `file://`-ről fut, ahol a `navigator.clipboard`
-   * nem mindig elérhető – ezért a `execCommand` tartalék. Enélkül a másolás
-   * némán elmaradna, ami rosszabb, mint ha nem is lenne gomb.
-   */
-  function copyText(s) {
-    const kesz = () => toast('✓ Vágólapra másolva', 'success');
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(s).then(kesz, () => execCopy(s) ? kesz() : toast('Nem sikerült a másolás', 'error'));
-      return;
-    }
-    execCopy(s) ? kesz() : toast('Nem sikerült a másolás', 'error');
-  }
-
-  function execCopy(s) {
-    const ta = document.createElement('textarea');
-    ta.value = s;
-    ta.style.cssText = 'position:fixed;left:-9999px;top:0';
-    document.body.appendChild(ta);
-    ta.select();
-    let ok = false;
-    try { ok = document.execCommand('copy'); } catch { ok = false; }
-    ta.remove();
-    return ok;
-  }
+  // A `copyText` a js/utils.js-ben él – az EH-panel is használja.
 
   function schemaReady() {
     try { SchemaStore.get(); return true; } catch { return false; }
