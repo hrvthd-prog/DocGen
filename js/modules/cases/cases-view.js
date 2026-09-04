@@ -17,6 +17,9 @@ const CasesModule = (() => {
     kivalasztott: null,
     lap:        'idovonal',     // idovonal | eh  – ügyváltáskor NEM áll vissza:
                                 // aki EH-t tölt, sorra veszi a dolgozókat
+    // Az ügylista elrejthető. Egy kérelem előkészítése közben ritkán kell, a
+    // helye viszont dokkolt (fél képernyős) ablakban a legdrágább.
+    savZarva:   Settings.get('cases_side_collapsed', false),
   };
 
   const SZUROK = [
@@ -34,6 +37,13 @@ const CasesModule = (() => {
     window.addEventListener('docgenTabActivated', e => {
       if (e.detail === 'cases') render();
     });
+    // Alt+L: a lista be/ki. Az Alt+1..4 a füleké (app.js), az „L" szabad.
+    document.addEventListener('keydown', e => {
+      if (!e.altKey || e.key.toLowerCase() !== 'l') return;
+      if (!container.classList.contains('active')) return;
+      e.preventDefault();
+      savValt();
+    });
     CaseRepo.onChange(() => { render(); frissitJelzo(); });
     // Az EH-panelen a mentés is ezt hívná, és a teljes újrarajzolás elvenné a
     // fókuszt a mezőről, ami épp aktív. Ott a sor magát frissíti.
@@ -44,6 +54,19 @@ const CasesModule = (() => {
   function ehPanelenDolgozunk() {
     const a = document.activeElement;
     return !!(a && a.closest && a.closest('.eh-wrap'));
+  }
+
+  /**
+   * Ügylista mutatása / elrejtése.
+   *
+   * Dokkolt (fél képernyős) ablakban a bal sáv a hely harmada, miközben egy
+   * kérelem előkészítése közben alig kell. Az állapot megjegyződik: aki
+   * becsukja, annak holnap is csukva induljon.
+   */
+  function savValt() {
+    state.savZarva = !state.savZarva;
+    Settings.set('cases_side_collapsed', state.savZarva);
+    render();
   }
 
   /**
@@ -84,6 +107,11 @@ const CasesModule = (() => {
       const v = SchemaStore.resolveValues(e.fields, 'hu');
       return [v.surname, v.forename].filter(Boolean).join(' ') || '(névtelen)';
     } catch { return '(ismeretlen)'; }
+  }
+
+  function kivalasztottNeve() {
+    const c = CaseRepo.get(state.kivalasztott);
+    return c ? dolgozoNeve(c.employeeId) : '';
   }
 
   function dolgozoMezoi(employeeId) {
@@ -154,9 +182,10 @@ const CasesModule = (() => {
 
     const lista = szurtLista();
     const felvetes = javaslatokHtml();
+    const zart = state.savZarva;
 
     container.innerHTML = `
-      <div class="cv-wrap">
+      <div class="cv-wrap${zart ? ' is-collapsed' : ''}">
         <aside class="cv-side">
           <div class="cv-toolbar">
             <input type="search" id="cv-search" class="field-input" placeholder="Keresés: név, EH szám, iktatószám"
@@ -179,6 +208,13 @@ const CasesModule = (() => {
         </aside>
 
         <section class="cv-detail" id="cv-detail">
+          <div class="cv-bar">
+            <button class="cv-sidetoggle" id="cv-sidetoggle" type="button"
+                    title="${zart ? 'Ügylista mutatása' : 'Ügylista elrejtése'} (Alt+L)"
+                    aria-expanded="${zart ? 'false' : 'true'}">${zart ? '›' : '‹'}</button>
+            ${zart ? `<span class="cv-bar__lista">${lista.length} ügy</span>` : ''}
+            <span class="cv-bar__person">${state.kivalasztott ? escHtml(kivalasztottNeve()) : ''}</span>
+          </div>
           ${reszletHtml()}
         </section>
       </div>`;
@@ -188,7 +224,10 @@ const CasesModule = (() => {
 
   function reszletHtml() {
     if (!state.kivalasztott) {
-      return '<div class="ct-empty">Válassz ki egy ügyet a listából.</div>';
+      // Csukott listánál a „válassz a listából" félrevezető – nincs mit látni.
+      return state.savZarva
+        ? '<div class="ct-empty">Nyisd ki az ügylistát a › gombbal (vagy Alt+L), és válassz ügyet.</div>'
+        : '<div class="ct-empty">Válassz ki egy ügyet a listából.</div>';
     }
     const c = CaseRepo.get(state.kivalasztott);
     if (!c) return '<div class="ct-empty">Az ügy már nem létezik.</div>';
@@ -204,14 +243,12 @@ const CasesModule = (() => {
     // alatt sosem látszana a lényeg, és pont ez a munkamenet a cél.
     if (state.lap === 'eh') {
       return `
-        <div class="cv-detail__person">${escHtml(dolgozoNeve(c.employeeId))}</div>
         ${fulek}
         ${emp ? CaseEh.render(c, emp)
               : '<div class="ct-empty">A dolgozó rekordja nem található.</div>'}`;
     }
 
     return `
-      <div class="cv-detail__person">${escHtml(dolgozoNeve(c.employeeId))}</div>
       ${fulek}
       ${CaseTimeline.render(c, dolgozoMezoi(c.employeeId))}
       <div class="cv-actions">
@@ -304,6 +341,9 @@ const CasesModule = (() => {
     container.querySelectorAll('.cv-tab').forEach(b => {
       b.addEventListener('click', () => { state.lap = b.dataset.lap; render(); });
     });
+
+    const savGomb = q('#cv-sidetoggle');
+    if (savGomb) savGomb.addEventListener('click', savValt);
 
     if (state.lap === 'eh' && state.kivalasztott) {
       const c = CaseRepo.get(state.kivalasztott);

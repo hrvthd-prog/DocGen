@@ -125,7 +125,7 @@ const CaseEh = (() => {
         <div class="eh-row eh-row--list${ures ? ' is-missing' : ''}" data-eh="${escHtml(row.eh)}">
           ${cimke}
           <span class="eh-value eh-value--list">
-            <span class="eh-chev" aria-hidden="true">⌄</span>
+            <span class="eh-chev" aria-hidden="true">▾</span>
             ${ertek.text ? escHtml(ertek.text)
                          : `<span class="eh-empty">${ertek.fajta === 'kezi' ? 'kézzel' : 'hiányzik'}</span>`}
           </span>

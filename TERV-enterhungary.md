@@ -556,18 +556,18 @@ gyorsabb az EH gombja.
 │ ── A kérelmező személyes adatai ──                        │
 │ családi név (útlevél szerint) *     [ Kovacs         ] ⧉ │
 │ MO-ra érkezést megelőző foglalk. *  [ hegesztő       ] ⧉ │
-│ állampolgárság *              ⌄ Szerbia                  │
+│ állampolgárság *              ▾ Szerbia                  │
 │                                 melléknévi alak a listából│
 │ nemzetisége                   — kézzel                   │
 │ ── Magyarországi munkáltató adatai ──          (cégadat)  │
 │ rövid cégnév *                      [ AUMOVIO Hungary Kft.]⧉│
 │ KSH-szám *                    [ 10518869 2611 113 19 ]  ⧉ │
-│ TEÁOR száma [2025] *          ⌄ 2611                     │
+│ TEÁOR száma [2025] *          ▾ 2611                     │
 └──────────────────────────────────────────────────────────┘
 ```
 
 A két sorfajta **ekkora különbséget** kap: a másolhatón keretezett mező és
-`⧉` gomb van, a listáson csak a `⌄` jel, az érték és egy halvány tipp.
+`⧉` gomb van, a listáson csak a `▾` jel, az érték és egy halvány tipp.
 Végiggörgetve ránézésre látszik, hol lehet kattintani és hol kell választani.
 
 - **Egy görgetős lista, panelekre bontva** — a fő űrlap és a választott
@@ -671,10 +671,25 @@ Három dolog akadályozza ma:
 | K2 | `.cv-side { width: 380px; flex: 0 0 380px }` | 945 − 380 = **564 px** marad a panelnek — a bal sáv a hely 40 %-a, miközben EH-kitöltés közben alig nézünk rá | `@media (max-width: 1200px) { .cv-side { flex-basis: 300px; width: 300px } }` → **645 px** a panelnek. Három sor CSS. |
 | K3 | a sorelrendezés nincs megtervezve | — | rács: `grid-template-columns: minmax(0,1fr) minmax(0,1.15fr) 28px` (címke / érték / `⧉`). A címke **tördel, nem csonkul** — az EH-n a címke alapján találod meg a rovatot, tehát a `text-overflow: ellipsis` itt kifejezetten káros lenne. |
 
-**Miért nem csukható össze a bal sáv?** Az lenne a látványos megoldás, de
-állapotot, gombot és egy fél animációt kér — a `@media` három sora ugyanazt a
-645 px-et adja, nulla JS-sel. Ha később kiderül, hogy ez sem elég, az
-összecsukás akkor is megépíthető.
+**A bal sáv összecsukható — ez utólag került be (K4).** A terv először
+elvetette („állapotot, gombot és egy fél animációt kér"), de az első éles
+használat megmutatta, hogy a `@media` három sora nem elég. Két okból:
+
+| # | Mi | Mi lett |
+|---|---|---|
+| K4a | **A 780 px-es töréspont elkapta a dokkolt nézetet.** 1920×1080-on fele-fele ~960 *eszköz*pixel, ami **125%-os Windows-skálázással mindössze ~756 CSS pixel** — a sáv így a tartalom FÖLÉ csúszott, és elvette a magasság 45%-át, pont ott, ahol a legkevesebb hely van | a töréspont **600 px**-re szűkült, így a sáv oldalt marad |
+| K4b | 300 px-es sáv mellett 756 px-en a panel **456 px** — szűk | `is-collapsed`: a sáv `display: none`, a panel **756 px** (+66%) |
+
+A gomb a részletező fejlécsávjában ül (`‹` / `›`), tehát **csukott
+állapotban is elérhető**; mellette az ügyek száma és a kiválasztott dolgozó
+neve marad látható. Gyorsbillentyű: **Alt+L**. Az állapot megjegyződik
+(`Settings: cases_side_collapsed`) — aki becsukja, annak holnap is csukva
+induljon.
+
+A `display: none` és nem `width: 0`: a rejtett sáv így a **Tab-láncból is
+kiesik**, vagyis az EH-panelen a Tab továbbra is pontosan a másolás útját
+járja (6.7). Ha nincs kiválasztott ügy és a sáv csukva, az üres állapot
+szövege maga mondja meg a kiutat — be nem lehet ragadni.
 
 **Elférés-számítás a 645 px-re.** A leghosszabb EH-címke a
 „Magyarországra érkezést megelőző foglalkozás" (44 karakter), ami 11 px-es
