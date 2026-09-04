@@ -158,9 +158,29 @@
 .cv-detail {
   flex: 1; min-width: 0; overflow-y: auto; background: var(--c-card);
 }
-.cv-detail__person {
-  padding: 10px 14px 0; font-size: 12px; color: var(--c-muted); font-weight: 600;
+
+/* ── Összecsukható ügylista ──────────────────────────────────────────────── */
+
+/* Dokkolt (fél képernyős) ablakban a bal sáv a hely harmada, miközben egy
+   kérelem előkészítése közben alig kell. A `display: none` és nem `width: 0`:
+   a rejtett sáv így a Tab-láncból is kiesik – az EH-panelen a Tab a másolás
+   útját járja, nem az ügylistát. */
+.cv-wrap.is-collapsed .cv-side { display: none; }
+
+.cv-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 14px 0;
 }
+.cv-sidetoggle {
+  flex: 0 0 auto; width: 22px; height: 22px; padding: 0;
+  border: 1px solid var(--c-border); border-radius: 4px;
+  background: transparent; color: var(--c-muted);
+  cursor: pointer; font-size: 13px; line-height: 1;
+}
+.cv-sidetoggle:hover { background: var(--c-teal); border-color: var(--c-teal); color: #fff; }
+.cv-bar__lista  { font-size: 11px; color: var(--c-muted); }
+.cv-bar__person { font-size: 12px; color: var(--c-muted); font-weight: 600;
+                  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .cv-notready { padding: 24px; font-size: 13px; color: var(--c-muted); }
 
@@ -339,10 +359,19 @@
   .cv-side { width: 300px; flex: 0 0 300px; }
 }
 
-@media (max-width: 780px) {
+/* A sáv a tartalom FÖLÉ csak nagyon szűk ablakban kerüljön.
+   A korábbi 780 px-es töréspont a dokkolt nézetet is elkapta: 1920×1080-on
+   fele-fele ~960 eszközpixel, ami 125%-os Windows-skálázással mindössze
+   ~756 CSS pixel — a sáv így felülre csúszott, és a magasság 45%-át elvette,
+   pont ott, ahol a legkevesebb hely van. A 600 px alá szorított töréspont
+   megtartja az oldalsó elrendezést; ha ott is szűk, a lista becsukható. */
+@media (max-width: 600px) {
   .cv-wrap { flex-direction: column; }
   .cv-side { width: auto; flex: 0 0 auto; max-height: 45%; border-right: 0;
              border-bottom: 1px solid var(--c-border); }
+}
+
+@media (max-width: 780px) {
   .cf-grid { grid-template-columns: 1fr; }
 }
 

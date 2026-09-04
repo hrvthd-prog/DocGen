@@ -39,6 +39,18 @@ sablonnal. Röviden, de úgy, hogy a *következő* session ebből folytatni tudj
 **Változás:** mit csináltunk (fájlok, `v<verzió>`).
 **Miért / döntés:** a nem magától értetődő döntések és okuk.
 **Tesztek:** mi fut, mi az eredmény.
+**Utólag, az első éles használat után:** a bal sáv összecsukható lett
+(`‹`/`›` gomb a részletező fejlécsávjában, **Alt+L**, az állapot
+`Settings: cases_side_collapsed`-ben őrződik). Két ok:
+- **A 780 px-es töréspont elkapta a dokkolt nézetet.** 1920×1080-on fele-fele
+  ~960 *eszköz*pixel, de **125%-os Windows-skálázással ~756 CSS pixel** — a
+  sáv a tartalom FÖLÉ csúszott, és elvette a magasság 45%-át. A töréspont
+  600 px-re szűkült. (A TERV 6.6 K1 pontja a DPI-t kockázatként említette —
+  a töréspontra viszont nem gondoltunk.)
+- 300 px-es sáv mellett a panel 756 px-en 456 px; csukva **756 px** (+66%).
+A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
+és az EH-panelen a Tab továbbra is a másolás útját járja.
+
 **Nyitott / következő:** mi maradt hátra, mire figyeljen a következő session.
 ```
 
