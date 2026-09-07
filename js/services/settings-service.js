@@ -76,6 +76,28 @@ const Settings = (() => {
     setTemplateAccounts(map);
   }
 
+  // ── EH: az okmány átvételéhez megadott elérhetőség ───────────────────────
+  // Az EH „Az okmány átvétele" panelján az ÜGYINTÉZŐ elérhetősége megy fel,
+  // nem a munkavállalóé — az okmányról szóló értesítést az ügyet vivő kapja.
+  // Ezért egy helyen áll, nem munkavállalónként a nyilvántartásban.
+  const EH_CONTACT_DEFAULT = {
+    email:   'daniel.horvath@aumovio.com',
+    telefon: '+36205799979',
+  };
+
+  // Üresre törölt mező üres marad (szándékos), csak a nem mentett esik vissza
+  // az alapértelmezettre.
+  function ehContact() {
+    return Object.assign({}, EH_CONTACT_DEFAULT, get('eh_contact', null) || {});
+  }
+
+  function setEhContact(c) {
+    set('eh_contact', {
+      email:   String((c && c.email)   || '').trim(),
+      telefon: String((c && c.telefon) || '').trim(),
+    });
+  }
+
   function getAllUsers() {
     return get('users', []);
   }
@@ -95,6 +117,9 @@ const Settings = (() => {
     addTemplateToAccount,
     setTemplateVisibility,
     getTemplateAccounts,
+    ehContact,
+    setEhContact,
+    EH_CONTACT_DEFAULT,
     getAllUsers,
     isAdmin,
   };
