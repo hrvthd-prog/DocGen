@@ -257,6 +257,10 @@
 .cv-suggest__nev  { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cv-suggest__days { color: var(--c-muted); flex: 0 0 auto; }
 
+/* A törlés a sor jobb szélére kerül, elhúzva a mindennapi műveletektől. */
+.cv-del { margin-left: auto; color: var(--c-red); }
+.cv-del:hover { background: var(--c-red); color: #fff; }
+
 .cv-actions {
   display: flex; gap: 8px; padding: 12px 14px;
   border-top: 1px solid var(--c-border);

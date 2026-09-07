@@ -68,6 +68,63 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-09-07 — Ügy törlése; a szám-javítás átmegy az idővonalra; teljes dolgozólista
+
+**Cél:** három kérés. (1) A megnyitott ügy legyen törölhető úgy, hogy a
+dolgozó visszakerüljön a lejárók közé. (2) Hibajelentés: „egy ügyben
+EH-számot töröltem, mentettem, de mégis megmaradt az adat." (3) A bal sávban
+minden dolgozó jelenjen meg, ne csak a 90 napon belül lejárók.
+
+**Változás** (`v10.51`):
+- `js/services/case-repo.js` — `javitEsemenyeken()`; az `update()` a javítást
+  visszamenőleg átvezeti az esemény-pillanatképeken. A `destroy()` már megvolt,
+  nem kellett hozzányúlni.
+- `js/modules/cases/cases-view.js` — „Ügy törlése" gomb + megerősítő
+  párbeszéd (`torlesMegerosites`); a javaslatlistából teljes dolgozólista
+  (`nyitottHosszabbitas`, `javaslatMeta`), a kereső erre is hat.
+- `css/cases.css` — `.cv-del` (jobb szélre húzott, piros ghost gomb).
+- `TERV-esemenyek.md` 3. — a szám-javítás szemantikája.
+
+**A hiba gyökere (2):** nem a mentés romlott el. **Minden esemény eltárolja,
+mi volt a szám a rögzítés pillanatában, és az idővonal EZT mutatja**, nem az
+ügy mezőjét. A törlés a mezőt kiürítette (ellenőrizve: `case.ehNumber` `""`
+lett és mentődött), a bejegyzések viszont hordozták tovább a régi értéket —
+így a képernyőn minden maradt a régiben. Az `update()` ezért mostantól átírja
+azokat a bejegyzéseket, amelyek a **korábbi értéket** mutatták. Amihez nem
+nyúl:
+- **üresről felvitt szám** — az tényleg később keletkezett (megjött az
+  iktatószám); visszamenőleg odaírva azt állítanánk, hogy már az ügy
+  megnyitásakor is megvolt. Az ilyen eset amúgy is új bejegyzést kap.
+- **eltérő értékű bejegyzés** — valódi történeti adat (két külön szám volt),
+  nem elírás.
+
+**Miért / döntés:**
+- **A törléshez nem kellett „visszaállítás" (1).** A bal sáv listája élőben a
+  nyitott ügyekből számol, ezért az ügy eltűnésével a dolgozó magától
+  visszakapja a napszámát — lemérve teszttel. Ami NEM áll vissza: a lezáráskor
+  rögzített azonosító a dolgozónál marad, ezt a párbeszéd ki is írja.
+- **A teljes lista a fül belépője (3).** Aki nem volt a 90 napos ablakban,
+  ahhoz erről a fülről nem lehetett hozzáférni — sem ügyet nyitni, sem az
+  EH-panelt megnyitni rá. A napszámot továbbra is a `suggestRenewals` adja
+  (`belul: Infinity`), akit az kihagy — nincs lejárata, vagy már van nyitott
+  meghosszabbítása —, azt utána fűzzük hozzá: így a sürgősség a lista elején
+  marad. A cím `Közelgő lejárat, nyitott ügy nélkül` → **`Dolgozók`**.
+- **Nyitott ügyű dolgozóra kattintva az ÜGY nyílik meg**, nem egy új —
+  különben egy kattintással duplán nyitnánk ugyanazt.
+- **A kereső mostantól a dolgozólistára is hat.** Teljes névsor mellett egy
+  keresőmező, ami csak az alatta lévő ügylistát szűkíti, félrevezető.
+
+**Tesztek:** `node test/run-all.js` zöld (`cases.test.js` 58 → 64). Hat új
+ellenőrzés: a törölt szám eltűnik az idővonalról, az elgépelt javítása átmegy
+a korábbi bejegyzéseken, az üresről felvitt NEM megy vissza, az eltérő értékű
+bejegyzés érintetlen, a törölt ügy dolgozója visszakerül a javaslatok közé,
+és nem létező ügy törlése nem hiba.
+
+**Nyitott / következő:** böngészőben nem próbáltam ki (a `file://`-s app itt
+nem futtatható). Első nyitáskor érdemes ránézni: a bal sáv listája most
+mindenkit hoz — ha sok a dolgozó, lehet, hogy a `.cv-suggest__list` 30vh-s
+korlátja szűk lesz, és érdemes megosztani a helyet az ügylistával.
+
 ## 2026-09-07 — Javaslatlista névsorban; a kézi EH-sorok elrejthetők
 
 **Cél:** két kérés az első éles használat után. (1) A „Közelgő lejárat,

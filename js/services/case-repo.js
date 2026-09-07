@@ -469,11 +469,19 @@ const CaseRepo = (() => {
    * Ha a kiváltó dátum változik és a határidőt nem írták felül kézzel, a
    * határidő magától újraszámolódik – különben egy elgépelt költözési dátum
    * javítása után a határidő a régi, hibás értéken maradna.
+   *
+   * Ugyanez az EH számra és az iktatószámra is áll, csak ott az esemény-
+   * pillanatképeken keresztül: minden bejegyzés eltárolja, mi volt a szám a
+   * rögzítés pillanatában, és az idővonal EZT mutatja. Javítás után tehát a
+   * mező már az új értéken állna, a képernyőn viszont továbbra is a régi
+   * látszana – „mentettem, mégis megmaradt". Lásd `javitEsemenyeken`.
    */
   function update(id, { dueAt, ehNumber, fileNumber, note, type, triggerDate } = {}) {
     ensureLoaded();
     const c = get(id);
     if (!c) throw new Error('Nincs ilyen ügy.');
+    const regiEh  = c.ehNumber;
+    const regiIkt = c.fileNumber;
 
     const next = Object.assign({}, c);
     if (triggerDate !== undefined) {
@@ -500,9 +508,33 @@ const CaseRepo = (() => {
     if (gondok.length) throw new Error(gondok.join(' '));
 
     Object.assign(c, next, { updatedAt: nowIso(), updatedBy: currentUserName() });
+    javitEsemenyeken(c, 'ehNumber',   regiEh,  c.ehNumber);
+    javitEsemenyeken(c, 'fileNumber', regiIkt, c.fileNumber);
     scheduleSave();
     emit();
     return c;
+  }
+
+  /**
+   * Egy szám JAVÍTÁSA visszamenőleg hat az esemény-pillanatképekre, a
+   * FELVITELE nem.
+   *
+   * A különbség nem formai. Ha egy elgépelt (vagy törölt) EH szám csak az ügy
+   * mezőjében változna, az idővonalon örökre ott maradna a régi érték —
+   * pontosan ez okozta a „töröltem, mentettem, mégis megmaradt" hibát. Ezért
+   * a korábbi értéket hordozó bejegyzések követik a javítást.
+   *
+   * Üresről indulva viszont NEM írunk vissza: ott a szám tényleg később
+   * keletkezett (megjött az iktatószám), és visszamenőleg odastemplizve azt
+   * állítanánk, hogy már az ügy megnyitásakor is megvolt. Az ilyen „most
+   * érkezett meg" eset amúgy is új bejegyzést kap a `setStatus`/`addEvent`-től.
+   *
+   * Az ELTÉRŐ régi értékű bejegyzésekhez sem nyúlunk: az valódi történeti adat
+   * (két külön szám volt), nem elírás.
+   */
+  function javitEsemenyeken(c, mezo, regi, uj) {
+    if (!regi || regi === uj) return;
+    for (const e of c.events) if (e[mezo] === regi) e[mezo] = uj;
   }
 
   /**
