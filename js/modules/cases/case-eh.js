@@ -24,6 +24,10 @@ const CaseEh = (() => {
     jogcim:   {},          // caseId → 'c7' | 'c9' | 'c12'
     masolt:   new Set(),   // 'caseId|eh'
     fokusz:   null,        // az utoljára fókuszált sor eh-neve
+    // A kézi sorok elrejthetők. Ezekre a panel semmit nem tud adni (nincs
+    // mögöttük adat), a ~180 sorból viszont 77 ilyen — ennyi zaj elfedi a
+    // munkát. Ez megjegyződik: aki elrejti, annak holnap is rejtve induljon.
+    keziRejtve: Settings.get('eh_hide_manual', false),
   };
 
   // ── Értékfeloldás ──────────────────────────────────────────────────────────
@@ -72,9 +76,30 @@ const CaseEh = (() => {
 
   // ── Megjelenítés ───────────────────────────────────────────────────────────
 
+  /**
+   * A kézi sorok nélkül. Az üresen maradó PANELCÍMEK is kimaradnak: cím alatt
+   * semmivel a rejtés félkésznek látszana.
+   *
+   * Hátulról előre megyünk, mert így a `out` utolsó eleme mindig az a sor,
+   * ami az eredeti sorrendben `r` UTÁN következik — ebből egy lépésben
+   * eldönthető, hogy a panel alatt maradt-e bármi.
+   */
+  function lathatoSorok(sorok) {
+    const out = [];
+    for (let i = sorok.length - 1; i >= 0; i--) {
+      const r = sorok[i];
+      if (r.manual) continue;
+      if (r.panel && (!out.length || out[out.length - 1].panel)) continue;
+      out.push(r);
+    }
+    return out.reverse();
+  }
+
   function render(ugy, emp) {
     const jogcim = state.jogcim[ugy.id] || '';
-    const sorok  = EhForms.rows(jogcim);
+    const mind   = EhForms.rows(jogcim);
+    const sorok  = state.keziRejtve ? lathatoSorok(mind) : mind;
+    const rejtve = mind.filter(r => r.manual).length;
     const feloldott = SchemaStore.resolveValues(emp.fields, 'hu');
 
     const valaszto = `
@@ -100,6 +125,10 @@ const CaseEh = (() => {
           ${valaszto}
           <span class="eh-hint" title="Tab: következő másolható mező · Enter: másol és továbblép · F2: szerkesztés · Esc: elvet">
             ${masolhato} másolható mező · Tab / Enter</span>
+          <button class="cv-filter eh-kezi${state.keziRejtve ? ' is-active' : ''}" type="button"
+                  id="eh-kezi" aria-pressed="${state.keziRejtve}"
+                  title="A kézzel töltendő sorok mögött nincs adat — a panel nem tud rájuk semmit adni">
+            ${state.keziRejtve ? `${rejtve} kézi mező rejtve` : 'Kézi mezők elrejtése'}</button>
         </div>
         <div class="eh-rows">${torzs}</div>
       </div>`;
@@ -176,6 +205,13 @@ const CaseEh = (() => {
     const valaszto = gyoker.querySelector('#eh-jogcim');
     if (valaszto) valaszto.addEventListener('change', () => {
       state.jogcim[ugy.id] = valaszto.value;
+      ujra();
+    });
+
+    const keziGomb = gyoker.querySelector('#eh-kezi');
+    if (keziGomb) keziGomb.addEventListener('click', () => {
+      state.keziRejtve = !state.keziRejtve;
+      Settings.set('eh_hide_manual', state.keziRejtve);
       ujra();
     });
 
@@ -300,5 +336,5 @@ const CaseEh = (() => {
     });
   }
 
-  return { render, bind, _state: state };
+  return { render, bind, _state: state, _lathatoSorok: lathatoSorok };
 })();

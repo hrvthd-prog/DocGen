@@ -1016,3 +1016,16 @@ görgetősáv nincs, az ügylista 522 px-en mutat 1680 px tartalmat, az EH-panel
 - **A fő űrlap 83 sor lett, nem 90.** A 8 `kicsikoru…` checkbox kimaradt: mind
   kézi jelölés, egyetlen adat sem tartozik hozzájuk. A `hozzatartozo1` sor
   viszont bekerült, innen a 83.
+
+### 12.5 A kézi sorok elrejthetők (utólag)
+
+Az első éles használat után derült ki, hogy a **kézi sorok zavarnak**. Nem
+kevés van belőlük: a c7-es kérelem 220 sorából **76 kézi**, és mögöttük
+semmi nincs — a panel nem tud rájuk mit adni, csak a helyet foglalják a
+másolható mezők között. A fejlécbe került egy kapcsoló (`eh_hide_manual`),
+ami kiveszi őket; a c7 így **220 → 129 sorra** rövidül.
+
+Az **üresen maradó panelcímeket** is elhagyjuk (36 → 21): cím alatt semmivel
+a rejtés félkésznek látszana. A másolható mezők száma nem változik — a kézi
+sorok eleve nem voltak sem másolhatók, sem a Tab-láncban —, tehát a rejtés
+**tisztán megjelenítés**, semmilyen munkafolyamatot nem rövidít le.

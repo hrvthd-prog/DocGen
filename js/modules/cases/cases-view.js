@@ -20,7 +20,16 @@ const CasesModule = (() => {
     // Az ügylista elrejthető. Egy kérelem előkészítése közben ritkán kell, a
     // helye viszont dokkolt (fél képernyős) ablakban a legdrágább.
     savZarva:   Settings.get('cases_side_collapsed', false),
+    // A közelgő lejáratok rendezése. A nap szerinti a kiindulás (az ég sürgősebb),
+    // de névsorban keresni is kell tudni, ha valakit név szerint keresünk.
+    javaslatRend: Settings.get('cases_suggest_sort', 'nap'),
   };
+
+  const RENDEZESEK = [
+    { key: 'nap',     label: 'nap szerint' },
+    { key: 'nev-fel', label: 'A → Z' },
+    { key: 'nev-le',  label: 'Z → A' },
+  ];
 
   const SZUROK = [
     { key: 'nyitott', label: 'Nyitott' },
@@ -271,9 +280,24 @@ const CasesModule = (() => {
     catch { return ''; }
     if (!javaslatok.length) return '';
 
+    // A CaseRepo nap szerint rendezve adja; a névsor a megjelenítés dolga.
+    const rend = RENDEZESEK.find(r => r.key === state.javaslatRend) || RENDEZESEK[0];
+    if (rend.key !== 'nap') {
+      const irany = rend.key === 'nev-fel' ? 1 : -1;
+      // A nevet egyszer kérjük el: a `dolgozoNeve` rekordot olvas és értéket
+      // old fel, összehasonlításonként újra megtenni pazarlás.
+      const nev = new Map(javaslatok.map(j => [j.employee.id, dolgozoNeve(j.employee.id)]));
+      javaslatok.sort((a, b) => irany *
+        nev.get(a.employee.id).localeCompare(nev.get(b.employee.id), 'hu'));
+    }
+
     return `
       <div class="cv-suggest">
-        <div class="cv-suggest__title">Közelgő lejárat, nyitott ügy nélkül (${javaslatok.length})</div>
+        <div class="cv-suggest__title">
+          <span>Közelgő lejárat, nyitott ügy nélkül (${javaslatok.length})</span>
+          <button class="cv-filter cv-suggest__sort" type="button" id="cv-suggest-sort"
+                  title="Rendezés váltása: nap szerint → A → Z → Z → A">${escHtml(rend.label)}</button>
+        </div>
         <div class="cv-suggest__list">
           ${javaslatok.map(j => `
             <button class="cv-suggest__item" data-new-for="${escHtml(j.employee.id)}">
@@ -305,6 +329,14 @@ const CasesModule = (() => {
 
     container.querySelectorAll('.cv-row').forEach(b => {
       b.addEventListener('click', () => { state.kivalasztott = b.dataset.id; render(); });
+    });
+
+    const rendGomb = q('#cv-suggest-sort');
+    if (rendGomb) rendGomb.addEventListener('click', () => {
+      const i = RENDEZESEK.findIndex(r => r.key === state.javaslatRend);
+      state.javaslatRend = RENDEZESEK[(i + 1) % RENDEZESEK.length].key;
+      Settings.set('cases_suggest_sort', state.javaslatRend);
+      render();
     });
 
     container.querySelectorAll('[data-new-for]').forEach(b => {

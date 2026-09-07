@@ -44,12 +44,13 @@ for (const [rel, name] of [
   ['../js/schema/schema-store.js', 'SchemaStore'],
   ['../js/schema/eh-forms.js', 'EhForms'],
   ['../js/services/settings-service.js', 'Settings'],
+  ['../js/modules/cases/case-eh.js', 'CaseEh'],
 ]) {
   let code = fs.readFileSync(path.join(__dirname, rel), 'utf8');
   code += `\nglobalThis.${name} = ${name};`;
   vm.runInContext(code, sandbox, { filename: rel });
 }
-const { EhForms, SchemaStore, SEED_SCHEMA, Settings } = sandbox;
+const { EhForms, SchemaStore, SEED_SCHEMA, Settings, CaseEh } = sandbox;
 sandbox.EH_EMPLOYER = sandbox.EhForms.EMPLOYER;
 const EMP = EhForms.EMPLOYER;
 
@@ -156,6 +157,36 @@ atest('a mentett érték felülírja az alapértelmezettet, az üres üres marad
   assertEq(Settings.ehContact().telefon, '');
   Settings.remove('eh_contact');
   assertEq(Settings.ehContact().email, Settings.EH_CONTACT_DEFAULT.email);
+});
+
+// ── Kézi sorok elrejtése ────────────────────────────────────────────────────
+asection('Kézi sorok elrejtése');
+
+// A ~180 sorból 77 kézi: mögöttük nincs adat, a panel nem tud rájuk semmit
+// adni. Elrejtve viszont könnyű üresen hagyni egy PANELCÍMET – az félkésznek
+// látszik. A szűrés hátulról előre megy, ezért érdemes rögzíteni, mit ad.
+atest('a kézi sorok kimaradnak, a többi sorrendje marad', () => {
+  const mind = EhForms.rows('c7');
+  const latszik = CaseEh._lathatoSorok(mind);
+  assert(!latszik.some(r => r.manual), 'kézi sor maradt a listában');
+  const varhato = mind.filter(r => !r.panel && !r.manual);
+  assertEq(JSON.stringify(latszik.filter(r => !r.panel).map(r => r.eh)),
+           JSON.stringify(varhato.map(r => r.eh)), 'az adatsorok sorrendje');
+});
+
+atest('nem marad üres panelcím', () => {
+  const latszik = CaseEh._lathatoSorok(EhForms.rows('c7'));
+  latszik.forEach((r, i) => {
+    if (!r.panel) return;
+    const kov = latszik[i + 1];
+    assert(kov && !kov.panel, `üresen maradt panel: ${r.panel}`);
+  });
+  assert(latszik.length, 'minden sor eltűnt');
+});
+
+atest('kézi sor nélküli listán semmit nem vesz el', () => {
+  const be = [{ panel: 'P' }, { eh: 'a', key: 'surname' }, { eh: 'b', const: 'x' }];
+  assertEq(CaseEh._lathatoSorok(be).length, 3);
 });
 
 // ── Cégadat: átmegy-e az EH saját validációján ──────────────────────────────
