@@ -235,8 +235,14 @@
 
 .cv-suggest { padding: 8px 12px; border-bottom: 1px solid var(--c-border); }
 .cv-suggest__title {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
   font-size: 10px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .04em; color: var(--c-amber); margin-bottom: 5px;
+}
+/* A rendezésváltó a `.cv-filter` pirula – a nagybetűsítést és a ritkítást
+   viszont a címtől örökölné, ott az „A → Z" szétesne. */
+.cv-suggest__sort {
+  flex: 0 0 auto; text-transform: none; letter-spacing: 0; font-weight: 400;
 }
 /* MIND a javaslat látszik, görgetve. A korlát azért `vh` és nem fix px:
    a sáv magassága a képernyőé. A 30% felső korlát hagyja, hogy a nyitott
@@ -281,6 +287,8 @@
 .eh-jogcim { display: flex; flex-direction: column; gap: 3px; flex: 1 1 260px; min-width: 0; }
 .eh-jogcim > span { font-size: 11px; color: var(--c-muted); }
 .eh-hint { font-size: 10px; color: var(--c-muted); padding-bottom: 5px; cursor: help; }
+/* A kézi sorok rejtése a fejléc jobb szélére kerül, a többitől elhúzva. */
+.eh-kezi { margin-left: auto; margin-bottom: 4px; }
 
 .eh-rows { padding: 0 0 20px; }
 

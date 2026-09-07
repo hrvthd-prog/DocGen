@@ -68,6 +68,51 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-09-07 — Javaslatlista névsorban; a kézi EH-sorok elrejthetők
+
+**Cél:** két kérés az első éles használat után. (1) A „Közelgő lejárat,
+nyitott ügy nélkül" lista ne csak a hátralévő napok szerint rendezzen, hanem
+névsorban is, mindkét irányban. (2) A kézzel töltendő EH-mezők legyenek egy
+gombbal teljesen eltüntethetők — így zavaróak.
+
+**Változás** (`v10.50`):
+- `js/modules/cases/cases-view.js` — `RENDEZESEK` (nap / A→Z / Z→A), a
+  javaslatlista fejlécébe egy körbeforgó pirula gomb. Az állapot
+  `Settings: cases_suggest_sort`.
+- `js/modules/cases/case-eh.js` — `lathatoSorok()`, a fejlécben kapcsoló;
+  állapot `Settings: eh_hide_manual`.
+- `css/cases.css` — a `.cv-suggest__title` flex sor lett (cím + gomb), a
+  `.cv-suggest__sort` visszaveszi a nagybetűsítést, az `.eh-kezi` a fejléc
+  jobb szélére húz. Új gombstílus nincs: mindkettő a meglévő `.cv-filter`.
+- `TERV-enterhungary.md` 12.5 — a rejtés indoklása és a mért számok.
+
+**Miért / döntés:**
+- **A rendezés a megjelenítés dolga, nem a `CaseRepo`-é.** A
+  `suggestRenewals` továbbra is nap szerint rendezve ad; a névsort a nézet
+  teszi rá. Egy körbeforgó gomb, nem három: három állapotnak egy vezérlő is
+  elég, és a felirat mindig megmondja, hol tartunk.
+- **A kézi sor ≡ `manual:` sor.** Lemértük: a 77 forrás nélküli sor pontosan
+  a `manual`-lel jelölt 77 — nincs olyan sor, ami véletlenül maradt forrás
+  nélkül, tehát a szűrés nem takar el hibát.
+- **Az üresen maradó panelcímek is kimaradnak** (c7: 36 → 21 panel). A szűrés
+  hátulról előre megy, mert így az „üres-e a panel" egy lépésben eldönthető.
+- A rejtés **tisztán megjelenítés**: a kézi sorok eleve nem voltak sem
+  másolhatók, sem a Tab-láncban, ezért a „N másolható mező" számláló nem
+  változik (mérve: 31 mindkét állapotban).
+- Mindkét beállítás **megjegyződik** — a `cases_side_collapsed` mintájára:
+  aki egyszer beállítja, annak holnap is úgy induljon.
+
+**Tesztek:** `node test/run-all.js` zöld. A `test/eh-forms.test.js` mostantól
+a `case-eh.js`-t is betölti (DOM nélkül is betölthető), és három ellenőrzés
+őrzi a `_lathatoSorok`-ot: nem marad kézi sor, nem marad üres panelcím, és
+kézi sor nélküli listán semmit nem vesz el. Fejléc nélküli füst-próba: a
+c7 220 → 129 sorra, a fő űrlap 84 → 48 sorra rövidül.
+
+**Nyitott / következő:** böngészőben egyik sem lett kipróbálva (a `file://`-s
+app itt nem futtatható) — az első nyitáskor érdemes ránézni a két gombra:
+a javaslatlista fejlécében a rendezés-pirulára, az EH-fejléc jobb szélén a
+„Kézi mezők elrejtése" gombra.
+
 ## 2026-09-07 — Az okmány átvétele: elérhetőség a Beállításokból
 
 **Cél:** az EH-panel „Az okmány átvétele" szekciójában az e-mail cím és a
