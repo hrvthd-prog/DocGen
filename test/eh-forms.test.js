@@ -30,17 +30,26 @@ const sandbox = {
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 
+// A `setting:` sorok a Settings-bol jonnek; ahhoz localStorage kell.
+const tarolo = new Map();
+sandbox.localStorage = {
+  getItem: k => (tarolo.has(k) ? tarolo.get(k) : null),
+  setItem: (k, v) => tarolo.set(k, String(v)),
+  removeItem: k => tarolo.delete(k),
+};
+
 for (const [rel, name] of [
   ['../js/schema/value-codec.js', 'ValueCodec'],
   ['../js/schema/seed-schema.js', 'SEED_SCHEMA'],
   ['../js/schema/schema-store.js', 'SchemaStore'],
   ['../js/schema/eh-forms.js', 'EhForms'],
+  ['../js/services/settings-service.js', 'Settings'],
 ]) {
   let code = fs.readFileSync(path.join(__dirname, rel), 'utf8');
   code += `\nglobalThis.${name} = ${name};`;
   vm.runInContext(code, sandbox, { filename: rel });
 }
-const { EhForms, SchemaStore, SEED_SCHEMA } = sandbox;
+const { EhForms, SchemaStore, SEED_SCHEMA, Settings } = sandbox;
 sandbox.EH_EMPLOYER = sandbox.EhForms.EMPLOYER;
 const EMP = EhForms.EMPLOYER;
 
@@ -102,12 +111,12 @@ atest('`max` csak másolható soron van, `list` mellett soha', () => {
   }
 });
 
-atest('a fő űrlapon 31 másolható és 10 listás DB-s mező van', () => {
+atest('a fő űrlapon 29 másolható és 10 listás DB-s mező van', () => {
   const dbs = FO.filter(r => r.key);
-  // A 31. a hozzátartozó-sor (`hr_children`): az EH nyolcszor 19 rovatot kér,
+  // A 29. a hozzátartozó-sor (`hr_children`): az EH nyolcszor 19 rovatot kér,
   // a DB egy szabad szöveget tárol. Másolhatónak hagyjuk – a szétbontás kézi,
   // de a nyers szöveg vágólapra tehető.
-  assertEq(dbs.filter(r => !r.list).length, 31, 'másolható DB-s mező');
+  assertEq(dbs.filter(r => !r.list).length, 29, 'másolható DB-s mező');
   assertEq(dbs.filter(r => r.list).length, 10, 'listás DB-s mező');
 });
 
@@ -124,6 +133,29 @@ atest('a jogcím-szűrés kihagyja az idegen sorokat', () => {
 
 atest('jogcím nélkül csak a fő űrlap jön', () => {
   assertEq(EhForms.rows('').filter(r => r.eh).length, FO.length);
+});
+
+// ── Beállításból jövő sorok ─────────────────────────────────────────────────
+asection('Beállításból jövő elérhetőség');
+
+// Az „Az okmány átvétele" panel e-mail/telefon rovata az ÜGYINTÉZŐÉ, nem a
+// munkavállalóé — a Beállítások fülről jön. Ha a sor `setting:` neve és a
+// `Settings.ehContact()` kulcsai elcsúsznak, a panel némán üreset másolna.
+atest('minden `setting` név értéket ad a Beállításokból', () => {
+  const c = Settings.ehContact();
+  const sorok = MIND.filter(r => r.setting);
+  assert(sorok.length, 'nincs `setting:` sor — elmaradt a bekötés?');
+  for (const r of sorok) {
+    assert(c[r.setting], `a Settings.ehContact() nem ismeri: ${r.setting} (${r.eh})`);
+  }
+});
+
+atest('a mentett érték felülírja az alapértelmezettet, az üres üres marad', () => {
+  Settings.setEhContact({ email: 'a@b.hu', telefon: '' });
+  assertEq(Settings.ehContact().email, 'a@b.hu');
+  assertEq(Settings.ehContact().telefon, '');
+  Settings.remove('eh_contact');
+  assertEq(Settings.ehContact().email, Settings.EH_CONTACT_DEFAULT.email);
 });
 
 // ── Cégadat: átmegy-e az EH saját validációján ──────────────────────────────

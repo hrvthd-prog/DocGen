@@ -30,6 +30,7 @@
  *   employer  a EH_EMPLOYER blokk útvonala (cégadat)
  *   const     minden kérelemnél ugyanaz az érték
  *   fromCase  az ügyből jövő érték
+ *   setting   a Beállítások fülön megadott érték (Settings.ehContact)
  *   manual    nincs a DB-ben, kézzel töltendő
  *   list      listás mező; az értéke a soron megjelenő tipp, vagy `true`
  *   dict      a szótár fordítsa magyarra
@@ -249,9 +250,10 @@ const EhForms = (() => {
       key: 'employment_end', unsure: true },
 
     { panel: 'Az okmány átvétele' },
-    { eh: 'email', label: 'div class="ub col-sm-6 col-md-3 col-xl-2">', req: true,
-      key: 'email' },
-    { eh: 'telefon', label: 'telefonszám', key: 'telephone' },
+    { eh: 'email', label: 'e-mail cím', req: true, setting: 'email',
+      note: 'az ügyintézőé — a Beállítások fülön állítható' },
+    { eh: 'telefon', label: 'telefonszám', setting: 'telefon',
+      note: 'az ügyintézőé — a Beállítások fülön állítható' },
     { eh: 'atvetel', label: 'Az okmány átvétele', req: true,
       const: 'A kérelmező az okmányt a kiállító hatóságnál veszi át', list: true },
     { eh: 'atvetel_cim', label: 'Postai kézbesítés címe', manual: true, list: true },

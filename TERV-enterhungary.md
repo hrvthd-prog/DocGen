@@ -63,7 +63,9 @@ nincs megfeleltetési tábla. A panel megmutatja a tárolt értéket magyarul
 és ennyi.
 
 **Számokban** (a kész leírásból mérve, `test/eh-forms.test.js` őrzi): a fő
-űrlap 41 DB-s mezőjéből **31 másolható és 10 listás**; a munkavállalási lapon
+űrlap 39 DB-s mezőjéből **29 másolható és 10 listás** (az okmány átvételéhez
+tartozó e-mail és telefon a Beállításokból jön, nem a nyilvántartásból);
+a munkavállalási lapon
 6 vs. 6; a cégadat-blokkban 33 vs. 10. Egy teljes kérelem (fő űrlap + c7)
 **70 másolható mezőt** ad. A munka háromnegyede tehát oda megy, ahol számít.
 
@@ -272,8 +274,8 @@ formában — a szétbontás kézi marad. Lásd 11.
 | `schengeniokmany`, `engedelytipus`, `engdszama`, `engedelyerv` | schengeni okmány | — |
 | `korabbielut`, `korabbibuntetes`, `orszag`, `korabbibuntetesdatum`, `bunticselekmenyleiras`, `buntileirasa`, `korabbikiut`, `korabbikiutdatum`, `beteg`, `reszesulkezelesben`, `kijelentemgyerek`, `kicsikoru1…8` | egyéb adatok | — |
 | `meddig` | meddig kérelmezi a tartózkodást | → `employment_end` ⚠ M5 |
-| `email` | e-mail cím | → `email` |
-| `telefon` | telefonszám | → `telephone` |
+| `email` | e-mail cím | beáll. `eh_contact.email` |
+| `telefon` | telefonszám | beáll. `eh_contact.telefon` |
 | `atvetel` | az okmány átvétele | áll. `atvetel_hivatal` |
 | `atvetel_cim` | postai kézbesítés címe | — |
 | `nyilatkozat1`, `nyilatkozat2` | nyilatkozat | áll. bepipálva |
@@ -433,6 +435,7 @@ Egy sor kulcsai — **nyolc, több nem kell**:
 | `employer` | a `EH_EMPLOYER` blokk kulcsa (cégadat) |
 | `req` | az EH-n `*`-gal jelölt kötelező mező |
 | `const` / `manual` / `fromCase` | konstans érték, kézi mező, ügyből jövő érték |
+| `setting` | a Beállítások fülön megadott érték (`Settings.ehContact()`) |
 | `max` | az EH `maxlength`-je — **csak másolható mezőn**, a hosszjelzéshez |
 | `list` | ha jelen van: **listás mező**, nincs másoló gomb. Az értéke a soron megjelenő egymondatos tipp („melléknévi alak a listából") vagy `true` |
 | `dict` | a szótár fordítsa magyarra (M1, M3) |

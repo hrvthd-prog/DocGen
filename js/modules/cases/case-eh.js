@@ -39,6 +39,7 @@ const CaseEh = (() => {
   function ertekOf(row, emp, feloldott, ugy) {
     if (row.const)    return { text: row.const,    fajta: 'const' };
     if (row.employer) return { text: EhForms.employerValue(row.employer), fajta: 'ceg' };
+    if (row.setting)  return { text: Settings.ehContact()[row.setting] || '', fajta: 'beallitas' };
     if (row.fromCase) return { text: ugybolErtek(row, ugy), fajta: 'ugy' };
     if (!row.key)     return { text: '', fajta: 'kezi' };
 
@@ -91,7 +92,7 @@ const CaseEh = (() => {
       : sorHtml(r, ertekOf(r, emp, feloldott, ugy), ugy.id)).join('');
 
     const masolhato = sorok.filter(r =>
-      r.eh && !r.list && !r.manual && (r.key || r.employer || r.const || r.fromCase)).length;
+      r.eh && !r.list && !r.manual && (r.key || r.employer || r.const || r.fromCase || r.setting)).length;
 
     return `
       <div class="eh-wrap" id="eh-wrap">

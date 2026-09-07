@@ -85,6 +85,8 @@ const SettingsModule = (() => {
             </div>
           </div>
 
+          ${ehKapcsolatKartya()}
+
           ${verzioKartya()}
         </div>
       </div>`;
@@ -93,11 +95,57 @@ const SettingsModule = (() => {
     document.getElementById('sv-xlsx').addEventListener('change', onXlsxPicked);
     document.getElementById('sv-dict-save').addEventListener('click', saveDictionary);
     document.getElementById('sv-dict-scan').addEventListener('click', showMissingPairs);
+    document.getElementById('sv-eh-save').addEventListener('click', mentEhKapcsolat);
     // A kurzor helye kattintásra és nyilazásra is változik, nem csak gépelésre
     ['input', 'click', 'keyup'].forEach(ev =>
       document.getElementById('sv-dict').addEventListener(ev, renderDictPreview));
     renderFieldList();
     renderDictionary();
+  }
+
+  // ── Enter Hungary: okmány átvétele ─────────────────────────────────────────
+
+  /**
+   * Az EH „Az okmány átvétele" panelján az ÜGYINTÉZŐ elérhetősége megy fel,
+   * nem a munkavállalóé — ezért nem a nyilvántartásból jön, hanem innen, egy
+   * helyről. Az Ügyek fül kitöltés-segédje ezt az értéket teszi másolhatóvá.
+   */
+  function ehKapcsolatKartya() {
+    const c = Settings.ehContact();
+    return `
+      <div class="ws-card">
+        <div class="ws-card-header">
+          <span class="ws-card-title">Enter Hungary — okmány átvétele</span>
+        </div>
+        <div class="ws-card-body">
+          <p class="sv-intro">
+            Az EH „Az okmány átvétele" panelján minden kérelemnél ez az e-mail cím
+            és telefonszám megy fel: az ügyintézőé, nem a munkavállalóé. Az Ügyek
+            fül kitöltés-segédje innen veszi a másolható értéket.
+          </p>
+          <div class="sv-form">
+            <label class="ef-field">
+              <span class="ef-label">E-mail cím</span>
+              <input type="text" class="field-input" id="sv-eh-email" value="${escHtml(c.email)}">
+            </label>
+            <label class="ef-field">
+              <span class="ef-label">Telefonszám</span>
+              <input type="text" class="field-input" id="sv-eh-tel" value="${escHtml(c.telefon)}">
+            </label>
+          </div>
+          <div class="sv-toolbar">
+            <button class="btn btn-primary btn-sm" id="sv-eh-save">Elérhetőség mentése</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function mentEhKapcsolat() {
+    Settings.setEhContact({
+      email:   document.getElementById('sv-eh-email').value,
+      telefon: document.getElementById('sv-eh-tel').value,
+    });
+    toast('✓ Elérhetőség mentve', 'success');
   }
 
   /**

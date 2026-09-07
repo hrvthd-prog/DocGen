@@ -68,6 +68,43 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-09-07 — Az okmány átvétele: elérhetőség a Beállításokból
+
+**Cél:** az EH-panel „Az okmány átvétele" szekciójában az e-mail cím és a
+telefonszám ne munkavállalónként jöjjön a nyilvántartásból, hanem egy helyen,
+a Beállítások fülön legyen megadható.
+
+**Változás** (`v10.49`):
+- `js/services/settings-service.js` — `ehContact()` / `setEhContact()`,
+  `eh_contact` kulcson. Alapértelmezett: `daniel.horvath@aumovio.com` és
+  `+36205799979`.
+- `js/schema/eh-forms.js` — új sorkulcs: `setting`. Az `email` és a `telefon`
+  sor `key: 'email'` / `key: 'telephone'` helyett `setting`-ből jön.
+- `js/modules/cases/case-eh.js` — `ertekOf` feloldja a `setting` sorokat
+  (`fajta: 'beallitas'`); a fejléc „N másolható mező" számlálója is ismeri.
+- `js/modules/settings/settings-view.js` — új kártya („Enter Hungary — okmány
+  átvétele") két mezővel és mentés gombbal. Nincs új CSS: a meglévő
+  `sv-form` / `ef-field` osztályok.
+
+**Miért / döntés:**
+- **Az ügyintézőé, nem a munkavállalóé.** Az okmányról szóló értesítést az
+  ügyet vivő kapja, ezért adatkörileg sem a nyilvántartásba való — külön
+  sorkulcs (`setting`) tisztább, mint egy munkavállalói mező felülírása.
+- **Üresre törölt mező üres marad**; csak a soha nem mentett esik vissza az
+  alapértelmezettre. A szándékos törlést nem írjuk felül.
+- Az `email` sor címkéje eddig egy elrontott scrape-maradék volt
+  (`div class="ub col-sm-6…"`), most `e-mail cím`. Csak a látható címke
+  változott, az `eh` horgony nem.
+
+**Tesztek:** `node test/run-all.js` zöld. A `test/eh-forms.test.js` sandboxa
+mostantól a `settings-service.js`-t is betölti (localStorage-pótlékkal), és
+őrzi, hogy minden `setting:` név feloldható; a másolható DB-s mezők száma
+31 → 29 (a két sor kikerült a nyilvántartásból).
+
+**Nyitott / következő:** a Beállítások fülön böngészőben nem próbáltam ki
+(a `file://`-s app nem futtatható itt) — az első élesben nyitáskor érdemes
+ránézni a kártyára és egy mentésre.
+
 ## 2026-09-04 — Enter Hungary kitöltés-segéd: terv + megvalósítás
 
 **Cél:** az EH űrlap kitöltése ma két ablak közti fejből-másolás. Kérés: az
