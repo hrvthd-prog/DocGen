@@ -76,6 +76,17 @@ case {
 Az `events[]` a **teljes állapotváltozás-történet**. Ebből visszakereshető, mikor
 mi történt, és ki rögzítette — ez hatósági ügyintézésnél nem luxus.
 
+> **JAVÍTVA — a szám JAVÍTÁSA nem történeti tény.** Minden bejegyzés eltárolja,
+> mi volt az EH szám és az iktatószám a rögzítés pillanatában, és az idővonal
+> EZT mutatja, nem az ügy mezőjét. Ebből az következett, hogy egy elgépelt (vagy
+> törölt) szám javítása után a mező már jó volt, a képernyőn viszont maradt a
+> régi: „töröltem, mentettem, mégis megmaradt". A `CaseRepo.update` ezért
+> visszamenőleg átírja azokat a bejegyzéseket, amelyek a **korábbi értéket**
+> hordozták. Amihez NEM nyúl: (a) az üresről most felvitt szám — az tényleg
+> később keletkezett, visszamenőleg odaírva azt állítanánk, hogy már az ügy
+> megnyitásakor is megvolt; (b) az eltérő értékű bejegyzés — az valódi történeti
+> adat, nem elírás.
+
 > **JAVÍTVA — két időpont kell, nem egy.** Eredetileg csak `at` volt: a
 > rögzítés pillanata. Csakhogy a valóságban napokkal később visszük fel, hogy
 > „múlt kedden megjött a hiánypótlási felhívás" — így az idővonal a **gépelés**

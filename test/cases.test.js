@@ -495,6 +495,61 @@ atest('státuszváltáskor is megadható – gyakran ekkor derül ki', async () 
   assertEq(u.events[1].fileNumber, 'IKT-999/2026', 'az esemény nem őrizte meg');
 });
 
+// Miért itt: minden esemény ELTÁROLJA, mi volt a szám a rögzítés pillanatában,
+// és az idővonal EZT mutatja — nem az ügy mezőjét. Javítás után tehát a mező
+// már jó, a képernyőn mégis a régi érték maradna („töröltem, mentettem, mégis
+// megmaradt"). Ezek a tesztek a javítás visszamenőleges hatását őrzik.
+atest('a törölt EH szám az idővonalról is eltűnik', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', ehNumber: 'EH18506859' });
+  CaseRepo.setStatus(ugy.id, 'beadva', { note: 'beadva' });
+
+  CaseRepo.update(ugy.id, { ehNumber: '' });
+  const u = CaseRepo.get(ugy.id);
+  assertEq(u.ehNumber, '');
+  assertEq(u.events.filter(e => e.ehNumber).length, 0, 'esemény-pillanatkép őrzi a törölt számot');
+  assertEq(CaseRepo.timeline(u, {}).filter(p => p.ehNumber).length, 0, 'az idővonalon még látszik');
+});
+
+atest('az elgépelt szám javítása a korábbi bejegyzéseken is átmegy', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', fileNumber: 'IKT-9999/2026' });
+  CaseRepo.setStatus(ugy.id, 'beadva', { note: 'beadva' });
+
+  CaseRepo.update(ugy.id, { fileNumber: 'IKT-1234/2026' });
+  const u = CaseRepo.get(ugy.id);
+  assert(u.events.every(e => e.fileNumber === 'IKT-1234/2026'), 'maradt régi értékű bejegyzés');
+});
+
+atest('az ÜRESRŐL felvitt szám NEM kerül vissza a régi bejegyzésekre', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso' });
+
+  // Az iktatószám a beadáskor keletkezik: visszamenőleg odaírva azt állítanánk,
+  // hogy már az ügy megnyitásakor is megvolt.
+  CaseRepo.update(ugy.id, { fileNumber: 'IKT-1234/2026' });
+  const u = CaseRepo.get(ugy.id);
+  assertEq(u.fileNumber, 'IKT-1234/2026');
+  assertEq(u.events[0].fileNumber, '', 'visszamenőleg odaírta a később keletkezett számot');
+});
+
+atest('a más értékű korábbi bejegyzéshez nem nyúl', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', ehNumber: 'EH-REGI' });
+  // A státuszváltás ÚJ számot rögzít: innentől ez az ügy aktuális száma, a
+  // megnyitáskori „EH-REGI" pedig valódi történeti adat.
+  CaseRepo.setStatus(ugy.id, 'beadva', { note: 'x', ehNumber: 'EH-MASIK' });
+
+  CaseRepo.update(ugy.id, { ehNumber: 'EH-UJ' });
+  const u = CaseRepo.get(ugy.id);
+  assertEq(u.events[0].ehNumber, 'EH-REGI', 'valódi történeti értéket írt felül');
+  assertEq(u.events[1].ehNumber, 'EH-UJ',   'az aktuális értékű bejegyzés nem követte a javítást');
+});
+
 atest('EH számra és iktatószámra lehet keresni', async () => {
   await tisztaAllapot();
   const emp = ujDolgozo();
@@ -504,6 +559,29 @@ atest('EH számra és iktatószámra lehet keresni', async () => {
   assertEq(CaseRepo.search('aaa-111').length, 1);
   assertEq(CaseRepo.search('bbb-222').length, 1);
   assertEq(CaseRepo.search('nincsilyen').length, 0);
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+asection('Ügy törlése');
+
+atest('a törölt ügy eltűnik, a dolgozó visszakerül a lejárók közé', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo({ expiration_of_rp: '2027-03-01' });
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas' });
+
+  // Nyitott meghosszabbítással a dolgozó KIMARAD a javaslatokból…
+  assertEq(CaseRepo.suggestRenewals([emp], { belul: 400, ma: '2027-01-01' }).length, 0);
+
+  assertEq(CaseRepo.destroy(ugy.id), true);
+  assertEq(CaseRepo.get(ugy.id), null, 'az ügy megmaradt');
+  // …a törléssel viszont magától visszakerül – nincs mit külön visszaállítani.
+  assertEq(CaseRepo.suggestRenewals([emp], { belul: 400, ma: '2027-01-01' }).length, 1,
+    'a dolgozó nem került vissza a lejárók közé');
+});
+
+atest('nem létező ügy törlése nem hiba, csak nem csinál semmit', async () => {
+  await tisztaAllapot();
+  assertEq(CaseRepo.destroy('nincs-ilyen'), false);
 });
 
 // ════════════════════════════════════════════════════════════════════════════

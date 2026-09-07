@@ -263,21 +263,54 @@ const CasesModule = (() => {
       <div class="cv-actions">
         <button class="btn btn-ghost btn-sm" id="cv-edit">Adatok szerkesztése</button>
         ${c.closedAt ? '' : '<button class="btn btn-primary btn-sm" id="cv-advance">Státusz rögzítése</button>'}
+        <button class="btn btn-ghost btn-sm cv-del" id="cv-delete">Ügy törlése</button>
       </div>`;
   }
 
+  /** A dolgozó nyitott meghosszabbítási ügye, ha van. */
+  function nyitottHosszabbitas(employeeId) {
+    try {
+      return CaseRepo.forEmployee(employeeId)
+        .find(c => !c.closedAt && c.type === 'rp_hosszabbitas') || null;
+    } catch { return null; }
+  }
+
   /**
-   * Közelgő lejáratok, amikre még nincs nyitott meghosszabbítási ügy.
-   * Csak felvet – nem hoz létre semmit magától.
+   * A bal sáv dolgozó-listája — MINDENKI, nem csak a 90 napon belül lejárók.
    *
-   * MIND látszik, görgethető listában. Korábban csak az első 5, alatta egy
-   * „és további N" sor – abból viszont nem lehetett dolgozni: aki a hatodik
-   * volt, arról csak annyi derült ki, hogy létezik.
+   * Korábban csak a közelgő lejáratok látszottak. Aki nem volt köztük, ahhoz
+   * erről a fülről nem lehetett hozzáférni: sem ügyet nyitni, sem az EH-panelt
+   * megnyitni rá — pedig ez a lista a fül belépője. A sürgősség így sem vész
+   * el: a nap szerinti rendezés a legközelebbi lejárattal kezd, a lejárat
+   * nélküliek a sor végére kerülnek.
+   *
+   * A napszámot a `suggestRenewals` adja (ugyanaz a dátumszámítás, mint eddig);
+   * akit az kihagy — nincs lejárata, vagy már van nyitott meghosszabbítása —,
+   * azt utána fűzzük hozzá. Nyitott ügyű dolgozóra kattintva az ÜGY nyílik meg,
+   * nem egy új: különben egy kattintással duplán nyitnánk ugyanazt.
    */
   function javaslatokHtml() {
+    let mind = [];
+    try { mind = EmployeeRepo.all(); } catch { return ''; }
+
     let javaslatok = [];
-    try { javaslatok = CaseRepo.suggestRenewals(EmployeeRepo.all(), { belul: 90 }); }
-    catch { return ''; }
+    try { javaslatok = CaseRepo.suggestRenewals(mind, { belul: Infinity }); }
+    catch { javaslatok = []; }
+
+    // A hozzáfűzés sorrendje adja a nap szerinti rendezést: a `suggestRenewals`
+    // lejárat szerint rendezve ad, a napszám nélküliek utánuk kerülnek.
+    const megvan = new Set(javaslatok.map(j => j.employee.id));
+    for (const emp of mind) {
+      if (megvan.has(emp.id)) continue;
+      javaslatok.push({ employee: emp, daysLeft: null, nyitottUgy: nyitottHosszabbitas(emp.id) });
+    }
+
+    // A keresőmező eddig csak az ügylistára hatott. Teljes névsor mellett ez
+    // zavaró: aki nevet gépel, azt várja, hogy ez a lista is szűküljön.
+    if (state.kereses) {
+      const needle = state.kereses.toLowerCase();
+      javaslatok = javaslatok.filter(j => dolgozoNeve(j.employee.id).toLowerCase().includes(needle));
+    }
     if (!javaslatok.length) return '';
 
     // A CaseRepo nap szerint rendezve adja; a névsor a megjelenítés dolga.
@@ -294,18 +327,89 @@ const CasesModule = (() => {
     return `
       <div class="cv-suggest">
         <div class="cv-suggest__title">
-          <span>Közelgő lejárat, nyitott ügy nélkül (${javaslatok.length})</span>
+          <span>Dolgozók (${javaslatok.length})</span>
           <button class="cv-filter cv-suggest__sort" type="button" id="cv-suggest-sort"
                   title="Rendezés váltása: nap szerint → A → Z → Z → A">${escHtml(rend.label)}</button>
         </div>
         <div class="cv-suggest__list">
           ${javaslatok.map(j => `
-            <button class="cv-suggest__item" data-new-for="${escHtml(j.employee.id)}">
+            <button class="cv-suggest__item" ${j.nyitottUgy
+                ? `data-open-case="${escHtml(j.nyitottUgy.id)}" title="Nyitott meghosszabbítási ügy — megnyitás"`
+                : `data-new-for="${escHtml(j.employee.id)}" title="Új ügy nyitása"`}>
               <span class="cv-suggest__nev">${escHtml(dolgozoNeve(j.employee.id))}</span>
-              <span class="cv-suggest__days">${j.daysLeft < 0 ? `${-j.daysLeft} napja lejárt` : `${j.daysLeft} nap`}</span>
+              <span class="cv-suggest__days">${escHtml(javaslatMeta(j))}</span>
             </button>`).join('')}
         </div>
       </div>`;
+  }
+
+  /** A soron jobbra álló szöveg: a hátralévő napok, vagy ami helyettük áll. */
+  function javaslatMeta(j) {
+    if (j.daysLeft == null) return j.nyitottUgy ? 'nyitott ügy' : 'nincs lejárat';
+    return j.daysLeft < 0 ? `${-j.daysLeft} napja lejárt` : `${j.daysLeft} nap`;
+  }
+
+  // ── Törlés ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Ügy végleges törlése.
+   *
+   * A dolgozót nem kell külön „visszaállítani" a lejárók közé: a bal sáv
+   * listája a NYITOTT ügyekből számol élőben, ezért az ügy eltűnésével a
+   * dolgozó magától visszakapja a napszámát. Ami viszont NEM áll vissza, azt
+   * ki kell írni — a lezáráskor rögzített új azonosító a dolgozónál marad.
+   */
+  function torlesMegerosites(caseId) {
+    const c = CaseRepo.get(caseId);
+    if (!c) { toast('Az ügy nem található', 'error'); return; }
+
+    const nev  = dolgozoNeve(c.employeeId);
+    const db   = (c.events || []).length;
+    const lejar = (dolgozoMezoi(c.employeeId) || {}).expiration_of_rp;
+
+    showDialog({
+      title: 'Ügy végleges törlése',
+      body: `
+        <p style="font-size:13px;margin-bottom:10px">
+          Biztosan véglegesen törlöd <b>${escHtml(nev)}</b>
+          „${escHtml(CaseTypes.label(c.type))}" ügyét?
+        </p>
+        <ul class="sv-warn-list">
+          <li><b>${db}</b> idővonal-bejegyzés elvész — köztük a rögzített
+              státuszváltások és a hozzájuk fűzött megjegyzések.</li>
+          ${c.producedId ? `<li>A lezáráskor rögzített azonosító
+              (<b>${escHtml(c.producedId.value)}</b>) <b>a dolgozónál marad</b> —
+              a törlés nem vonja vissza. Ha az is hibás, a Nyilvántartás fülön
+              javítsd.</li>` : ''}
+          ${lejar && !c.closedAt && c.type === 'rp_hosszabbitas'
+            ? `<li>${escHtml(nev)} visszakerül a lejáró engedélyesek közé
+                 (${escHtml(lejar)}), és újra nyitható rá ügy.</li>` : ''}
+        </ul>
+        <p class="ef-hint">
+          A törlés a <code>data/backup/</code> mappából állítható vissza,
+          ha adatmappát használsz.
+        </p>`,
+      footer: `
+        <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Mégse</button>
+        <button class="btn btn-danger btn-sm" id="cv-delete-confirm">Végleges törlés</button>`,
+    });
+
+    document.getElementById('cv-delete-confirm').addEventListener('click', async () => {
+      try {
+        CaseRepo.destroy(caseId);
+        await CaseRepo.flush();
+        closeDialog();
+        BevLogger.info('UGY_TORLES', `Ügy törölve: ${nev} – ${CaseTypes.label(c.type)}`,
+                       '', `esemenyek=${db}`);
+        // A kijelölés a törölt ügyre mutatna: a részletező „már nem létezik"-et
+        // írna ki, ami zavaróbb, mint az üres állapot.
+        state.kivalasztott = null;
+        toast('✓ Ügy törölve', 'success');
+        render();
+      } catch (e) {
+        toast('A törlés nem sikerült: ' + e.message, 'error');
+      }
+    });
   }
 
   // ── Események ──────────────────────────────────────────────────────────────
@@ -339,6 +443,10 @@ const CasesModule = (() => {
       render();
     });
 
+    container.querySelectorAll('[data-open-case]').forEach(b => {
+      b.addEventListener('click', () => { state.kivalasztott = b.dataset.openCase; render(); });
+    });
+
     container.querySelectorAll('[data-new-for]').forEach(b => {
       b.addEventListener('click', () => CaseForm.open({
         employeeId: b.dataset.newFor, type: 'rp_hosszabbitas',
@@ -355,6 +463,9 @@ const CasesModule = (() => {
     if (szerk) szerk.addEventListener('click', () => CaseForm.open({
       caseId: state.kivalasztott, onSaved: () => render(),
     }));
+
+    const torol = q('#cv-delete');
+    if (torol) torol.addEventListener('click', () => torlesMegerosites(state.kivalasztott));
 
     const lep = q('#cv-advance');
     if (lep) lep.addEventListener('click', () => CaseForm.openStatus({
