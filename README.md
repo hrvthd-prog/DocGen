@@ -231,16 +231,29 @@ megy haza az ember, tehát az **állampolgárság** eldönti. A séma ezt szabá
 { key: 'transport_type', type: 'computed',
   computed: {
     from: ['citizenship'],
-    lookup: { bus: ['Ausztria', 'Szlovákia', 'Ukrajna', 'Románia',
-                    'Szerbia', 'Horvátország', 'Szlovénia'] },
+    lookup: { bus: ['Ukrajna', 'ukrán', 'Ukraine', 'Ukrainian',
+                    'Szlovákia', 'szlovák', 'Slovakia', 'Slovak', …] },
     default: 'airplane',
   } }
 ```
 
 Az ilyen mező **nem kerül ki az adatbekérőbe** (nincs értelme megkérdezni), a
 kimenete pedig a szótáron megy át, mint bármelyik szabad szöveg. Ha nincs
-forrásadat, üres marad — nem találgatunk. Új küldő ország felvételéhez a
-**Beállítások → Séma** lapon kell bővíteni a listát.
+forrásadat, üres marad — nem találgatunk.
+
+**A listában minden alaknak szerepelnie kell, ahogyan az adat érkezhet** —
+országnév és melléknév, magyarul és angolul is. Az illesztés nem tippel:
+korábban csak a magyar országnév (`Ukrajna`) szerepelt, ezért az „ukrán"
+állampolgárságú dolgozó némán a `default`-ot, vagyis **repülőt** kapott.
+Amit a lista nem ismer, az nem hiba, hanem csendben az alapértelmezés.
+
+> A **szótári pár is illeszkedik**: aki „Ukraine"-t írt, ugyanoda tartozik,
+> mint aki „Ukrajná"-t — így egy szótárbővítés a szabályon is segít.
+
+**Kalibrálás:** a lista a **Beállítások → Séma → az adott mező „Szerkesztés"**
+gombjánál bővíthető (Szabály — melyik kimenethez mely értékek tartoznak), ha új
+küldő ország jön. A saját kalibrálást a program frissítése nem írja felül: a
+kódból csak azt a szabályt hozza fel, amihez senki nem nyúlt hozzá.
 
 Hogy egy mezőnek pontosan mi a jelölője, a **Beállítások → Séma** fülön látszik.
 Amire nem volt adat, azt a *Hiányzó adatok naplója* utólag is megmutatja.

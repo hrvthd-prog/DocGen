@@ -399,6 +399,13 @@ const SettingsModule = (() => {
                     cim: `{{${f.key}_en}} — másolás vágólapra` }];
   }
 
+  /** A származtatási szabály forrásmezőjének magyar neve – a szerkesztő súgójához. */
+  function forrasCimke(f) {
+    const kulcs = ((f.computed || {}).from || [])[0] || '';
+    const forras = kulcs ? SchemaStore.field(kulcs) : null;
+    return forras ? forras.label.hu : kulcs;
+  }
+
   function renderFieldRow(f) {
     const ford = FORDITAS[f.type] || { rovid: f.type, teljes: '' };
 
@@ -493,6 +500,24 @@ const SettingsModule = (() => {
           ${f && f.type === 'computed' ? `
             <p class="ef-hint sv-wide">Ez egy számított mező (${escHtml(f.computed.from.join(' + '))}),
                a típusa nem módosítható itt.</p>` : ''}
+          ${f && f.type === 'computed' && f.computed.lookup ? `
+            <div class="sv-wide" id="fd-rule-wrap">
+              <span class="ef-label">Szabály — melyik kimenethez mely értékek tartoznak</span>
+              <p class="ef-hint">
+                Balra a KIMENET (ez kerül a dokumentumba, a szótáron át magyarul),
+                jobbra a(z) „${escHtml(forrasCimke(f))}" elfogadott értékei vesszővel.
+                Írj be minden alakot, ahogyan érkezhet — országnevet és melléknevet,
+                magyarul és angolul is (Ukrajna, ukrán, Ukraine, Ukrainian):
+                az illesztés nem tippel, csak azt ismeri fel, ami itt szerepel.
+              </p>
+              <div id="fd-rule-list"></div>
+              <button type="button" class="btn btn-ghost btn-sm" id="fd-rule-add">Kimenet hozzáadása</button>
+              <label class="ef-field" style="margin-top:8px">
+                <span class="ef-label">Alapértelmezés — amire egyik sor sem illeszkedik</span>
+                <input type="text" class="field-input" id="fd-rule-default"
+                       value="${escHtml(f.computed.default || '')}">
+              </label>
+            </div>` : ''}
         </div>`,
       footer: `
         <span id="fd-error" class="ef-error"></span>
@@ -505,7 +530,14 @@ const SettingsModule = (() => {
       ? JSON.parse(JSON.stringify(f.values))
       : [];
 
+    // A szabály sorai: kimenet + a hozzá tartozó elfogadott értékek.
+    let ruleRows = f && f.type === 'computed' && f.computed.lookup
+      ? Object.keys(f.computed.lookup).map(k =>
+          ({ ertek: k, forrasok: (f.computed.lookup[k] || []).slice() }))
+      : [];
+
     renderEnumList();
+    renderRuleList();
 
     document.getElementById('fd-type').addEventListener('change', e => {
       const wrap = document.getElementById('fd-enum-wrap');
@@ -514,6 +546,10 @@ const SettingsModule = (() => {
     document.getElementById('fd-enum-add').addEventListener('click', () => {
       enumValues.push({ id: '', hu: '', en: '', accepts: [] });
       renderEnumList();
+    });
+    document.getElementById('fd-rule-add')?.addEventListener('click', () => {
+      ruleRows.push({ ertek: '', forrasok: [] });
+      renderRuleList();
     });
     document.getElementById('fd-save').addEventListener('click', () => saveField(f));
     document.getElementById('fd-delete')?.addEventListener('click', () => deleteField(f));
@@ -544,6 +580,45 @@ const SettingsModule = (() => {
         b.addEventListener('click', () => {
           enumValues.splice(Number(b.dataset.evDel), 1);
           renderEnumList();
+        });
+      });
+    }
+
+    /**
+     * A származtatási szabály szerkesztője (számított mező `lookup`-ja).
+     *
+     * Eddig ez csak kódból volt állítható, a felület viszont azt ígérte, hogy
+     * a lista a Séma lapon bővíthető — az ígéret nem volt igaz. Aki új küldő
+     * országot vesz fel, itt megteheti; a szerkesztő az `enum` értéklista
+     * mintáját követi.
+     */
+    function renderRuleList() {
+      const box = document.getElementById('fd-rule-list');
+      if (!box) return;
+      box.innerHTML = ruleRows.map((r, i) => `
+        <div class="sv-rule-row">
+          <input type="text" class="field-input" data-rv="ertek" data-i="${i}"
+                 value="${escHtml(r.ertek)}" placeholder="kimenet (pl. bus)">
+          <input type="text" class="field-input" data-rv="forrasok" data-i="${i}"
+                 value="${escHtml(r.forrasok.join(', '))}"
+                 placeholder="elfogadott értékek, vesszővel">
+          <button type="button" class="ef-id-del" data-rv-del="${i}" title="Sor törlése">&times;</button>
+        </div>`).join('');
+
+      box.querySelectorAll('[data-rv]').forEach(inp => {
+        inp.addEventListener('input', () => {
+          const i = Number(inp.dataset.i);
+          if (inp.dataset.rv === 'forrasok') {
+            ruleRows[i].forrasok = inp.value.split(',').map(x => x.trim()).filter(Boolean);
+          } else {
+            ruleRows[i].ertek = inp.value.trim();
+          }
+        });
+      });
+      box.querySelectorAll('[data-rv-del]').forEach(b => {
+        b.addEventListener('click', () => {
+          ruleRows.splice(Number(b.dataset.rvDel), 1);
+          renderRuleList();
         });
       });
     }
@@ -594,6 +669,17 @@ const SettingsModule = (() => {
           f2.type = type;
           if (type === 'enum') f2.values = enumValues;
           else delete f2.values;
+        } else if (f2.computed && f2.computed.lookup) {
+          const lookup = {};
+          for (const r of ruleRows) {
+            if (!r.ertek) return setErr('A szabály minden sorához kell kimenet.');
+            if (lookup[r.ertek]) return setErr(`Ugyanaz a kimenet kétszer szerepel: ${r.ertek}`);
+            lookup[r.ertek] = r.forrasok.slice();
+          }
+          f2.computed = Object.assign({}, f2.computed, {
+            lookup,
+            default: document.getElementById('fd-rule-default').value.trim(),
+          });
         }
       } else {
         const nf = { key, group: grp, type, required: req, label: { hu, en }, tags };
