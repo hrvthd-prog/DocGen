@@ -403,6 +403,77 @@ test('év-elöl alak akárhogy tagolva egységesül, ambigúzat nem alakítunk',
 });
 
 // ════════════════════════════════════════════════════════════════════════════
+section('Szám: ezres tagolás a dokumentumban');
+// A bér az iraton olvashatóan kell (450 000), tárolni viszont tagolatlanul
+// tárolunk – ugyanaz a szétválasztás, mint a dátumnál.
+
+const NBSP = '\u00A0';   // nem törő szóköz – szándékosan kódként, hogy látszódjon
+
+test('a bér háromjegyű csoportokra tagolva jelenik meg', () => {
+  assertEq(SchemaStore.renderTag('gross_salary',  { gross_salary: '450000' }), '450' + NBSP + '000');
+  assertEq(SchemaStore.renderTag('Bruttó bér',    { gross_salary: '1234567' }),
+    '1' + NBSP + '234' + NBSP + '567');
+  // a jelölő angol alakja ugyanazt adja: a szám nem fordítandó
+  assertEq(SchemaStore.renderTag('Bruttó bér_EN', { gross_salary: '450000' }), '450' + NBSP + '000');
+});
+
+test('az elválasztó NEM TÖRŐ szóköz – az iraton a szám nem törhet ketté', () => {
+  const t = SchemaStore.renderTag('gross_salary', { gross_salary: '450000' });
+  assert(t.includes(NBSP), 'nem nem-törő szóközzel tagol');
+  assert(!/ /.test(t), 'sima szóköz került a számba');
+});
+
+test('a tárolt érték érintetlen marad – az export és az EH ezt viszi', () => {
+  const mezok = { gross_salary: '450000' };
+  SchemaStore.renderTag('gross_salary', mezok);
+  assertEq(mezok.gross_salary, '450000');
+});
+
+test('négy számjegy alatt nincs mit tagolni', () => {
+  assertEq(SchemaStore.renderTag('gross_salary', { gross_salary: '999' }), '999');
+  assertEq(SchemaStore.renderTag('gross_salary', { gross_salary: '0' }), '0');
+  assertEq(SchemaStore.renderTag('gross_salary', { gross_salary: '' }), '');
+});
+
+test('a kézzel beírt tagolás újratagolódik, nem duplázódik', () => {
+  // Ne függjön a kimenet attól, ki hogyan gépelte be a mezőt.
+  for (const raw of ['450 000', '450' + NBSP + '000', ' 450000 ']) {
+    assertEq(SchemaStore.renderTag('gross_salary', { gross_salary: raw }),
+      '450' + NBSP + '000', JSON.stringify(raw));
+  }
+});
+
+test('ami nem tiszta szám, azt nem írjuk át', () => {
+  // Ugyanaz az elv, mint a csonka dátumnál: mértékegységes vagy hiányos
+  // értékből nem gyártunk szebbnek látszó, de hamis alakot.
+  for (const raw of ['450000 Ft/hó', 'kb. 450000', '450-000', 'megbeszélés szerint']) {
+    assertEq(SchemaStore.renderTag('gross_salary', { gross_salary: raw }), raw, raw);
+  }
+});
+
+test('a tizedes rész és az előjel megmarad', () => {
+  assertEq(SchemaStore._formatNumber('1234.5'), '1' + NBSP + '234.5');
+  assertEq(SchemaStore._formatNumber('1234,5'), '1' + NBSP + '234,5');
+  assertEq(SchemaStore._formatNumber('-1234'),  '-1' + NBSP + '234');
+});
+
+test('a tagolás a TÍPUSHOZ kötődik, nem a mező nevéhez', () => {
+  // Az irányítószám, a házszám és a FEOR szöveg, nem szám – ezért marad
+  // tagolatlan. Ha valaha számmá válnának, ez a teszt bukna, és jól teszi.
+  for (const kulcs of ['postal_code', 'street_number', 'feor']) {
+    const f = SchemaStore.field(kulcs);
+    assert(f, `nincs ilyen mező: ${kulcs}`);
+    assert(f.type !== 'number', `${kulcs} száммá vált – ezres tagolást kapna`);
+  }
+  assertEq(SchemaStore.renderTag('Irányítószám', { postal_code: '1024' }), '1024');
+});
+
+test('a teljes értékkészletben is tagolva van (ez megy a sablonba)', () => {
+  const v = SchemaStore.resolveValues({ gross_salary: '450000' }, 'hu');
+  assertEq(v.gross_salary, '450' + NBSP + '000');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
 section('Értékhez kötött jelölőnégyzet');
 // A hatósági űrlap nem kiírja az értéket, hanem bejelöli: „☐ male ☒ female".
 // Ilyenkor több négyzet néz ugyanarra a mezőre, más-más várt értékkel.

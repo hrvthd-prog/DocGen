@@ -94,6 +94,35 @@ találgatunk, és a teljes dátumot sem írjuk át szebbnek látszó, de hamis a
 > Excel a beírt dátumot a kitöltő gépének területi beállítása szerint mutatná
 > (angol rendszeren `3/15/1990`), és a kitöltő azt hinné, elrontotta.
 
+### Szám: ezres tagolás
+
+A **szám (`number`) típusú** mezők — ma a `Bruttó bér` — háromjegyű
+csoportokra tagolva kerülnek a dokumentumba:
+
+```
+Bruttó bér: {{Bruttó bér}} Ft   →   Bruttó bér: 450 000 Ft
+```
+
+**Tárolni tagolatlanul tárolunk** (`450000`) — ahogy az adatbekérő útmutatója
+is kéri („digits only, without currency sign or spaces") —, és az **export, az
+adatbekérő és az Enter Hungary-másolás is a nyers alakot viszi**. A tagolás
+csak a megjelenítés: pontosan úgy, mint a dátumnál (tárolva `1988-04-12`,
+iratban `1988.04.12.`).
+
+Az elválasztó **nem törő szóköz**: a magyar helyesírás szóközzel tagol, egy
+iraton viszont a szám nem törhet ketté a sor végén.
+
+Ami nem tiszta szám (`450000 Ft/hó`, `megbeszélés szerint`), az **változatlanul
+megy tovább** — mértékegységes vagy hiányos értéket nem írunk át. A kézzel
+beírt tagolást viszont újratagoljuk, hogy a kimenet ne függjön attól, ki hogyan
+gépelte be.
+
+> A tagolás a **típushoz** kötődik, nem a mező nevéhez: ha egy új mezőnek
+> (pl. nettó bér) ezres tagolás kell, `number` típussal kell felvenni a
+> **Beállítások → Séma** lapon. Aminek a tagolás rossz volna — évszám,
+> azonosító —, az `text` vagy `date`; az irányítószám, a házszám és a FEOR
+> ezért ma is szöveg.
+
 ### Ügyszám a dokumentumon
 
 Néhány iraton fel kell tüntetni a hatósági **EH számot**, esetleg az
