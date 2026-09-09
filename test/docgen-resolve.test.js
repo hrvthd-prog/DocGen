@@ -195,6 +195,28 @@ test('a fájlnév-minta tokenjei feloldhatók a sorból', () => {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
+section('A bér ezres tagolása');
+
+test('a bér tagolva megy a sablonba, és a docx-oldal sem alakítja vissza', () => {
+  const emp = { id: 'ber-1', identifiers: [], fields: { gross_salary: '450000' } };
+  const row = buildRenderRow(emp, '2026. augusztus 6.');
+  const parser = DocxService.makeParser(row, new Set(), makeSchemaResolver(emp));
+
+  assertEq(parser('Bruttó bér').get(),  '450\u00A0000');
+  assertEq(parser('gross_salary').get(), '450\u00A0000');
+  // A `formatValue` a lebegőpontos Excel-alakok miatt normalizál számokat; a
+  // tagolt érték nem szám többé, ezért érintetlenül megy tovább. Ha valaha
+  // mégis visszaalakítaná, a tagolás némán eltűnne a dokumentumból.
+  assertEq(DocxService.formatValue('450\u00A0000'), '450\u00A0000');
+});
+
+test('a tárolt érték tagolatlan marad', () => {
+  const emp = { id: 'ber-2', identifiers: [], fields: { gross_salary: '450000' } };
+  buildRenderRow(emp, '2026. augusztus 6.');
+  assertEq(emp.fields.gross_salary, '450000');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
 section('Az ügyszám a sablonban');
 
 // Itt már a VALÓDI feloldó fut (DocxService.makeParser), ugyanaz, amit a

@@ -187,7 +187,8 @@ const SchemaStore = (() => {
   function renderValue(f, raw, lang = 'hu') {
     if (f.type === 'enum') return ValueCodec.render(f, raw, lang);
     const s = raw == null ? '' : String(raw);
-    if (f.type === 'date') return formatDate(s);
+    if (f.type === 'date')   return formatDate(s);
+    if (f.type === 'number') return formatNumber(s);
     if (f.type !== 'text' || !s) return s;
     return translate(s, lang) || s;
   }
@@ -209,6 +210,42 @@ const SchemaStore = (() => {
     const s = String(iso == null ? '' : iso).trim();
     const m = /^(\d{4})[-.\/](\d{1,2})[-.\/](\d{1,2})\.?$/.exec(s);
     return m ? `${m[1]}.${String(m[2]).padStart(2,'0')}.${String(m[3]).padStart(2,'0')}.` : s;
+  }
+
+  /**
+   * Tárolt szám → olvasható, ezres tagolású alak: 450000 → 450 000.
+   *
+   * A dátumhoz hasonlóan ez az EGYETLEN hely, ahol a szám olvasható alakra
+   * vált: tárolni tagolatlanul tárolunk (az adatbekérő útmutatója is „digits
+   * only, without currency sign or spaces"-t kér), az export és az importált
+   * érték érintetlen marad. Egy hatósági iraton viszont a 450000 nehezen
+   * olvasható — háromjegyű csoportokban egy pillantással ellenőrizhető.
+   *
+   * Ez a `number` TÍPUSÚ mezőkre hat, nem külön felsorolt kulcsokra: a típust
+   * ember állítja be a séma-szerkesztőben, és a „szám" itt mennyiséget jelent
+   * (bér, összeg). Aminek a tagolás rossz volna — évszám, azonosító —, az
+   * `text` vagy `date` mező, mint ma is (a helyrajzi szám, az irányítószám és
+   * a FEOR mind szöveg).
+   *
+   * Elválasztó: NEM TÖRŐ szóköz. A magyar helyesírás szóközzel tagol, egy
+   * iraton viszont a szám nem törhet ketté a sor végén. (Ugyanezt adja a
+   * `toLocaleString('hu-HU')`, csak az a böngésző területi adataitól függ —
+   * itt kiszámítható alak kell.)
+   *
+   * Amit nem ismerünk fel tiszta számként, azt VÁLTOZATLANUL hagyjuk: a
+   * „450000 Ft/hó" átírása találgatás lenne, ugyanaz az elv, mint a csonka
+   * dátumnál. A már beírt tagolást (szóköz) viszont újratagoljuk, hogy a
+   * kimenet ne függjön attól, ki hogyan gépelte be.
+   */
+  const EZRES_ELVALASZTO = '\u00A0';
+
+  function formatNumber(raw) {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return s;
+    const m = /^(-?)(\d+)([.,]\d+)?$/.exec(s.replace(/[\s\u00A0]/g, ''));
+    if (!m) return s;
+    const tagolt = m[2].replace(/\B(?=(\d{3})+(?!\d))/g, EZRES_ELVALASZTO);
+    return m[1] + tagolt + (m[3] || '');
   }
 
   // ── Lekérdezés ─────────────────────────────────────────────────────────────
@@ -727,6 +764,6 @@ const SchemaStore = (() => {
     validateValues, validateSchema, validateDictionary,
     migrateValues, renameFieldKey, migrateLegacyKeys, addMissingSeedFields,
     removeRetiredFields, usageOf,
-    _normalize: normalize, _datePart: datePart,
+    _normalize: normalize, _datePart: datePart, _formatNumber: formatNumber,
   };
 })();

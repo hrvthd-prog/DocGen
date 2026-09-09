@@ -68,6 +68,59 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-09-09 — A bér ezres tagolással megy az iratra
+
+**Cél:** a bér-jelölők értéke legyen olvasható a dokumentumban: háromjegyű
+csoportonként egy ezres elválasztó (450000 → 450 000).
+
+**Változás** (`v10.53`):
+- `js/schema/schema-store.js` — `formatNumber()`, és a `renderValue` a
+  `number` típusú mezőket ezen engedi át (a `formatDate` mintájára).
+  Exportálva `_formatNumber` néven, hogy közvetlenül is mérhető legyen.
+- `js/modules/cases/case-eh.js` — az EH-panel a `number` mezőt is NYERSEN
+  másolja, ahogy eddig a dátumot.
+- `README.md` „Szám: ezres tagolás".
+
+**Miért / döntés:**
+- **A típus dönt, nem a mező neve.** Egy kulcslista (`gross_salary`, …) kódban
+  élne és minden új mezőnél karbantartást kérne; a `number` típust ember
+  állítja be a séma-szerkesztőben, és ott a „szám" mennyiséget jelent. Aminek
+  a tagolás rossz volna (évszám, azonosító), az ma is `text` vagy `date` — az
+  irányítószám, a házszám és a FEOR mind szöveg. Egy teszt őrzi, hogy ezek ne
+  csússzanak át számmá.
+- **A séma-attribútum (`format: 'ezres'`) elvérzett volna.** A `normalize()`
+  csak az ismert mezőkulcsokat engedi át, és a MENTETT séma (`docgen-config
+  .json`) nem frissül a seedből: a meglévő telepítésen a jelző soha nem
+  jelenne meg. Csendben nem működő beállítás helyett inkább a típus.
+- **Tárolni tagolatlanul tárolunk.** A tagolás megjelenítés, mint a dátumnál:
+  az export, az adatbekérő és az EH-másolás a nyers alakot viszi. Az EH űrlap
+  tagolatlan számot vár — a panel ezért kapta meg ugyanazt a kivételt, amit a
+  dátum már használt.
+- **Nem törő szóköz.** A magyar helyesírás szóközzel tagol, egy iraton viszont
+  a szám nem törhet ketté a sor végén. (Ezt adja a `toLocaleString('hu-HU')`
+  is, csak az a böngésző területi adataitól függ — itt kiszámítható alak kell.)
+- **Amit nem ismerünk fel tiszta számként, nem írjuk át** („450000 Ft/hó",
+  „megbeszélés szerint") — ugyanaz az elv, mint a csonka dátumnál. A kézzel
+  beírt tagolást viszont újratagoljuk, hogy a kimenet ne függjön a gépeléstől.
+
+**Tesztek:** `node test/run-all.js` zöld. `schema.test.js` 63 → 72 (tagolás,
+nem törő szóköz, érintetlen tárolt érték, újratagolás, nem-szám érintetlen,
+tizedes/előjel, típushoz kötöttség). `docgen-resolve.test.js` 42 → 44: a
+jelölő a VALÓDI úton megy végig, és külön ellenőrzés őrzi, hogy a
+`DocxService.formatValue` nem alakítja vissza számmá a tagolt értéket —
+ott némán tűnne el a tagolás.
+
+**Nyitott / következő:**
+- **Nettó bér mező nincs a sémában** — csak `gross_salary` van, `net_salary`
+  (vagy bármilyen nettó) sehol. A kérésben szerepelt, de nem lehetett mit
+  formázni: amint felveszed a **Beállítások → Séma** lapon `number` típussal,
+  a tagolást magától megkapja.
+- Böngészőben nem próbáltam ki (a `file://`-s app itt nem futtatható) — az
+  első generálásnál érdemes ránézni egy bér-jelölőre.
+- Az előző munkamenet ága (`claude/eh-szamok-…`) **merge-elve** a `main`-be
+  (PR #2), a `v10.52` tag helyben megvan, de a tag-push ebből a környezetből
+  nem megy át — az első helyi push (`git push --follow-tags`) pótolja.
+
 ## 2026-09-09 — Az ügy EH száma átjön a dokumentumgenerálásba
 
 **Cél:** néhány iraton fel kell tüntetni az EH számot. A munkavállalónak nincs
