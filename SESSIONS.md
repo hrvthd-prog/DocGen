@@ -68,6 +68,65 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-09-09 — Hazautazás módja: az ukrán dolgozó repülőt kapott
+
+**Cél:** hibabejelentés. „Az ukrán munkavállalók busszal, a Fülöp-szigetekiek
+repülővel utaznak" — a program mást mondott, és a Beállításokban nem lehetett
+kalibrálni.
+
+**A hiba gyökere:** a `transport_type` szabály listája **csak a magyar
+ORSZÁGNEVET** ismerte (`Ukrajna`), az `Állampolgárság` rovatba viszont a
+melléknév (`ukrán`) és az angol alak (`Ukraine`, `Ukrainian`) is érkezik. Az
+illesztés nem tippel, tehát nem talált — és a dolgozó **némán** a `default`-ot,
+vagyis repülőt kapott. Lemérve: `Ukrajna` → busz, `ukrán` / `Ukraine` /
+`Ukrainian` → repülő.
+
+**Változás** (`v10.54`):
+- `js/schema/seed-schema.js` — a `bus` lista országonként négy-öt alakot ismer
+  (magyar országnév, magyar melléknév, angol országnév, angol melléknév).
+- `js/schema/schema-store.js` — `computeLookup` a **szótári párt** is elfogadja
+  forrásként; új `refreshComputedRules()` migráció + `REGI_SZABALYOK`.
+- `js/modules/registry/registry-view.js` — a migráció beindul a séma-felhozatal
+  során (`migrateLegacyKeys`).
+- `js/modules/settings/settings-view.js` + `css/registry.css` — a számított mező
+  szabálya **szerkeszthető** a Séma lapon (kimenet + elfogadott értékek sorok,
+  alapértelmezés), az enum értéklista mintájára.
+- `README.md` „Amit nem kérdezünk meg, mert kiszámolható" átírva.
+
+**Miért / döntés:**
+- **A kódban javított lista magától SOHA nem érte volna el a gépedet.** A
+  `load()` a mentett `docgen-config.json`-t használja, ha van, és az
+  `addMissingSeedFields` csak hiányzó MEZŐT pótol — a meglévő mező szabályához
+  nem nyúl. Enélkül a javítás csak friss telepítésen működne: pontosan az a
+  fajta „megcsináltam, mégsem változott" hiba, amit a legnehezebb észrevenni.
+- **A migráció csak az ÉRINTETLEN szabályt cseréli.** Ujjlenyomatot vesz a
+  mentett listáról, és csak akkor ír, ha az betűre a régi alak (vagy egyáltalán
+  nincs lookup). Aki a saját küldő országaihoz igazította, annak a listája
+  marad — különben a következő frissítés csendben eltörölné a munkáját.
+- **A szerkesztő azért kellett, mert a felület ígérte, de nem tudta.** A seed
+  kommentje és a README is azt írta, hogy „a lista a Beállítások → Séma lapon
+  bővíthető" — a mezőszerkesztő viszont csak annyit mondott a számított mezőre,
+  hogy „a típusa nem módosítható itt". Az ígéret most igaz.
+- **Nem tippelünk tövet.** Kézenfekvő lett volna „ukr" előtagra illeszteni, de
+  a `szlovák`/`szlovén` pár mutatja, hova vezet: a tévedés itt csendes, és egy
+  hatósági iratra megy ki. Marad a felsorolás — és mellette a szótár, ami már
+  amúgy is ismeri az `Ukraine = Ukrajna` párt.
+
+**Tesztek:** `node test/run-all.js` zöld. `schema.test.js` 72 → 79: a
+melléknévi és angol alakok mind buszt adnak, a Fülöp-szigetekiek minden
+alakban repülőt, a szótári pár is illeszkedik; a migrációra négy ellenőrzés
+(a régi lista felfrissül, másodszorra már nincs mit tenni, a saját kalibrálás
+sértetlen marad, a lookup nélküli régi mező is megkapja a listát).
+
+**Nyitott / következő:**
+- A **szabály-szerkesztő böngészőben nincs kipróbálva** (a `file://`-s app itt
+  nem futtatható) — az első nyitáskor érdemes ránézni: Beállítások → Séma →
+  „Hazautazás módja" → Szerkesztés.
+- A javítás a következő indításkor fut le magától (a napló `SEMA_MIGRACIO`
+  sorral jelzi); érdemes utána egy dolgozón ellenőrizni a `{{Közlekedési
+  eszköz}}` jelölőt.
+- Nettó bér mező továbbra sincs a sémában (lásd az előző bejegyzést).
+
 ## 2026-09-09 — A bér ezres tagolással megy az iratra
 
 **Cél:** a bér-jelölők értéke legyen olvasható a dokumentumban: háromjegyű

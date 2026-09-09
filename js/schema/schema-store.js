@@ -439,12 +439,23 @@ const SchemaStore = (() => {
    */
   function computeLookup(f, values, lang = 'hu') {
     const c = f.computed;
-    const forras = ValueCodec.normalize(values[(c.from || [])[0]]);
+    const nyers = values[(c.from || [])[0]];
+    const forras = ValueCodec.normalize(nyers);
     if (!forras) return '';
+
+    // A szótári párja is illeszkedik: aki „Ukraine"-t írt az állampolgárság
+    // rovatba, ugyanoda tartozik, mint aki „Ukrajná"-t – a pár amúgy is fel
+    // van véve. Így egy szótárbővítés a szabályokon is segít, és nem kell
+    // minden alakot a listába másolni.
+    const alakok = new Set([forras]);
+    for (const l of ['hu', 'en']) {
+      const par = translate(nyers, l);
+      if (par) alakok.add(ValueCodec.normalize(par));
+    }
 
     let kimenet = c.default || '';
     for (const [ertek, lista] of Object.entries(c.lookup)) {
-      if ((lista || []).some(x => ValueCodec.normalize(x) === forras)) { kimenet = ertek; break; }
+      if ((lista || []).some(x => alakok.has(ValueCodec.normalize(x)))) { kimenet = ertek; break; }
     }
     // A kimenet a szótáron megy át, mint bármelyik szabad szöveg
     return kimenet ? (translate(kimenet, lang) || kimenet) : '';
@@ -745,6 +756,64 @@ const SchemaStore = (() => {
     return kiesik.length;
   }
 
+  /**
+   * Elavult SZABÁLYOK felhozatala a már mentett sémán.
+   *
+   * Az `addMissingSeedFields` párja egy szinttel beljebb: az csak hiányzó
+   * MEZŐT pótol, a meglévő mező szabályához nem nyúl. Márpedig a `load()` a
+   * mentett configot használja, ha van — vagyis egy kódban javított
+   * `lookup` lista a meglévő telepítést SOHA nem érné el. Csendben maradna a
+   * régi, hibás szabály: pontosan az a fajta hiba, amit a legnehezebb észrevenni.
+   *
+   * Amihez NEM nyúlunk: a saját kalibrálás. Csak akkor cserélünk, ha a mentett
+   * szabály betűre a lent rögzített RÉGI alak (vagyis senki nem írta át), vagy
+   * ha egyáltalán nincs `lookup`-ja (az még a szabály előtti időkből maradt).
+   * Aki a Beállítások → Séma lapon hozzáigazította a saját országaihoz, annak
+   * a listája marad.
+   */
+  const REGI_SZABALYOK = {
+    // 2026-09: a hazautazás módja csak a magyar ORSZÁGNEVET ismerte, ezért az
+    // „ukrán" / „Ukrainian" állampolgárságú dolgozó némán repülőt kapott.
+    transport_type: {
+      bus: ['Ausztria', 'Szlovákia', 'Ukrajna', 'Románia',
+            'Szerbia', 'Horvátország', 'Szlovénia'],
+    },
+  };
+
+  /** Egy lookup összehasonlítható ujjlenyomata (sorrendtől függetlenül). */
+  function lookupUjjlenyomat(lookup) {
+    if (!lookup || typeof lookup !== 'object') return '';
+    return Object.keys(lookup).sort().map(k =>
+      k + '=' + (lookup[k] || []).map(v => ValueCodec.normalize(v)).sort().join('|')
+    ).join(';');
+  }
+
+  /** @returns {number} a frissített szabályok száma (0 = nem volt mit tenni) */
+  function refreshComputedRules(seed = (typeof SEED_SCHEMA !== 'undefined' ? SEED_SCHEMA : null)) {
+    ensureLoaded();
+    if (!seed || !Array.isArray(seed.fields)) return 0;
+
+    let db = 0;
+    for (const kulcs of Object.keys(REGI_SZABALYOK)) {
+      const mezo = schema.fields.find(f => f.key === kulcs && f.type === 'computed');
+      const seedMezo = (seed.fields || []).find(f => f.key === kulcs);
+      if (!mezo || !seedMezo || !seedMezo.computed || !seedMezo.computed.lookup) continue;
+
+      const mostani = lookupUjjlenyomat(mezo.computed && mezo.computed.lookup);
+      const erintetlen = mostani === lookupUjjlenyomat(REGI_SZABALYOK[kulcs]) || mostani === '';
+      if (!erintetlen) continue;                       // saját kalibrálás – marad
+      if (mostani === lookupUjjlenyomat(seedMezo.computed.lookup)) continue;   // már friss
+
+      mezo.computed = Object.assign({}, mezo.computed, {
+        lookup:  clone(seedMezo.computed.lookup),
+        default: seedMezo.computed.default != null ? String(seedMezo.computed.default) : '',
+      });
+      db++;
+    }
+    if (db) { schema.version = (schema.version || 1) + 1; emit(); }
+    return db;
+  }
+
   /** Mező törlése előtti hatásvizsgálat – mi veszne el. */
   function usageOf(key, employees = []) {
     ensureLoaded();
@@ -763,7 +832,7 @@ const SchemaStore = (() => {
     dictionary, setDictionary, translate, isUntranslated,
     validateValues, validateSchema, validateDictionary,
     migrateValues, renameFieldKey, migrateLegacyKeys, addMissingSeedFields,
-    removeRetiredFields, usageOf,
+    removeRetiredFields, refreshComputedRules, usageOf,
     _normalize: normalize, _datePart: datePart, _formatNumber: formatNumber,
   };
 })();
