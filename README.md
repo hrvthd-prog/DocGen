@@ -94,6 +94,36 @@ találgatunk, és a teljes dátumot sem írjuk át szebbnek látszó, de hamis a
 > Excel a beírt dátumot a kitöltő gépének területi beállítása szerint mutatná
 > (angol rendszeren `3/15/1990`), és a kitöltő azt hinné, elrontotta.
 
+### Ügyszám a dokumentumon
+
+Néhány iraton fel kell tüntetni a hatósági **EH számot**, esetleg az
+iktatószámot is. Ezek nem a munkavállaló adatai — az **ügyé** —, ezért nem is
+kell (és nem is lehet) a nyilvántartásba felvinni őket: a jelölő az **Ügyek
+fülön, a nyitott ügyön** rögzített számot hozza.
+
+```
+Ügyszám: {{EH szám}}     Iktatószám: {{Iktatószám}}
+```
+
+Ugyanaz több néven is írható, hogy egy kötőjel ne csússzon el:
+`{{EH szám}}`, `{{EH-szám}}`, `{{EH_szám}}`, `{{EH szam}}`, `{{ehNumber}}`,
+`{{eh_number}}` — mind ugyanaz. Az iktatószámnál: `{{Iktatószám}}`,
+`{{Iktatoszam}}`, `{{fileNumber}}`, `{{file_number}}`.
+
+**Melyik ügyé, ha több van?** A legutóbb megnyitott **nyitott** ügyé,
+amelyiknek már van száma. Az EH szám és az iktatószám mindig **ugyanabból** az
+ügyből jön — a hatóság a kettő párosából azonosítja az ügyet.
+
+**Lezárt ügy száma sosem kerül dokumentumra.** Egy most készülő beadványon az
+nem hiányos adat, hanem téves: rossz ügyre hivatkozna. Akinek nincs nyitott
+ügye, annál a jelölő üresen marad, és a *Hiányzó adatok naplója* kiírja, melyik
+dokumentumból maradt ki.
+
+> A **Generálás** fül összesítőjében ott van, melyik szám megy ki kire. Ha egy
+> dolgozónak több nyitott ügye is hordoz EH számot, a szám mellett `⚠` jelenik
+> meg (a napló is rögzíti, melyiket választotta) — ilyenkor érdemi döntés, hogy
+> melyik ügyről szól az irat.
+
 ### Szótár: ugyanaz az adat két nyelven
 
 Az ország, a munkakör vagy a szakképesítés az egyik iratba magyarul, a másikba
@@ -611,7 +641,7 @@ Tizenkét tesztcsomag, 322 teszt. Böngészőt nem igényel.
 | `docgen-resolve.test.js` | kétnyelvű jelölők, dátum-részek, szótár, számított mezők |
 | `logger.test.js` | a napló nem hagyhatja el a gépet |
 | `vbs-encoding.test.js` | a `.vbs` UTF-16 LE marad |
-| `cases.test.js` | határidők, kimenetelek, idővonal, láncolás |
+| `cases.test.js` | határidők, kimenetelek, idővonal, láncolás, ügyszám a dokumentumra |
 | `e2e.test.js` | **körbe-teszt:** táblázat → nyilvántartás → export |
 
 ### Próbaanyag
