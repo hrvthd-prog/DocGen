@@ -68,6 +68,62 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-09-09 — Az ügy EH száma átjön a dokumentumgenerálásba
+
+**Cél:** néhány iraton fel kell tüntetni az EH számot. A munkavállalónak nincs
+ilyen mezője a sémában, az adat viszont ott van kézzel felvive a **nyitott
+ügyeken**. Kérdés volt, hogyan lehet ezt jelölőként áthúzni a generálásba.
+
+**Változás** (`v10.52`):
+- `js/services/case-repo.js` — `docIdentifiers(employeeId)` (melyik ügy száma
+  megy ki és miért) + `docTags(employeeId)` (ugyanaz jelölőnevekre bontva) +
+  `DOC_TAGS` (a jelölőnevek listája, egy helyen).
+- `js/modules/docgen.js` — a `buildRenderRow` hozzáfűzi az ügy-jelölőket
+  (`ugyJelolok`); a személyválasztó és a Generálás fül összesítője mutatja az
+  EH számot (`ugyAzonositok`); több nyitott ügynél `CASE_EH_AMBIGUOUS` napló.
+- `js/services/docx-service.js` — a `makeParser` mostantól exportált, hogy a
+  jelölő-feloldás Node-ból is mérhető legyen (mint a `processCheckboxes`).
+- `README.md` „Ügyszám a dokumentumon", `TERV-esemenyek.md` 5. szakasz.
+
+**Miért / döntés:**
+- **Nem séma-mező.** Egy `eh_number` mező a dolgozón rossz kérdésre válaszolna:
+  az azonosító nem a személyé, hanem az ÜGYÉ, és egy dolgozónak több ügye
+  futhat egyszerre — az első kettős ügynél összecsúszna. Az adat marad ott,
+  ahol keletkezik; a generálás kéri el.
+- **Csak NYITOTT ügyből.** Egy lezárt ügy száma egy most készülő beadványon nem
+  hiányos adat, hanem téves: rossz ügyre hivatkozna. Üresen hagyva a *Hiányzó
+  adatok naplója* kiírja — az üres mező javítható, a rossz szám észrevétlen.
+- **A két szám ugyanabból az ügyből.** Nem a legfrissebb EH szám a legfrissebb
+  iktatószámmal párosítva: a hatóság a kettő párosából azonosítja az ügyet, egy
+  kevert páros sehová nem mutat. Ezért van EGY forrásügy (a legutóbb megnyitott,
+  amelyiknek már van száma), és mindkét szám onnan jön.
+- **A választás nem néma.** Ha több nyitott ügy is hordoz számot, az összesítőn
+  `⚠` kerül a szám mellé, a generálás pedig naplózza, melyiket választotta —
+  utólag meg kell tudni mondani, melyik ügy száma ment ki az iratra.
+- **Több írásmód.** `{{EH szám}}`, `{{EH-szám}}`, `{{EH_szám}}`, `{{ehNumber}}`,
+  `{{eh_number}}` … mind ugyanaz. A sablonokat emberek írják; egy kötőjel nem
+  lehet az a részlet, amin egy beadvány elcsúszik.
+- **Az előjegyzett ügy nem takar el semmit.** Az `openNextCase` a JÖVŐBE nyitja
+  a következő ügyet, tehát a sorrendben elöl áll — de mivel még nincs száma,
+  a szűrés átlép rajta, és a folyamatban lévő ügy száma megy ki.
+
+**Tesztek:** `node test/run-all.js` zöld. `cases.test.js` 64 → 74 (a választás
+szabályai: lezárt ügy kimarad, a két szám egy ügyből jön, kétértelműség
+jelzése, más dolgozó ügye nem szivárog át, törölt szám eltűnik).
+`docgen-resolve.test.js` 34 → 42: az ügyszám-jelölőket már a **valódi**
+feloldó (`DocxService.makeParser`) oldja fel, nem a normalizálási szabály
+másolata, és a jelölőnevek a `CaseRepo.DOC_TAGS`-ből jönnek — egy alak
+törlése elbuktatja a tesztet (lemérve). Külön teszt őrzi, hogy a sémának
+NINCS ilyen nevű mezője: ha lenne, a feloldó nyerne a sor előtt, és az ügy
+száma helyett egy soha ki nem töltött mező menne ki.
+
+**Nyitott / következő:** böngészőben nem próbáltam ki (a `file://`-s app itt
+nem futtatható) — első nyitáskor érdemes ránézni a Generálás fül összesítőjére
+(ott az EH szám a sablonchipek előtt), és egy próbagenerálásra `{{EH szám}}`
+jelölővel. Ami felmerült, de nem lett megcsinálva: a **fájlnév-minta** még nem
+ismeri az ügyszámot (`[EH szám]` token a `DocxService.NAME_TOKENS`-ben) — ha az
+iratokat ügyszám szerint kell mappázni, ez a következő lépés.
+
 ## 2026-09-07 — Ügy törlése; a szám-javítás átmegy az idővonalra; teljes dolgozólista
 
 **Cél:** három kérés. (1) A megnyitott ügy legyen törölhető úgy, hogy a

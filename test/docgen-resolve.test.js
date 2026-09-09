@@ -33,6 +33,10 @@ const sandbox = {
   Error, RegExp, Promise, isNaN, parseInt, parseFloat, crypto,
 };
 sandbox.globalThis = sandbox;
+// A docx-service a böngésző `window`-jára néz betöltéskor (docxtemplater).
+// Maga a RENDER DOMParser-t kér, az itt nincs – a jelölő-feloldás viszont
+// (makeParser) tiszta JS, és pont az a kérdés, hogy egy jelölő mit talál meg.
+sandbox.window = sandbox;
 vm.createContext(sandbox);
 
 for (const [rel, name] of [
@@ -40,19 +44,26 @@ for (const [rel, name] of [
   ['../js/schema/value-codec.js',     'ValueCodec'],
   ['../js/schema/seed-schema.js',     'SEED_SCHEMA'],
   ['../js/schema/schema-store.js',    'SchemaStore'],
+  ['../js/services/docx-service.js',  'DocxService'],
+  // Csak a jelölőneveiért (`DOC_TAGS`): az ügyszám-jelölők listája ott él, és
+  // ez a teszt AZT méri, nem egy ide másolt párját.
+  ['../js/services/case-repo.js',     'CaseRepo'],
 ]) {
   let code = fs.readFileSync(path.join(__dirname, rel), 'utf8');
   code += `\nglobalThis.${name} = ${name};`;
   vm.runInContext(code, sandbox, { filename: rel });
 }
-const { SchemaStore, SEED_SCHEMA, ValueCodec, EmployeeRepo } = sandbox;
+const { SchemaStore, SEED_SCHEMA, ValueCodec, EmployeeRepo, DocxService, CaseRepo } = sandbox;
 SchemaStore.loadFrom(SEED_SCHEMA);
 
 // ── A docgen két segédfüggvényének kiemelt mása ─────────────────────────────
 // Ugyanaz a logika, mint a js/modules/docgen.js-ben; itt DOM nélkül vizsgálható.
 // (A docgen forrásában is ellenőrizzük, hogy ez a két függvény tényleg létezik.)
 
-function buildRenderRow(emp, maiNap) {
+// Az `ugyTags` a docgenben `CaseRepo.docTags(emp.id)` – az ügyekből jövő
+// EH szám és iktatószám. A választás szabályait a cases.test.js őrzi; itt az
+// a kérdés, hogy a sorba bekerülve nem üt-e el semmit a sémából.
+function buildRenderRow(emp, maiNap, ugyTags = {}) {
   const v = SchemaStore.resolveValues(emp.fields, 'hu');
   for (const f of SchemaStore.fields()) {
     const cimke = f.label.hu;
@@ -61,6 +72,7 @@ function buildRenderRow(emp, maiNap) {
   v['mai nap'] = maiNap;
   const sap = EmployeeRepo.currentIdentifier(emp, 'sap');
   if (sap) v['Azonosító'] = sap.value;
+  Object.assign(v, ugyTags);
   return v;
 }
 
@@ -159,10 +171,79 @@ test('a számított mezők is szerepelnek a sorban', () => {
   assertEq(row['Állandó lakcím'], '1024 Budapest Fő utca 12');
 });
 
+test('az ügyből jövő EH szám bekerül a sorba, a sémabeli mezőket nem bántja', () => {
+  const r = buildRenderRow(EMP, '2026. augusztus 6.',
+    { 'EH szám': 'EH18506859', 'Iktatószám': '106-1-12345-2/2026-T' });
+  assertEq(r['EH szám'], 'EH18506859');
+  assertEq(r['Iktatószám'], '106-1-12345-2/2026-T');
+  assertEq(r['Vezetéknév'], 'Kovács');
+  assertEq(r['mai nap'], '2026. augusztus 6.');
+});
+
+test('az ügyszám-jelölőket a séma NEM ismeri – ezért oldódnak fel a sorból', () => {
+  // Ha valaha bekerülne egy ilyen nevű séma-mező, a feloldó nyerne a sor
+  // előtt, és az ügy száma helyett a (soha ki nem töltött) mező menne ki.
+  for (const nev of ['EH szám', 'EH-szám', 'ehNumber', 'Iktatószám', 'fileNumber']) {
+    assertEq(resolve(nev), null, nev);
+  }
+});
+
 test('a fájlnév-minta tokenjei feloldhatók a sorból', () => {
   // A DocxService NAME_TOKENS a magyar címkét keresi
   assertEq(row['Vezetéknév'], 'Kovács');
   assertEq(row['Keresztnév'], 'Anna');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+section('Az ügyszám a sablonban');
+
+// Itt már a VALÓDI feloldó fut (DocxService.makeParser), ugyanaz, amit a
+// render hív – nem a normalizálási szabály másolata. A sorban ugyanazok a
+// kulcsok vannak, amiket a CaseRepo.docTags ad.
+function ugyszamos(tags) {
+  const r = buildRenderRow(EMP, '2026. augusztus 6.', tags);
+  const emptyTags = new Set();
+  const parser = DocxService.makeParser(r, emptyTags, makeSchemaResolver(EMP));
+  return { jelolo: nev => parser(nev).get(), emptyTags };
+}
+
+/** Amit a CaseRepo.docTags ad, csak kézzel megadott értékekkel. */
+function ugyTags(ertekek) {
+  const out = {};
+  for (const mezo of Object.keys(CaseRepo.DOC_TAGS)) {
+    for (const nev of CaseRepo.DOC_TAGS[mezo]) out[nev] = ertekek[mezo] || '';
+  }
+  return out;
+}
+
+const UGY_TAGS = ugyTags({ ehNumber: 'EH18506859', fileNumber: '106-1-12345-2/2026-T' });
+
+test('az EH szám minden írásmódban ugyanazt adja', () => {
+  const { jelolo } = ugyszamos(UGY_TAGS);
+  for (const nev of ['EH szám', 'EH-szám', 'EH_szám', 'EH szam', 'EH_szam',
+                     'ehNumber', 'eh_number', 'EH number']) {
+    assertEq(jelolo(nev), 'EH18506859', `{{${nev}}}`);
+  }
+});
+
+test('az iktatószám sem csúszik el a kötőjelen', () => {
+  const { jelolo } = ugyszamos(UGY_TAGS);
+  for (const nev of ['Iktatószám', 'Iktatoszam', 'fileNumber', 'file_number']) {
+    assertEq(jelolo(nev), '106-1-12345-2/2026-T', `{{${nev}}}`);
+  }
+});
+
+test('a szám formázás nélkül megy ki', () => {
+  // A csupa számjegyű ügyszámot nem szabad számként kerekíteni, a vezető
+  // nullát pedig levágni – az azonosító karakterről karakterre az, ami.
+  const { jelolo } = ugyszamos(ugyTags({ ehNumber: '0018506859' }));
+  assertEq(jelolo('EH szám'), '0018506859');
+});
+
+test('nyitott ügy nélkül üres, és bekerül a hiányzó adatok közé', () => {
+  const { jelolo, emptyTags } = ugyszamos(ugyTags({}));
+  assertEq(jelolo('EH szám'), '');
+  assert(emptyTags.has('EH szám'), 'a hiányzó ügyszám némán maradt volna');
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -215,6 +296,19 @@ test('a generálás átadja az összehasonlítót is', () => {
   assert(/makeSchemaMatcher/.test(docgenSrc), 'nincs séma-összehasonlító');
   assert(/generateDocx\([\s\S]{0,160}equals:/.test(docgenSrc),
     'a generálás nem kapja meg az összehasonlítót');
+});
+
+test('az ügyek EH száma bekerül a generálandó sorba', () => {
+  // A munkavállalónak nincs EH szám mezője: az azonosító az ÜGYÉ. A docgen
+  // ezért a CaseRepo-tól kéri el – ha ez a hívás elveszne, a jelölő némán
+  // üresen maradna minden dokumentumon.
+  assert(/CaseRepo\.docTags/.test(docgenSrc), 'a sor nem kapja meg az ügy azonosítóit');
+  assert(/function buildRenderRow[\s\S]{0,1200}ugyJelolok\(emp\.id\)/.test(docgenSrc),
+    'a buildRenderRow nem fűzi hozzá az ügy-jelölőket');
+});
+
+test('a több nyitott ügy közti választás naplózódik', () => {
+  assert(/CASE_EH_AMBIGUOUS/.test(docgenSrc), 'a kétértelmű EH szám némán dőlne el');
 });
 
 test('a nyilvántartás változása frissíti a docgen listáját', () => {

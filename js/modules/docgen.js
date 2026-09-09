@@ -935,7 +935,24 @@ const DocgenModule = (() => {
     v['mai nap'] = state.maiNap;
     const sap = EmployeeRepo.currentIdentifier(emp, 'sap');
     if (sap) v['Azonosító'] = sap.value;
+
+    // Az ügyből jövő hatósági azonosítók ({{EH szám}}, {{Iktatószám}}). Ezek
+    // NEM a nyilvántartás mezői – a séma nem ismeri őket –, ezért ugyanúgy sima
+    // kulcsként kerülnek a sorba, mint a {{mai nap}}. Ha az ügyek nincsenek
+    // betöltve (nincs adatmappa), a generálás emiatt nem állhat meg: a jelölő
+    // üresen marad, és a hiányzó adatok naplója kiírja.
+    Object.assign(v, ugyJelolok(emp.id));
     return v;
+  }
+
+  /** Az ügyekből jövő azonosítók, ha az ügyek egyáltalán be vannak töltve. */
+  function ugyAzonositok(empId) {
+    try { return CaseRepo.docIdentifiers(empId); } catch { return null; }
+  }
+
+  /** Ugyanaz sablon-jelölőkre bontva; ügyek nélkül üres, nem hiba. */
+  function ugyJelolok(empId) {
+    try { return CaseRepo.docTags(empId); } catch { return {}; }
   }
 
   /**
@@ -1360,12 +1377,19 @@ const DocgenModule = (() => {
 
     // A választóban a séma szerinti, magyarra fordított értékek jelennek meg,
     // de a kiválasztás kulcsa az állandó belső azonosító marad.
+    // Az EH szám és az iktatószám azért van itt, mert a választó oszlopra tud
+    // szűrni: egy ügyszámra rákeresve kijelölhető mindenki, aki abban érintett.
+    // (Alapból nem látszik – a választó az első hat oszlopot mutatja –, de az
+    // oszlopválasztóból bekapcsolható.)
     const megjelenites = state.clientRows.map(emp => {
       const v = SchemaStore.resolveValues(emp.fields, 'hu');
       const sap = EmployeeRepo.currentIdentifier(emp, 'sap');
+      const ugy = ugyAzonositok(emp.id);
       return Object.assign({}, v, {
         __id: emp.id,
         'Azonosító': sap ? sap.value : '',
+        'EH szám':    ugy ? ugy.ehNumber   : '',
+        'Iktatószám': ugy ? ugy.fileNumber : '',
       });
     });
 
@@ -1392,26 +1416,39 @@ const DocgenModule = (() => {
     const count = q('#dg-sum-count');
     if (!body) return;
 
-    const clientNames = state.selectedClients.map(clientLabel);
-    const tpls        = [...state.chosenTemplates];
+    // Az EH szám azért látszik itt, mert a sablon `{{EH szám}}` jelölőjébe EZ az
+    // érték megy: a listán még a generálás előtt kiderül, ha valakinél üres,
+    // vagy ha nem az az ügy adja, amelyikre az ügyintéző gondolt.
+    const clients = state.selectedClients.map(id => {
+      const ugy = ugyAzonositok(id);
+      return { name: clientLabel(id), eh: ugy ? ugy.ehNumber : '',
+               tobbEh: !!(ugy && ugy.ambiguous) };
+    });
+    const tpls = [...state.chosenTemplates];
 
-    if (!clientNames.length || !tpls.length) {
+    if (!clients.length || !tpls.length) {
       body.innerHTML = `<div style="color:var(--c-muted);font-size:12px;font-style:italic;padding:4px 0">
         Válassz ügyfeleket és sablonokat a generáláshoz.</div>`;
       if (count) count.textContent = '';
       return;
     }
 
-    const total = clientNames.length * tpls.length;
-    if (count) count.textContent = `${clientNames.length} × ${tpls.length} = ${total} dokumentum`;
+    const total = clients.length * tpls.length;
+    if (count) count.textContent = `${clients.length} × ${tpls.length} = ${total} dokumentum`;
 
-    body.innerHTML = clientNames.map(name => `
+    body.innerHTML = clients.map(({ name, eh, tobbEh }) => `
       <div style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;
           border-bottom:1px solid var(--c-border)">
         <span style="font-size:12px;font-weight:500;min-width:110px;flex-shrink:0;
             padding-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
             title="${escHtml(name)}">${escHtml(name)}</span>
-        <div style="display:flex;flex-wrap:wrap;gap:3px">
+        <div style="display:flex;flex-wrap:wrap;gap:3px;align-items:center">
+          ${eh ? `<span style="font-size:10px;padding:2px 7px;border-radius:4px;
+                background:var(--c-bg);border:1px dashed var(--c-border);white-space:nowrap;
+                color:var(--c-muted)"
+                title="A nyitott ügy EH száma – ez megy a {{EH szám}} jelölőbe${
+                  tobbEh ? '. Több nyitott ügynek is van száma, a legutóbb megnyitotté került ide.' : ''}"
+                >${escHtml(eh)}${tobbEh ? ' ⚠' : ''}</span>` : ''}
           ${tpls.map(t =>
             `<span style="font-size:10px;padding:2px 7px;border-radius:4px;
                 background:var(--c-bg);border:1px solid var(--c-border);white-space:nowrap"
@@ -1689,6 +1726,19 @@ const DocgenModule = (() => {
         outputDir: state.outputDir?.name || null,
         templatesDir: state.templatesDir?.name || null }),
       `user=${currentUser}, clients=[${clients.slice(0,5).map(employeeName).join('|')}${clients.length>5?'…':''}], templates=[${templates.slice(0,5).join('|')}${templates.length>5?'…':''}]`);
+
+    // Ha egy dolgozónak több nyitott ügye is hordoz EH számot, a dokumentumra a
+    // legutóbb megnyitotté kerül. Ez választás, nem tény – ezért naplózzuk, hogy
+    // utólag meg lehessen mondani, melyik ügy száma ment ki az iratra.
+    for (const emp of clients) {
+      const azon = ugyAzonositok(emp.id);
+      if (azon && azon.ambiguous) {
+        BevLogger.warn('CASE_EH_AMBIGUOUS',
+          `Több nyitott ügynek is van EH száma: ${employeeName(emp)}`,
+          `valasztott=${azon.ehNumber} (ugy=${azon.caseType}), mind=[${azon.ehNumbers.join('|')}]`,
+          `user=${currentUser}`);
+      }
+    }
 
     setStatus('Generálás…', 0);
     setGenButtons(false);
