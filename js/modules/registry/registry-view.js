@@ -72,6 +72,7 @@ const RegistryModule = (() => {
     CaseTypes.useBackend(makeConfigBackend(dirHandle, 'caseTypes'));
     EmployeeRepo.useBackend(EmployeeRepo.createFileBackend(dirHandle));
     CaseRepo.useBackend(CaseRepo.createFileBackend(dirHandle));
+    TransferRepo.useBackend(TransferRepo.createFileBackend(dirHandle));
     await SchemaStore.load();
     await ExportProfiles.load();
     await CaseTypes.load();
@@ -86,6 +87,7 @@ const RegistryModule = (() => {
     try {
       await EmployeeRepo.load();
       await CaseRepo.load();
+      await TransferRepo.load();
     } catch (e) {
       if (EmployeeRepo.isCorruptError(e)) {
         state.ready = false;
@@ -112,11 +114,13 @@ const RegistryModule = (() => {
     CaseTypes.useBackend(makeIdbConfigBackend('caseTypes'));
     EmployeeRepo.useBackend(EmployeeRepo.createIdbBackend());
     CaseRepo.useBackend(CaseRepo.createIdbBackend());
+    TransferRepo.useBackend(TransferRepo.createIdbBackend());
     await SchemaStore.load();
     await ExportProfiles.load();
     await CaseTypes.load();
     await EmployeeRepo.load();
     await CaseRepo.load();
+    await TransferRepo.load();
     state.ready = true;
     await migrateLegacyKeys();
     renderSidebar();

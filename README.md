@@ -23,7 +23,7 @@ ismerik a mappaválasztó API-t, ami a sablonok beolvasásához kell.
 |---|---|
 | **Dokumentumok** | Sablon kiválasztása, személyek kijelölése, generálás |
 | **Nyilvántartás** | Személyek felvitele, keresés, xlsx be- és kivitel |
-| **Ügyek** | Kérelmek és bejelentések követése, határidők, idővonal |
+| **Ügyek** | Kérelmek és bejelentések követése, határidők, idővonal; díjátutalások |
 | **Beállítások** | Séma szerkesztése, szótár, export profilok, napló |
 
 Az **Ügyek** fül címkéjén piros pötty jelzi, hány ügy határideje járt le.
@@ -472,23 +472,137 @@ Ha egy meghosszabbítás megadással zárul, az app bekéri az új engedélyszá
 következő ablak a régi, már lejárt engedélyből számolna. Utána egy kattintással
 előjegyezhető a következő ciklus, a saját ablakával.
 
+## Átutalások
+
+Az **Ügyek → Átutalások** nézet váltja ki a `Procedural-Fee-Transfer-Log.xlsm`
+munkafüzetet: az eljárási díjak (26 000 / 47 000 Ft) utalásának előkészítése,
+nyilvántartása és bizonyítása.
+
+### Köteg
+
+Egy köteg egy utalási adag. Két állapota van:
+
+| Állapot | Mit jelent |
+|---|---|
+| **előkészítés** | Még gyűlnek a tételek, bármi szerkeszthető. Egyszerre egy ilyen van. |
+| **kifizetve** | A pénz elindult, rögzítve a dátummal. Javítható, de minden javítás naplózódik. |
+
+A munkafüzetben ez két külön munkalap volt (beviteli lap + archívum). Itt egy
+mező, mert a kettő között nem szerkezeti a különbség — így nem is térhet el
+egymástól ugyanaz a sor két helyen.
+
+### Tétel felvétele
+
+- **Ügylista → egy ügy kiválasztva → „Díj a kötegbe"** — a gyors út.
+- **Átutalások → „Ügy hozzáadása"** — több ügy egyszerre; ami már szerepel
+  valamelyik kötegben, az jelölve és nem választható.
+
+A tétel a felvételkor **pillanatképet** készít a névről, születési dátumról,
+állampolgárságról és az azonosítóról. Ha később javul a dolgozó adata vagy
+törlődik az ügy, a már elutalt tétel nem változik visszamenőleg — ez bizonyítja,
+mi szerepelt a banki közleményben. Az előkészítés alatti kötegnél a sor bármikor
+átírható kézzel.
+
+**Az összeget felvételkor meg kell adni** a táblázatban: 26 000 vagy 47 000 Ft.
+
+### Közlemény
+
+A `Név ÉÉÉÉ-HH-NN AZONOSÍTÓ` alakú banki közlemény a sor adataiból áll össze,
+nem szerkeszthető külön — így sosem mondhat mást, mint ami a sorban van.
+96 karakter fölött pirosra vált (ennyi fér a belföldi átutalás közlemény-rovatába).
+
+### Ellenőrzés
+
+A felület folyamatosan jelzi, ami hiányos vagy gyanús: hiányzó adat, rossz
+azonosító-formátum, nem szabályos összeg, **ugyanaz az azonosító kétszer a
+kötegben**, és ami a legfontosabb — **az azonosító egy korábbi kifizetett
+kötegben már szerepelt** (dupla utalás).
+
+Ezek figyelmeztetések, nem tiltások: a PDF hiányos sorral is elkészíthető,
+mert a javításhoz gyakran épp a kinyomtatott kép kell.
+
+### Napló
+
+Minden művelet bekerül: köteg létrehozása és törlése, tétel hozzáadása,
+mezőnkénti módosítás (előtte–utána értékkel), tétel törlése, kifizetés.
+A napló a **törlést is túléli** — külön, csak hozzáfűzhető listában él, nem a
+törölt soron belül. A *Napló* gombbal nézhető meg kötegenként.
+
+> Ez egy JSON az adatmappában: aki a fájlhoz fér, átírhatja. Jóhiszemű
+> használat melletti visszakövetésre való, nem kriptografikus bizonyíték.
+
+### PDF
+
+A *PDF* gomb a munkafüzet nyomtatási képét adja vissza, A4 fekvőben, angol
+nyelven (a bank és az OIF ezt látja). Több tételnél lapokra tördel, és
+minden lapon megismétli a fejlécsort. A fájl a kimeneti mappába kerül
+`Fee-transfers_ÉÉÉÉ-HH-NN_óópp.pdf` néven, vagy letöltésként, ha nincs
+kimeneti mappa.
+
+Ehhez **nem kell Word és nem kell külső lépés** — az app maga rajzolja.
+
+### Adatfájl
+
+`docgen-transfers.json` az adatmappában, ugyanazzal a mentési és
+visszaállítási védelemmel, mint a nyilvántartás és az ügyek.
+
+
 ## PDF
 
-A generálás `.docx`-et készít. A PDF-fé alakítás **külön lépés**, mert
-böngészőből nem lehet Wordöt vezérelni, szervert pedig nem telepíthetünk.
+Két, élesen különböző PDF van az appban, és érdemes tudni, melyik melyik.
 
-1. Generálj — a `.docx` fájlok a kimeneti mappába kerülnek
-2. Másold a **`tools/docx-pdf.vbs`** fájlt a kimeneti mappába, és kattints rá
-   duplán (vagy húzd rá a mappát) — minden `.docx` mellé PDF kerül, almappákban is
-3. Ha összefűzött PDF is kell: **Dokumentumok → Összefűzés a kimeneti mappából**
+### Sablonból generált irat — a Word készíti
+
+Hivatalos nyomtatvány tördelését egyedül a Word ismeri. Böngészőből nem lehet
+Wordöt vezérelni, ezért ez **külön lépés** marad — de már nem kell hozzá
+keresgélni:
+
+1. **Generálj** — a `.docx` fájlok a kimeneti mappába kerülnek, és melléjük
+   kerül a **`PDF-keszites.vbs`** (a `tools/docx-pdf.vbs` másolata) meg egy
+   `docgen-generalas.json` kísérőfájl.
+2. **Kattints duplán a `PDF-keszites.vbs`-re** a kimeneti mappában — minden
+   `.docx` mellé PDF kerül, almappákban is.
+3. **Dokumentumok → PDF összefűzés → Ellenőrzés** — megmutatja, hány DOCX-hez
+   készült már PDF, és mi hiányzik. Innen indítható az összefűzés is.
+
+A szkript első alkalommal még nem másolódik ki magától: az *Ellenőrzés* alatti
+gombbal kell egyszer kiválasztani a `tools/docx-pdf.vbs` fájlt. Utána minden
+generálás automatikusan viszi.
 
 A konverzió a Wordöt használja, ezért a PDF **teljesen hű** az eredetihez.
 Ha már fut a Word, a szkript ahhoz csatlakozik és nem zárja be a végén.
 
-> **Ha szerkeszted a `.vbs` fájlt:** UTF-16 LE kódolással, BOM-mal mentsd.
-> A Windows Script Host különben ANSI-ként olvassa, és minden ékezet elromlik —
-> nemcsak az üzenetekben, hanem a PDF-ben is. (UTF-8 BOM-mal el sem indul.)
-> A `test/vbs-encoding.test.js` ezt ellenőrzi.
+> A generálás után felajánlott **„Gyorsnézet nyomtatással"** NEM formahű: a
+> böngésző csak a szöveget látja, a fejlécet, láblécet és a tördelést nem.
+> Tartalom-ellenőrzésre jó, hivatalos iratnak nem.
+
+#### Indítás a böngészőből (nem kötelező)
+
+Ha nem akarsz a kimeneti mappáig navigálni, a konverzió elindítható az appból is:
+
+1. Futtasd egyszer a **`tools/telepit-protokoll.vbs`** fájlt — bejegyzi a
+   `docgenpdf://` protokollt a **saját felhasználódhoz** (`HKEY_CURRENT_USER`,
+   nem kell rendszergazda). Ugyanez a fájl kapcsolja ki, ha újra futtatod.
+2. Kattints egyszer a kimeneti mappában a `PDF-keszites.vbs`-re — ebből tudja
+   meg a szkript, melyik mappával dolgozzon.
+3. Onnantól a *PDF-készítés indítása innen* gomb elindítja a konverziót.
+
+A böngésző elsőre rákérdez, hogy megnyithatja-e — ott pipáld be a „mindig
+engedélyezze" lehetőséget. Ha a céges házirend tiltja, a duplakattintásos út
+változatlanul működik.
+
+### Díjátutalási lap — az app rajzolja
+
+Az **Ügyek → Átutalások** nézetben készülő lap nem sablonból jön: az app
+közvetlenül rajzolja (pdf-lib + beágyazott Carlito betűkészlet). Nincs hozzá
+Word, nincs külső lépés, egy gombnyomás. Lásd az [Átutalások](#átutalások)
+szakaszt.
+
+### Ha szerkeszted a `.vbs` fájlokat
+
+UTF-16 LE kódolással, BOM-mal mentsd. A Windows Script Host különben ANSI-ként
+olvassa, és minden ékezet elromlik — nemcsak az üzenetekben, hanem a PDF-ben is.
+(UTF-8 BOM-mal el sem indul.) A `test/vbs-encoding.test.js` ezt ellenőrzi.
 
 A környezet felmérésének csomagja: [`tools/pdf-proba/`](tools/pdf-proba/OLVASD-EL.md),
 az eredménye: [`EREDMENY.md`](tools/pdf-proba/EREDMENY.md).

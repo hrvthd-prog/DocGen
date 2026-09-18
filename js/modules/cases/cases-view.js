@@ -23,6 +23,10 @@ const CasesModule = (() => {
     // A közelgő lejáratok rendezése. A nap szerinti a kiindulás (az ég sürgősebb),
     // de névsorban keresni is kell tudni, ha valakit név szerint keresünk.
     javaslatRend: Settings.get('cases_suggest_sort', 'nap'),
+    // Ügylista vagy átutalások. A fül SZINTJÉN váltunk, mert egy átutalási
+    // köteg sok ügyet fog át – egy kiválasztott ügy alá zárva folyton ki
+    // kellene lépni belőle.
+    nezet: Settings.get('cases_view', 'ugyek'),
   };
 
   const RENDEZESEK = [
@@ -54,6 +58,7 @@ const CasesModule = (() => {
       savValt();
     });
     CaseRepo.onChange(() => { render(); frissitJelzo(); });
+    TransferRepo.onChange(() => { if (state.nezet === 'atutalasok') render(); });
     // Az EH-panelen a mentés is ezt hívná, és a teljes újrarajzolás elvenné a
     // fókuszt a mezőről, ami épp aktív. Ott a sor magát frissíti.
     EmployeeRepo.onChange(() => { if (!ehPanelenDolgozunk()) render(); frissitJelzo(); });
@@ -102,6 +107,15 @@ const CasesModule = (() => {
     }
     jelzo.textContent = db > 99 ? '99+' : String(db);
     jelzo.title = `${db} lejárt határidejű ügy`;
+  }
+
+  /** Kis szám az Átutalások gombon: hány tétel vár az előkészítés alatti kötegben. */
+  function atutalasJelzo() {
+    try {
+      const nyitott = TransferRepo.all().filter(TransferRepo.isOpen);
+      const db = nyitott.reduce((n, b) => n + b.rows.length, 0);
+      return db ? ` <span class="cv-viewbtn__badge">${db}</span>` : '';
+    } catch { return ''; }
   }
 
   function keszAll() {
@@ -189,11 +203,31 @@ const CasesModule = (() => {
       return;
     }
 
+    container.innerHTML = `
+      <div class="cv-viewbar">
+        <button class="cv-viewbtn ${state.nezet === 'ugyek' ? 'is-active' : ''}"
+                data-nezet="ugyek" type="button">Ügylista</button>
+        <button class="cv-viewbtn ${state.nezet === 'atutalasok' ? 'is-active' : ''}"
+                data-nezet="atutalasok" type="button">Átutalások${atutalasJelzo()}</button>
+      </div>
+      <div class="cv-view" id="cv-view"></div>`;
+
+    container.querySelectorAll('.cv-viewbtn').forEach(gomb => {
+      gomb.addEventListener('click', () => {
+        state.nezet = gomb.dataset.nezet;
+        Settings.set('cases_view', state.nezet);
+        render();
+      });
+    });
+
+    const nezetEl = container.querySelector('#cv-view');
+    if (state.nezet === 'atutalasok') { TransfersView.render(nezetEl); return; }
+
     const lista = szurtLista();
     const felvetes = javaslatokHtml();
     const zart = state.savZarva;
 
-    container.innerHTML = `
+    nezetEl.innerHTML = `
       <div class="cv-wrap${zart ? ' is-collapsed' : ''}">
         <aside class="cv-side">
           <div class="cv-toolbar">
@@ -263,6 +297,7 @@ const CasesModule = (() => {
       <div class="cv-actions">
         <button class="btn btn-ghost btn-sm" id="cv-edit">Adatok szerkesztése</button>
         ${c.closedAt ? '' : '<button class="btn btn-primary btn-sm" id="cv-advance">Státusz rögzítése</button>'}
+        <button class="btn btn-secondary btn-sm" id="cv-fee">Díj a kötegbe</button>
         <button class="btn btn-ghost btn-sm cv-del" id="cv-delete">Ügy törlése</button>
       </div>`;
   }
@@ -433,6 +468,12 @@ const CasesModule = (() => {
 
     container.querySelectorAll('.cv-row').forEach(b => {
       b.addEventListener('click', () => { state.kivalasztott = b.dataset.id; render(); });
+    });
+
+    const dij = q('#cv-fee');
+    if (dij) dij.addEventListener('click', () => {
+      const c = CaseRepo.get(state.kivalasztott);
+      if (c && TransfersView.addFromCase(c)) render();
     });
 
     const rendGomb = q('#cv-suggest-sort');
