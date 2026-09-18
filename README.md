@@ -632,8 +632,9 @@ keresgélni:
 1. **Generálj** — a `.docx` fájlok a kimeneti mappába kerülnek, és melléjük
    kerül a **`PDF-keszites.vbs`** (a `tools/docx-pdf.vbs` másolata) meg egy
    `docgen-generalas.json` kísérőfájl.
-2. **Kattints duplán a `PDF-keszites.vbs`-re** a kimeneti mappában — minden
-   `.docx` mellé PDF kerül, almappákban is.
+2. **Kattints duplán a `PDF-keszites.vbs`-re** a kimeneti mappában — a
+   `docgen-generalas.json` kísérőfájl alapján **csak a legutóbbi generálás**
+   dokumentumaiból készül PDF. A mappában maradt korábbi iratokhoz nem nyúl.
 3. **Dokumentumok → PDF összefűzés → Ellenőrzés** — megmutatja, hány DOCX-hez
    készült már PDF, és mi hiányzik. Innen indítható az összefűzés is.
 
@@ -643,6 +644,13 @@ generálás automatikusan viszi.
 
 A konverzió a Wordöt használja, ezért a PDF **teljesen hű** az eredetihez.
 Ha már fut a Word, a szkript ahhoz csatlakozik és nem zárja be a végén.
+
+> **Kísérőfájl nélkül** (pl. ha a `tools/docx-pdf.vbs`-re ráhúzol egy mappát) a
+> szkript az eredeti módján dolgozik: a mappa és almappái **minden** `.docx`
+> fájlját átalakítja. Ez az önálló használat, és ott épp ez a hasznos.
+>
+> Mit csinálna? `cscript //Nologo tools\docx-pdf.vbs <mappa> /lista` — kiírja a
+> munkalistát, és nem indítja el a Wordöt.
 
 > A generálás után felajánlott **„Gyorsnézet nyomtatással"** NEM formahű: a
 > böngésző csak a szöveget látja, a fejlécet, láblécet és a tördelést nem.
