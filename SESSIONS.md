@@ -75,7 +75,7 @@ helyi JSON-nel, CRUD-dal és naplózással, PDF-kimenettel. (2) Menet közben
 kiderült: „nem működik a PDF összefűzés és a PDF generálás" — a kettő ugyanaz
 a probléma, ezért a terv elé került.
 
-**Változás** (`v10.52`):
+**Változás** (`v10.57` — a commit `v10.52`-ként született, a mainbe fésülve lett 10.57):
 - `js/services/pdf-service.js` + `vendor/fontkit.umd.min.js` + `vendor/fonts/Carlito-*`
   + `vendor/carlito-fonts.js` (generált, `tools/font-bundle.js`) — az app első
   Word-független PDF-rétege.
@@ -102,7 +102,19 @@ Két önálló, korábbi hiba is kiderült és javult: az összefűzés minden c
 ugyanazt a nevet adta (a nyers rekordból olvasott név-token mindig üres volt),
 és üres eredményre is „✓ összefűzve" üzenetet adott.
 
-**Tesztek:** `node test/run-all.js` → 17 készlet, mind zöld.
+**Tesztek:** `node test/run-all.js` → 17 készlet, mind zöld — a merge után is.
+
+**Merge:** közben három commit érkezett a mainre (EH szám a generálásba, ezres
+tagolás, hazautazás módja). Az `index.html` / `print.html` / `js/version.js`
+ütközése csak a gépi verziószám volt — a hivatkozások halmaza és sorrendje
+azonos —, a `SESSIONS.md`-ben mindkét ág bejegyzései megmaradtak. A verzió
+merge közben nem lépett (a hook ott kihagyja magát), ezért külön commit
+rendezte 10.57-re.
+
+**Tag-ütközés — RENDEZENDŐ:** ez az ág a 10.51-ről indult, ezért a helyi hook
+a saját commitját is `v10.52`-nek számolta, és a `git push --follow-tags` ezt
+fel is tette a távolira. A `v10.52` viszont a `7c2cb75`-é (EH szám) — annak a
+`js/version.js`-e is 10.52. A `v10.53` és `v10.54` tag hiányzik a távoliról.
 
 **Nyitott / következő:**
 - A `docgenpdf://` protokoll **nincs éles gépen kipróbálva** — a két `.vbs`
