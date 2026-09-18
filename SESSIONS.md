@@ -68,6 +68,53 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-09-18 (3.) — Áttekintő az Ügyek fülön
+
+**Cél:** dashboard az aktuális ügyek számáról és állapotáról, plusz visszaút,
+mert eddig ügyet kellett választani ahhoz, hogy az oldalsávon kívül bármi
+megjelenjen.
+
+**Változás** (`v10.60`):
+- `js/modules/cases/cases-dashboard.js` — négy blokk: számlálók, hiányzó ügyek,
+  benyújtási ablak, határidő nélküli ügyek.
+- `js/modules/cases/cases-view.js` — az áttekintő a részletező panel
+  alapállapota; „⌂ Áttekintés" gomb a felső sávban; Esc; a számláló-csempék a
+  meglévő szűrő-kötésre csatlakoznak.
+- `css/cases.css`, `test/cases-dashboard.test.js` (20 teszt), `README.md`.
+
+**Miért / döntés:**
+- **Nem harmadik nézet a váltóban, hanem a részletező panel alapállapota.**
+  Ott addig egy „Válassz ki egy ügyet" felirat állt: a felület legdrágább
+  helye, épp a legfontosabb pillanatban üresen. Így a lista mellette marad, és
+  nem kell külön helyre navigálni.
+- **A legfontosabb blokk az, ami NINCS.** A lejárt ügy már látszik (piros
+  pötty, szűrő, listasor); a nem létező ügy viszont láthatatlan. A
+  `suggestRenewals()` ezt már számolta, csak nem volt hol megjelennie.
+- **A 90 napos horizont nem ízlés kérdése:** a benyújtási ablak pontosan
+  ennyivel a lejárat előtt nyílik (`SUBMISSION_WINDOW_DEFAULT.earliestDays`).
+  Korábban felvetni zaj — még beadni sem lehetne.
+- **Minden elemnek van kattintása és következő lépése.** A csempék a lista
+  szűrőjét állítják, a sorok `data-new-for` / `data-open-case` attribútumot
+  visznek, amiket a `cases-view` MEGLÉVŐ kötései kapnak el — nem kellett új
+  eseménykezelő.
+- **A „határidő nélküli" blokk definíciója menet közben szűkült.** Először
+  minden `dueAt` nélküli nyitott ügy belekerült, de a meghosszabbításnak
+  jellemzően nincs is határideje — viszont VAN benyújtási ablaka, amit a fenti
+  blokk már mutat. Kétszer jelentettük volna ugyanazt. Most csak az kerül ide,
+  amit sem határidő, sem ablak nem időz. A tesztek fogták meg.
+- **Kimaradt: elakadt ügyek, diagramok, teljesítmény-statisztika.** Az „X napja
+  nem történt semmi" küszöbe önkényes lenne; a kördiagram pár tucat ügynél
+  semmit nem mond, amit a lista ne mondana jobban; a havi statisztika pedig
+  vezetői riport egy egyszemélyes operatív eszközben.
+
+**Tesztek:** `node test/run-all.js` → 19 készlet, mind zöld.
+
+**Nyitott / következő:**
+- A böngészős felület továbbra sincs végigkattintva — a 20 teszt a SZÁMOKAT
+  fedi (`adatok()`), a megjelenítést nem.
+- Ha a lista tovább nő, a `dash-list` 260 px-es maximuma kevés lehet; ma
+  görget, de lehet, hogy inkább „+ még N" kellene.
+
 ## 2026-09-18 (2.) — A PDF-átalakító csak a legutóbbi generálást viszi
 
 **Cél:** hibajelentés éles próbából: „a VBS nem csak a kiválasztott docx-ekből

@@ -45,6 +45,7 @@ const CasesModule = (() => {
 
   function init(el) {
     container = el;
+    CasesDashboard.init({ dolgozoNeve });
     render();
     frissitJelzo();
     window.addEventListener('docgenTabActivated', e => {
@@ -56,6 +57,21 @@ const CasesModule = (() => {
       if (!container.classList.contains('active')) return;
       e.preventDefault();
       savValt();
+    });
+
+    // Esc: vissza az áttekintőhöz. Csak akkor, ha nincs nyitott párbeszéd és
+    // nem egy mezőben gépel valaki – ott az Esc mást jelent.
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Escape' || !state.kivalasztott) return;
+      if (!container.classList.contains('active')) return;
+      if (state.nezet !== 'ugyek') return;
+      const dlg = document.getElementById('dialog-overlay');
+      if (dlg && !dlg.classList.contains('hidden')) return;
+      const a = document.activeElement;
+      if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+      e.preventDefault();
+      state.kivalasztott = null;
+      render();
     });
     CaseRepo.onChange(() => { render(); frissitJelzo(); });
     TransferRepo.onChange(() => { if (state.nezet === 'atutalasok') render(); });
@@ -256,6 +272,8 @@ const CasesModule = (() => {
                     title="${zart ? 'Ügylista mutatása' : 'Ügylista elrejtése'} (Alt+L)"
                     aria-expanded="${zart ? 'false' : 'true'}">${zart ? '›' : '‹'}</button>
             ${zart ? `<span class="cv-bar__lista">${lista.length} ügy</span>` : ''}
+            ${state.kivalasztott ? `<button class="cv-back" id="cv-back" type="button"
+                    title="Vissza az áttekintőhöz (Esc)">⌂ Áttekintés</button>` : ''}
             <span class="cv-bar__person">${state.kivalasztott ? escHtml(kivalasztottNeve()) : ''}</span>
           </div>
           ${reszletHtml()}
@@ -266,12 +284,9 @@ const CasesModule = (() => {
   }
 
   function reszletHtml() {
-    if (!state.kivalasztott) {
-      // Csukott listánál a „válassz a listából" félrevezető – nincs mit látni.
-      return state.savZarva
-        ? '<div class="ct-empty">Nyisd ki az ügylistát a › gombbal (vagy Alt+L), és válassz ügyet.</div>'
-        : '<div class="ct-empty">Válassz ki egy ügyet a listából.</div>';
-    }
+    // Nincs kiválasztott ügy → áttekintő. Ez a panel korábban üresen állt, és
+    // épp a leghasznosabb pillanatban nem mondott semmit: megnyitáskor.
+    if (!state.kivalasztott) return CasesDashboard.render();
     const c = CaseRepo.get(state.kivalasztott);
     if (!c) return '<div class="ct-empty">Az ügy már nem létezik.</div>';
 
@@ -462,9 +477,14 @@ const CasesModule = (() => {
       });
     }
 
-    container.querySelectorAll('.cv-filter').forEach(b => {
+    // Az áttekintő számláló-csempéi ugyanazt csinálják, mint a szűrőgombok:
+    // kattintásra a lista szűrődik. Enélkül a szám csak dísz lenne.
+    container.querySelectorAll('.cv-filter, .dash-stat').forEach(b => {
       b.addEventListener('click', () => { state.szuro = b.dataset.filter; render(); });
     });
+
+    const vissza = q('#cv-back');
+    if (vissza) vissza.addEventListener('click', () => { state.kivalasztott = null; render(); });
 
     container.querySelectorAll('.cv-row').forEach(b => {
       b.addEventListener('click', () => { state.kivalasztott = b.dataset.id; render(); });
