@@ -94,6 +94,65 @@ találgatunk, és a teljes dátumot sem írjuk át szebbnek látszó, de hamis a
 > Excel a beírt dátumot a kitöltő gépének területi beállítása szerint mutatná
 > (angol rendszeren `3/15/1990`), és a kitöltő azt hinné, elrontotta.
 
+### Szám: ezres tagolás
+
+A **szám (`number`) típusú** mezők — ma a `Bruttó bér` — háromjegyű
+csoportokra tagolva kerülnek a dokumentumba:
+
+```
+Bruttó bér: {{Bruttó bér}} Ft   →   Bruttó bér: 450 000 Ft
+```
+
+**Tárolni tagolatlanul tárolunk** (`450000`) — ahogy az adatbekérő útmutatója
+is kéri („digits only, without currency sign or spaces") —, és az **export, az
+adatbekérő és az Enter Hungary-másolás is a nyers alakot viszi**. A tagolás
+csak a megjelenítés: pontosan úgy, mint a dátumnál (tárolva `1988-04-12`,
+iratban `1988.04.12.`).
+
+Az elválasztó **nem törő szóköz**: a magyar helyesírás szóközzel tagol, egy
+iraton viszont a szám nem törhet ketté a sor végén.
+
+Ami nem tiszta szám (`450000 Ft/hó`, `megbeszélés szerint`), az **változatlanul
+megy tovább** — mértékegységes vagy hiányos értéket nem írunk át. A kézzel
+beírt tagolást viszont újratagoljuk, hogy a kimenet ne függjön attól, ki hogyan
+gépelte be.
+
+> A tagolás a **típushoz** kötődik, nem a mező nevéhez: ha egy új mezőnek
+> (pl. nettó bér) ezres tagolás kell, `number` típussal kell felvenni a
+> **Beállítások → Séma** lapon. Aminek a tagolás rossz volna — évszám,
+> azonosító —, az `text` vagy `date`; az irányítószám, a házszám és a FEOR
+> ezért ma is szöveg.
+
+### Ügyszám a dokumentumon
+
+Néhány iraton fel kell tüntetni a hatósági **EH számot**, esetleg az
+iktatószámot is. Ezek nem a munkavállaló adatai — az **ügyé** —, ezért nem is
+kell (és nem is lehet) a nyilvántartásba felvinni őket: a jelölő az **Ügyek
+fülön, a nyitott ügyön** rögzített számot hozza.
+
+```
+Ügyszám: {{EH szám}}     Iktatószám: {{Iktatószám}}
+```
+
+Ugyanaz több néven is írható, hogy egy kötőjel ne csússzon el:
+`{{EH szám}}`, `{{EH-szám}}`, `{{EH_szám}}`, `{{EH szam}}`, `{{ehNumber}}`,
+`{{eh_number}}` — mind ugyanaz. Az iktatószámnál: `{{Iktatószám}}`,
+`{{Iktatoszam}}`, `{{fileNumber}}`, `{{file_number}}`.
+
+**Melyik ügyé, ha több van?** A legutóbb megnyitott **nyitott** ügyé,
+amelyiknek már van száma. Az EH szám és az iktatószám mindig **ugyanabból** az
+ügyből jön — a hatóság a kettő párosából azonosítja az ügyet.
+
+**Lezárt ügy száma sosem kerül dokumentumra.** Egy most készülő beadványon az
+nem hiányos adat, hanem téves: rossz ügyre hivatkozna. Akinek nincs nyitott
+ügye, annál a jelölő üresen marad, és a *Hiányzó adatok naplója* kiírja, melyik
+dokumentumból maradt ki.
+
+> A **Generálás** fül összesítőjében ott van, melyik szám megy ki kire. Ha egy
+> dolgozónak több nyitott ügye is hordoz EH számot, a szám mellett `⚠` jelenik
+> meg (a napló is rögzíti, melyiket választotta) — ilyenkor érdemi döntés, hogy
+> melyik ügyről szól az irat.
+
 ### Szótár: ugyanaz az adat két nyelven
 
 Az ország, a munkakör vagy a szakképesítés az egyik iratba magyarul, a másikba
@@ -172,16 +231,29 @@ megy haza az ember, tehát az **állampolgárság** eldönti. A séma ezt szabá
 { key: 'transport_type', type: 'computed',
   computed: {
     from: ['citizenship'],
-    lookup: { bus: ['Ausztria', 'Szlovákia', 'Ukrajna', 'Románia',
-                    'Szerbia', 'Horvátország', 'Szlovénia'] },
+    lookup: { bus: ['Ukrajna', 'ukrán', 'Ukraine', 'Ukrainian',
+                    'Szlovákia', 'szlovák', 'Slovakia', 'Slovak', …] },
     default: 'airplane',
   } }
 ```
 
 Az ilyen mező **nem kerül ki az adatbekérőbe** (nincs értelme megkérdezni), a
 kimenete pedig a szótáron megy át, mint bármelyik szabad szöveg. Ha nincs
-forrásadat, üres marad — nem találgatunk. Új küldő ország felvételéhez a
-**Beállítások → Séma** lapon kell bővíteni a listát.
+forrásadat, üres marad — nem találgatunk.
+
+**A listában minden alaknak szerepelnie kell, ahogyan az adat érkezhet** —
+országnév és melléknév, magyarul és angolul is. Az illesztés nem tippel:
+korábban csak a magyar országnév (`Ukrajna`) szerepelt, ezért az „ukrán"
+állampolgárságú dolgozó némán a `default`-ot, vagyis **repülőt** kapott.
+Amit a lista nem ismer, az nem hiba, hanem csendben az alapértelmezés.
+
+> A **szótári pár is illeszkedik**: aki „Ukraine"-t írt, ugyanoda tartozik,
+> mint aki „Ukrajná"-t — így egy szótárbővítés a szabályon is segít.
+
+**Kalibrálás:** a lista a **Beállítások → Séma → az adott mező „Szerkesztés"**
+gombjánál bővíthető (Szabály — melyik kimenethez mely értékek tartoznak), ha új
+küldő ország jön. A saját kalibrálást a program frissítése nem írja felül: a
+kódból csak azt a szabályt hozza fel, amihez senki nem nyúlt hozzá.
 
 Hogy egy mezőnek pontosan mi a jelölője, a **Beállítások → Séma** fülön látszik.
 Amire nem volt adat, azt a *Hiányzó adatok naplója* utólag is megmutatja.
@@ -725,7 +797,7 @@ Tizenkét tesztcsomag, 322 teszt. Böngészőt nem igényel.
 | `docgen-resolve.test.js` | kétnyelvű jelölők, dátum-részek, szótár, számított mezők |
 | `logger.test.js` | a napló nem hagyhatja el a gépet |
 | `vbs-encoding.test.js` | a `.vbs` UTF-16 LE marad |
-| `cases.test.js` | határidők, kimenetelek, idővonal, láncolás |
+| `cases.test.js` | határidők, kimenetelek, idővonal, láncolás, ügyszám a dokumentumra |
 | `e2e.test.js` | **körbe-teszt:** táblázat → nyilvántartás → export |
 
 ### Próbaanyag

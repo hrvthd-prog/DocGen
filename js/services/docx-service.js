@@ -330,6 +330,7 @@ const DocxService = (() => {
   return {
     generateDocx,
     processCheckboxes,   // alacsonyszintű SDT-jelölő feldolgozás (teszthez is)
+    makeParser,          // a jelölő-feloldás maga (a render nélkül, teszthez is)
     enrichClientRow,
     outputFilename,
     uniqueFilename,

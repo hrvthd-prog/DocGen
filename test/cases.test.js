@@ -866,6 +866,120 @@ atest('a lejárt, sürgős és nyitott ügyek megszámolása', async () => {
   assertEq(s.nyitott, 3, 'a lezárt is beleszámított');
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+asection('Azonosítók a dokumentumokba');
+
+atest('a nyitott ügy EH száma és iktatószáma jelölőként elérhető', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas',
+    ehNumber: 'EH18506859', fileNumber: '106-1-12345-2/2026-T' });
+
+  const t = CaseRepo.docTags(emp.id);
+  assertEq(t['EH szám'],    'EH18506859');
+  assertEq(t['Iktatószám'], '106-1-12345-2/2026-T');
+  // Ugyanaz több néven – a DocxService a `_`-t szóközre cseréli, ezért az
+  // {{EH_szám}} és az {{eh_number}} is ide talál.
+  for (const nev of ['EH-szám', 'EH szam', 'EH number', 'ehNumber']) {
+    assertEq(t[nev], 'EH18506859', nev);
+  }
+});
+
+atest('ügy nélküli dolgozónál üres, nem hiba', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const t = CaseRepo.docTags(emp.id);
+  assertEq(t['EH szám'], '');
+  assertEq(t['Iktatószám'], '');
+  assertEq(CaseRepo.docIdentifiers(emp.id).caseId, null);
+});
+
+atest('LEZÁRT ügy száma nem kerül dokumentumra', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', ehNumber: 'EH-LEZART' });
+  CaseRepo.setStatus(ugy.id, 'lezarva', { outcome: 'megadva' });
+  // Egy most készülő beadványon a lezárt ügy száma nem hiányos adat, hanem
+  // téves: rossz ügyre hivatkozna.
+  assertEq(CaseRepo.docTags(emp.id)['EH szám'], '');
+});
+
+atest('több nyitott ügyből a legutóbb megnyitott nyer, és jelzi a többit', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  CaseRepo.create({ employeeId: emp.id, type: 'rp_elso',
+    openedAt: '2026-01-10', ehNumber: 'EH-REGI' });
+  CaseRepo.create({ employeeId: emp.id, type: 'szallashely_valtozas',
+    openedAt: '2026-05-20', ehNumber: 'EH-UJ' });
+
+  const a = CaseRepo.docIdentifiers(emp.id);
+  assertEq(a.ehNumber, 'EH-UJ');
+  assertEq(a.caseType, 'szallashely_valtozas');
+  assert(a.ambiguous, 'nem jelezte, hogy több nyitott ügynek is van száma');
+  assertEq(a.ehNumbers.length, 2);
+});
+
+atest('egy szám két nyitott ügyön nem kétértelmű', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', openedAt: '2026-01-10',
+    ehNumber: 'EH-AZONOS' });
+  CaseRepo.create({ employeeId: emp.id, type: 'szallashely_valtozas', openedAt: '2026-05-20',
+    ehNumber: 'EH-AZONOS' });
+  assert(!CaseRepo.docIdentifiers(emp.id).ambiguous, 'ugyanarra a számra figyelmeztetett');
+});
+
+atest('a szám nélküli (előjegyzett) ügy nem takarja el a számot hordozót', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas',
+    openedAt: '2026-02-01', ehNumber: 'EH-ELO' });
+  // Az openNextCase a JÖVŐBE jegyzi elő a következő ügyet – az sorrendben
+  // elöl áll, de még nincs száma; nem hallgattathatja el a folyamatban lévőt.
+  CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas', openedAt: '2027-09-01' });
+  assertEq(CaseRepo.docIdentifiers(emp.id).ehNumber, 'EH-ELO');
+});
+
+atest('a két szám ugyanabból az ügyből jön', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', openedAt: '2026-01-10',
+    ehNumber: 'EH-REGI', fileNumber: 'IKT-REGI' });
+  CaseRepo.create({ employeeId: emp.id, type: 'szallashely_valtozas', openedAt: '2026-05-20',
+    ehNumber: 'EH-UJ' });
+
+  // A hatóság az EH szám és az iktatószám párosából azonosítja az ügyet: a
+  // frissebb EH szám a régebbi ügy iktatószámával együtt hamis párost adna.
+  const a = CaseRepo.docIdentifiers(emp.id);
+  assertEq(a.ehNumber, 'EH-UJ');
+  assertEq(a.fileNumber, '', 'másik ügy iktatószámát húzta be');
+});
+
+atest('csak iktatószám is elég forrásnak', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', fileNumber: 'IKT-EGYEDUL' });
+  const a = CaseRepo.docIdentifiers(emp.id);
+  assertEq(a.ehNumber, '');
+  assertEq(a.fileNumber, 'IKT-EGYEDUL');
+});
+
+atest('másik dolgozó ügye nem szivárog át', async () => {
+  await tisztaAllapot();
+  const a = ujDolgozo({ surname: 'Egyik' });
+  const b = ujDolgozo({ surname: 'Másik' });
+  CaseRepo.create({ employeeId: a.id, type: 'rp_elso', ehNumber: 'EH-EGYIK' });
+  assertEq(CaseRepo.docTags(b.id)['EH szám'], '');
+});
+
+atest('a törölt EH szám a dokumentumból is eltűnik', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', ehNumber: 'EH-TORLENDO' });
+  CaseRepo.update(ugy.id, { ehNumber: '' });
+  assertEq(CaseRepo.docTags(emp.id)['EH szám'], '');
+});
+
 // ── Futtatás ────────────────────────────────────────────────────────────────
 (async () => {
   for (const item of queue) {

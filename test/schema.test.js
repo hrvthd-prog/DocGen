@@ -403,6 +403,77 @@ test('év-elöl alak akárhogy tagolva egységesül, ambigúzat nem alakítunk',
 });
 
 // ════════════════════════════════════════════════════════════════════════════
+section('Szám: ezres tagolás a dokumentumban');
+// A bér az iraton olvashatóan kell (450 000), tárolni viszont tagolatlanul
+// tárolunk – ugyanaz a szétválasztás, mint a dátumnál.
+
+const NBSP = '\u00A0';   // nem törő szóköz – szándékosan kódként, hogy látszódjon
+
+test('a bér háromjegyű csoportokra tagolva jelenik meg', () => {
+  assertEq(SchemaStore.renderTag('gross_salary',  { gross_salary: '450000' }), '450' + NBSP + '000');
+  assertEq(SchemaStore.renderTag('Bruttó bér',    { gross_salary: '1234567' }),
+    '1' + NBSP + '234' + NBSP + '567');
+  // a jelölő angol alakja ugyanazt adja: a szám nem fordítandó
+  assertEq(SchemaStore.renderTag('Bruttó bér_EN', { gross_salary: '450000' }), '450' + NBSP + '000');
+});
+
+test('az elválasztó NEM TÖRŐ szóköz – az iraton a szám nem törhet ketté', () => {
+  const t = SchemaStore.renderTag('gross_salary', { gross_salary: '450000' });
+  assert(t.includes(NBSP), 'nem nem-törő szóközzel tagol');
+  assert(!/ /.test(t), 'sima szóköz került a számba');
+});
+
+test('a tárolt érték érintetlen marad – az export és az EH ezt viszi', () => {
+  const mezok = { gross_salary: '450000' };
+  SchemaStore.renderTag('gross_salary', mezok);
+  assertEq(mezok.gross_salary, '450000');
+});
+
+test('négy számjegy alatt nincs mit tagolni', () => {
+  assertEq(SchemaStore.renderTag('gross_salary', { gross_salary: '999' }), '999');
+  assertEq(SchemaStore.renderTag('gross_salary', { gross_salary: '0' }), '0');
+  assertEq(SchemaStore.renderTag('gross_salary', { gross_salary: '' }), '');
+});
+
+test('a kézzel beírt tagolás újratagolódik, nem duplázódik', () => {
+  // Ne függjön a kimenet attól, ki hogyan gépelte be a mezőt.
+  for (const raw of ['450 000', '450' + NBSP + '000', ' 450000 ']) {
+    assertEq(SchemaStore.renderTag('gross_salary', { gross_salary: raw }),
+      '450' + NBSP + '000', JSON.stringify(raw));
+  }
+});
+
+test('ami nem tiszta szám, azt nem írjuk át', () => {
+  // Ugyanaz az elv, mint a csonka dátumnál: mértékegységes vagy hiányos
+  // értékből nem gyártunk szebbnek látszó, de hamis alakot.
+  for (const raw of ['450000 Ft/hó', 'kb. 450000', '450-000', 'megbeszélés szerint']) {
+    assertEq(SchemaStore.renderTag('gross_salary', { gross_salary: raw }), raw, raw);
+  }
+});
+
+test('a tizedes rész és az előjel megmarad', () => {
+  assertEq(SchemaStore._formatNumber('1234.5'), '1' + NBSP + '234.5');
+  assertEq(SchemaStore._formatNumber('1234,5'), '1' + NBSP + '234,5');
+  assertEq(SchemaStore._formatNumber('-1234'),  '-1' + NBSP + '234');
+});
+
+test('a tagolás a TÍPUSHOZ kötődik, nem a mező nevéhez', () => {
+  // Az irányítószám, a házszám és a FEOR szöveg, nem szám – ezért marad
+  // tagolatlan. Ha valaha számmá válnának, ez a teszt bukna, és jól teszi.
+  for (const kulcs of ['postal_code', 'street_number', 'feor']) {
+    const f = SchemaStore.field(kulcs);
+    assert(f, `nincs ilyen mező: ${kulcs}`);
+    assert(f.type !== 'number', `${kulcs} száммá vált – ezres tagolást kapna`);
+  }
+  assertEq(SchemaStore.renderTag('Irányítószám', { postal_code: '1024' }), '1024');
+});
+
+test('a teljes értékkészletben is tagolva van (ez megy a sablonba)', () => {
+  const v = SchemaStore.resolveValues({ gross_salary: '450000' }, 'hu');
+  assertEq(v.gross_salary, '450' + NBSP + '000');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
 section('Értékhez kötött jelölőnégyzet');
 // A hatósági űrlap nem kiírja az értéket, hanem bejelöli: „☐ male ☒ female".
 // Ilyenkor több négyzet néz ugyanarra a mezőre, más-más várt értékkel.
@@ -460,6 +531,41 @@ test('szomszédos országból busz, távolabbról repülő', () => {
   for (const a of ['Fülöp-szigetek', 'Mexikó', 'Brazília', 'Vietnám']) {
     assertEq(mod(a), 'repülő', `${a} nem repülő`);
   }
+});
+
+// A hibabejelentés: az ukrán dolgozó repülőt kapott. A lista csak a magyar
+// ORSZÁGNEVET ismerte, a rovatba viszont melléknév és angol alak is érkezik.
+test('az állampolgárság melléknévi és angol alakja is felismerhető', () => {
+  SchemaStore.loadFrom(SEED_SCHEMA);
+  SchemaStore.setDictionary([{ en: 'bus', hu: 'busz' }, { en: 'airplane', hu: 'repülő' }]);
+  const mod = a => SchemaStore.renderTag('transport_type', { citizenship: a });
+
+  for (const a of ['Ukrajna', 'ukrán', 'Ukraine', 'Ukrainian', 'UKRÁN', 'ukran']) {
+    assertEq(mod(a), 'busz', `${a} nem busz`);
+  }
+  for (const a of ['Szlovákia', 'szlovák', 'Slovakia', 'Slovak',
+                   'Szerbia', 'szerb', 'Serbia', 'Serbian',
+                   'Románia', 'román', 'Romania', 'Romanian']) {
+    assertEq(mod(a), 'busz', `${a} nem busz`);
+  }
+});
+
+test('a Fülöp-szigetekiek repülővel – minden alakban', () => {
+  SchemaStore.setDictionary([{ en: 'bus', hu: 'busz' }, { en: 'airplane', hu: 'repülő' }]);
+  const mod = a => SchemaStore.renderTag('transport_type', { citizenship: a });
+  for (const a of ['Fülöp-szigetek', 'Fülöp-szigeteki', 'Philippines', 'Filipino', 'Vietnám']) {
+    assertEq(mod(a), 'repülő', `${a} nem repülő`);
+  }
+});
+
+test('a szótári pár is illeszkedik a listára', () => {
+  // Ami nincs a listában, de a szótár szerint ugyanaz az ország, oda tartozik.
+  // Így egy szótárbővítés a szabályokon is segít.
+  SchemaStore.setDictionary([{ en: 'bus', hu: 'busz' }, { en: 'airplane', hu: 'repülő' },
+                             { en: 'Slovak Republic', hu: 'Szlovákia' }]);
+  assertEq(SchemaStore.renderTag('transport_type', { citizenship: 'Slovak Republic' }), 'busz');
+  // A követő tesztek a busz/repülő párokra számítanak – az országpárt vesszük ki
+  SchemaStore.setDictionary([{ en: 'bus', hu: 'busz' }, { en: 'airplane', hu: 'repülő' }]);
 });
 
 test('a felismerés ékezet- és kisbetű-tűrő', () => {
@@ -669,6 +775,60 @@ test('mező törlése előtt látszik, mi veszne el', () => {
   const u = SchemaStore.usageOf('postal_code', employees);
   assertEq(u.withData, 1, 'rossz az érintett rekordok száma');
   assert(u.computedBy.includes('Állandó lakcím'), 'nem jelezte a számított mező függését');
+});
+
+// ── Szabály-felhozatal a mentett sémán ──────────────────────────────────────
+// A `load()` a MENTETT configot használja, ha van: egy kódban javított lookup
+// enélkül soha nem érné el a meglévő telepítést. Csendben maradna a hibás
+// szabály – pont ez volt az ukrán/repülő hiba.
+
+/** Séma a RÉGI (hibás) hazautazás-szabállyal – ilyen van a mentett configban. */
+function regiSemaval(lookup) {
+  const s = JSON.parse(JSON.stringify(SEED_SCHEMA));
+  const f = s.fields.find(x => x.key === 'transport_type');
+  if (lookup === null) delete f.computed.lookup;
+  else f.computed.lookup = lookup;
+  return s;
+}
+
+const REGI_LISTA = {
+  bus: ['Ausztria', 'Szlovákia', 'Ukrajna', 'Románia',
+        'Szerbia', 'Horvátország', 'Szlovénia'],
+};
+
+test('a régi hazautazás-szabály felfrissül a mentett sémán', () => {
+  SchemaStore.loadFrom(regiSemaval(REGI_LISTA));
+  SchemaStore.setDictionary([{ en: 'bus', hu: 'busz' }, { en: 'airplane', hu: 'repülő' }]);
+  // Az induló állapot a bejelentett hiba: az ukrán dolgozó repülőt kap
+  assertEq(SchemaStore.renderTag('transport_type', { citizenship: 'ukrán' }), 'repülő');
+
+  assertEq(SchemaStore.refreshComputedRules(SEED_SCHEMA), 1, 'nem frissült a szabály');
+  assertEq(SchemaStore.renderTag('transport_type', { citizenship: 'ukrán' }), 'busz');
+  assertEq(SchemaStore.renderTag('transport_type', { citizenship: 'Ukrainian' }), 'busz');
+});
+
+test('a felhozatal ismételhető: másodszorra már nincs mit tenni', () => {
+  assertEq(SchemaStore.refreshComputedRules(SEED_SCHEMA), 0, 'újra átírta a friss szabályt');
+});
+
+test('a SAJÁT kalibrálást nem írjuk felül', () => {
+  // Aki a Beállítások → Séma lapon hozzáigazította a saját küldő országaihoz,
+  // annak a listája marad – a felhozatal csak az érintetlen szabályt cseréli.
+  SchemaStore.loadFrom(regiSemaval({ bus: ['Ukrajna', 'Mongólia'] }));
+  assertEq(SchemaStore.refreshComputedRules(SEED_SCHEMA), 0, 'felülírta a saját listát');
+  const f = SchemaStore.field('transport_type');
+  assert(f.computed.lookup.bus.includes('Mongólia'), 'eltűnt a saját érték');
+});
+
+test('a szabály nélküli (régi) számított mező is megkapja a listát', () => {
+  // A lookup előtti időkből maradt mezőt senki nem kalibrálhatta – nincs mit
+  // félteni rajta.
+  SchemaStore.loadFrom(regiSemaval(null));
+  assert(!SchemaStore.field('transport_type').computed.lookup, 'volt lookup a kiinduló állapotban');
+  assertEq(SchemaStore.refreshComputedRules(SEED_SCHEMA), 1);
+  assertEq(SchemaStore.renderTag('transport_type', { citizenship: 'ukrán' }), 'busz');
+  SchemaStore.setDictionary([]);
+  SchemaStore.loadFrom(SEED_SCHEMA);
 });
 
 // ════════════════════════════════════════════════════════════════════════════

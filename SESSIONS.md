@@ -113,6 +113,173 @@ ugyanazt a nevet adta (a nyers rekordból olvasott név-token mindig üres volt)
 - A File System Access engedély minden indításnál újra kell (`file://` a
   gyökere). Két lehetséges irány a TERV 4. pontjában — döntést igényel.
 - A PDF 566 kB a hibás részhalmazoló miatt. Ha zavaró, megbízható subsetter kell.
+## 2026-09-09 — Hazautazás módja: az ukrán dolgozó repülőt kapott
+
+**Cél:** hibabejelentés. „Az ukrán munkavállalók busszal, a Fülöp-szigetekiek
+repülővel utaznak" — a program mást mondott, és a Beállításokban nem lehetett
+kalibrálni.
+
+**A hiba gyökere:** a `transport_type` szabály listája **csak a magyar
+ORSZÁGNEVET** ismerte (`Ukrajna`), az `Állampolgárság` rovatba viszont a
+melléknév (`ukrán`) és az angol alak (`Ukraine`, `Ukrainian`) is érkezik. Az
+illesztés nem tippel, tehát nem talált — és a dolgozó **némán** a `default`-ot,
+vagyis repülőt kapott. Lemérve: `Ukrajna` → busz, `ukrán` / `Ukraine` /
+`Ukrainian` → repülő.
+
+**Változás** (`v10.54`):
+- `js/schema/seed-schema.js` — a `bus` lista országonként négy-öt alakot ismer
+  (magyar országnév, magyar melléknév, angol országnév, angol melléknév).
+- `js/schema/schema-store.js` — `computeLookup` a **szótári párt** is elfogadja
+  forrásként; új `refreshComputedRules()` migráció + `REGI_SZABALYOK`.
+- `js/modules/registry/registry-view.js` — a migráció beindul a séma-felhozatal
+  során (`migrateLegacyKeys`).
+- `js/modules/settings/settings-view.js` + `css/registry.css` — a számított mező
+  szabálya **szerkeszthető** a Séma lapon (kimenet + elfogadott értékek sorok,
+  alapértelmezés), az enum értéklista mintájára.
+- `README.md` „Amit nem kérdezünk meg, mert kiszámolható" átírva.
+
+**Miért / döntés:**
+- **A kódban javított lista magától SOHA nem érte volna el a gépedet.** A
+  `load()` a mentett `docgen-config.json`-t használja, ha van, és az
+  `addMissingSeedFields` csak hiányzó MEZŐT pótol — a meglévő mező szabályához
+  nem nyúl. Enélkül a javítás csak friss telepítésen működne: pontosan az a
+  fajta „megcsináltam, mégsem változott" hiba, amit a legnehezebb észrevenni.
+- **A migráció csak az ÉRINTETLEN szabályt cseréli.** Ujjlenyomatot vesz a
+  mentett listáról, és csak akkor ír, ha az betűre a régi alak (vagy egyáltalán
+  nincs lookup). Aki a saját küldő országaihoz igazította, annak a listája
+  marad — különben a következő frissítés csendben eltörölné a munkáját.
+- **A szerkesztő azért kellett, mert a felület ígérte, de nem tudta.** A seed
+  kommentje és a README is azt írta, hogy „a lista a Beállítások → Séma lapon
+  bővíthető" — a mezőszerkesztő viszont csak annyit mondott a számított mezőre,
+  hogy „a típusa nem módosítható itt". Az ígéret most igaz.
+- **Nem tippelünk tövet.** Kézenfekvő lett volna „ukr" előtagra illeszteni, de
+  a `szlovák`/`szlovén` pár mutatja, hova vezet: a tévedés itt csendes, és egy
+  hatósági iratra megy ki. Marad a felsorolás — és mellette a szótár, ami már
+  amúgy is ismeri az `Ukraine = Ukrajna` párt.
+
+**Tesztek:** `node test/run-all.js` zöld. `schema.test.js` 72 → 79: a
+melléknévi és angol alakok mind buszt adnak, a Fülöp-szigetekiek minden
+alakban repülőt, a szótári pár is illeszkedik; a migrációra négy ellenőrzés
+(a régi lista felfrissül, másodszorra már nincs mit tenni, a saját kalibrálás
+sértetlen marad, a lookup nélküli régi mező is megkapja a listát).
+
+**Nyitott / következő:**
+- A **szabály-szerkesztő böngészőben nincs kipróbálva** (a `file://`-s app itt
+  nem futtatható) — az első nyitáskor érdemes ránézni: Beállítások → Séma →
+  „Hazautazás módja" → Szerkesztés.
+- A javítás a következő indításkor fut le magától (a napló `SEMA_MIGRACIO`
+  sorral jelzi); érdemes utána egy dolgozón ellenőrizni a `{{Közlekedési
+  eszköz}}` jelölőt.
+- Nettó bér mező továbbra sincs a sémában (lásd az előző bejegyzést).
+
+## 2026-09-09 — A bér ezres tagolással megy az iratra
+
+**Cél:** a bér-jelölők értéke legyen olvasható a dokumentumban: háromjegyű
+csoportonként egy ezres elválasztó (450000 → 450 000).
+
+**Változás** (`v10.53`):
+- `js/schema/schema-store.js` — `formatNumber()`, és a `renderValue` a
+  `number` típusú mezőket ezen engedi át (a `formatDate` mintájára).
+  Exportálva `_formatNumber` néven, hogy közvetlenül is mérhető legyen.
+- `js/modules/cases/case-eh.js` — az EH-panel a `number` mezőt is NYERSEN
+  másolja, ahogy eddig a dátumot.
+- `README.md` „Szám: ezres tagolás".
+
+**Miért / döntés:**
+- **A típus dönt, nem a mező neve.** Egy kulcslista (`gross_salary`, …) kódban
+  élne és minden új mezőnél karbantartást kérne; a `number` típust ember
+  állítja be a séma-szerkesztőben, és ott a „szám" mennyiséget jelent. Aminek
+  a tagolás rossz volna (évszám, azonosító), az ma is `text` vagy `date` — az
+  irányítószám, a házszám és a FEOR mind szöveg. Egy teszt őrzi, hogy ezek ne
+  csússzanak át számmá.
+- **A séma-attribútum (`format: 'ezres'`) elvérzett volna.** A `normalize()`
+  csak az ismert mezőkulcsokat engedi át, és a MENTETT séma (`docgen-config
+  .json`) nem frissül a seedből: a meglévő telepítésen a jelző soha nem
+  jelenne meg. Csendben nem működő beállítás helyett inkább a típus.
+- **Tárolni tagolatlanul tárolunk.** A tagolás megjelenítés, mint a dátumnál:
+  az export, az adatbekérő és az EH-másolás a nyers alakot viszi. Az EH űrlap
+  tagolatlan számot vár — a panel ezért kapta meg ugyanazt a kivételt, amit a
+  dátum már használt.
+- **Nem törő szóköz.** A magyar helyesírás szóközzel tagol, egy iraton viszont
+  a szám nem törhet ketté a sor végén. (Ezt adja a `toLocaleString('hu-HU')`
+  is, csak az a böngésző területi adataitól függ — itt kiszámítható alak kell.)
+- **Amit nem ismerünk fel tiszta számként, nem írjuk át** („450000 Ft/hó",
+  „megbeszélés szerint") — ugyanaz az elv, mint a csonka dátumnál. A kézzel
+  beírt tagolást viszont újratagoljuk, hogy a kimenet ne függjön a gépeléstől.
+
+**Tesztek:** `node test/run-all.js` zöld. `schema.test.js` 63 → 72 (tagolás,
+nem törő szóköz, érintetlen tárolt érték, újratagolás, nem-szám érintetlen,
+tizedes/előjel, típushoz kötöttség). `docgen-resolve.test.js` 42 → 44: a
+jelölő a VALÓDI úton megy végig, és külön ellenőrzés őrzi, hogy a
+`DocxService.formatValue` nem alakítja vissza számmá a tagolt értéket —
+ott némán tűnne el a tagolás.
+
+**Nyitott / következő:**
+- **Nettó bér mező nincs a sémában** — csak `gross_salary` van, `net_salary`
+  (vagy bármilyen nettó) sehol. A kérésben szerepelt, de nem lehetett mit
+  formázni: amint felveszed a **Beállítások → Séma** lapon `number` típussal,
+  a tagolást magától megkapja.
+- Böngészőben nem próbáltam ki (a `file://`-s app itt nem futtatható) — az
+  első generálásnál érdemes ránézni egy bér-jelölőre.
+- Az előző munkamenet ága (`claude/eh-szamok-…`) **merge-elve** a `main`-be
+  (PR #2), a `v10.52` tag helyben megvan, de a tag-push ebből a környezetből
+  nem megy át — az első helyi push (`git push --follow-tags`) pótolja.
+
+## 2026-09-09 — Az ügy EH száma átjön a dokumentumgenerálásba
+
+**Cél:** néhány iraton fel kell tüntetni az EH számot. A munkavállalónak nincs
+ilyen mezője a sémában, az adat viszont ott van kézzel felvive a **nyitott
+ügyeken**. Kérdés volt, hogyan lehet ezt jelölőként áthúzni a generálásba.
+
+**Változás** (`v10.52`):
+- `js/services/case-repo.js` — `docIdentifiers(employeeId)` (melyik ügy száma
+  megy ki és miért) + `docTags(employeeId)` (ugyanaz jelölőnevekre bontva) +
+  `DOC_TAGS` (a jelölőnevek listája, egy helyen).
+- `js/modules/docgen.js` — a `buildRenderRow` hozzáfűzi az ügy-jelölőket
+  (`ugyJelolok`); a személyválasztó és a Generálás fül összesítője mutatja az
+  EH számot (`ugyAzonositok`); több nyitott ügynél `CASE_EH_AMBIGUOUS` napló.
+- `js/services/docx-service.js` — a `makeParser` mostantól exportált, hogy a
+  jelölő-feloldás Node-ból is mérhető legyen (mint a `processCheckboxes`).
+- `README.md` „Ügyszám a dokumentumon", `TERV-esemenyek.md` 5. szakasz.
+
+**Miért / döntés:**
+- **Nem séma-mező.** Egy `eh_number` mező a dolgozón rossz kérdésre válaszolna:
+  az azonosító nem a személyé, hanem az ÜGYÉ, és egy dolgozónak több ügye
+  futhat egyszerre — az első kettős ügynél összecsúszna. Az adat marad ott,
+  ahol keletkezik; a generálás kéri el.
+- **Csak NYITOTT ügyből.** Egy lezárt ügy száma egy most készülő beadványon nem
+  hiányos adat, hanem téves: rossz ügyre hivatkozna. Üresen hagyva a *Hiányzó
+  adatok naplója* kiírja — az üres mező javítható, a rossz szám észrevétlen.
+- **A két szám ugyanabból az ügyből.** Nem a legfrissebb EH szám a legfrissebb
+  iktatószámmal párosítva: a hatóság a kettő párosából azonosítja az ügyet, egy
+  kevert páros sehová nem mutat. Ezért van EGY forrásügy (a legutóbb megnyitott,
+  amelyiknek már van száma), és mindkét szám onnan jön.
+- **A választás nem néma.** Ha több nyitott ügy is hordoz számot, az összesítőn
+  `⚠` kerül a szám mellé, a generálás pedig naplózza, melyiket választotta —
+  utólag meg kell tudni mondani, melyik ügy száma ment ki az iratra.
+- **Több írásmód.** `{{EH szám}}`, `{{EH-szám}}`, `{{EH_szám}}`, `{{ehNumber}}`,
+  `{{eh_number}}` … mind ugyanaz. A sablonokat emberek írják; egy kötőjel nem
+  lehet az a részlet, amin egy beadvány elcsúszik.
+- **Az előjegyzett ügy nem takar el semmit.** Az `openNextCase` a JÖVŐBE nyitja
+  a következő ügyet, tehát a sorrendben elöl áll — de mivel még nincs száma,
+  a szűrés átlép rajta, és a folyamatban lévő ügy száma megy ki.
+
+**Tesztek:** `node test/run-all.js` zöld. `cases.test.js` 64 → 74 (a választás
+szabályai: lezárt ügy kimarad, a két szám egy ügyből jön, kétértelműség
+jelzése, más dolgozó ügye nem szivárog át, törölt szám eltűnik).
+`docgen-resolve.test.js` 34 → 42: az ügyszám-jelölőket már a **valódi**
+feloldó (`DocxService.makeParser`) oldja fel, nem a normalizálási szabály
+másolata, és a jelölőnevek a `CaseRepo.DOC_TAGS`-ből jönnek — egy alak
+törlése elbuktatja a tesztet (lemérve). Külön teszt őrzi, hogy a sémának
+NINCS ilyen nevű mezője: ha lenne, a feloldó nyerne a sor előtt, és az ügy
+száma helyett egy soha ki nem töltött mező menne ki.
+
+**Nyitott / következő:** böngészőben nem próbáltam ki (a `file://`-s app itt
+nem futtatható) — első nyitáskor érdemes ránézni a Generálás fül összesítőjére
+(ott az EH szám a sablonchipek előtt), és egy próbagenerálásra `{{EH szám}}`
+jelölővel. Ami felmerült, de nem lett megcsinálva: a **fájlnév-minta** még nem
+ismeri az ügyszámot (`[EH szám]` token a `DocxService.NAME_TOKENS`-ben) — ha az
+iratokat ügyszám szerint kell mappázni, ez a következő lépés.
 
 ## 2026-09-07 — Ügy törlése; a szám-javítás átmegy az idővonalra; teljes dolgozólista
 
