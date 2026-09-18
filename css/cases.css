@@ -411,3 +411,111 @@
   border-radius: 9px; background: var(--c-red); color: #fff;
   font-size: 10px; font-weight: 700; line-height: 1;
 }
+
+/* ── Ügyek áttekintő ─────────────────────────────────────────────────────── */
+/* A részletező panel alapállapota: ez látszik, amíg nincs kiválasztott ügy.
+   Korábban itt egy „Válassz ki egy ügyet" felirat állt — a legdrágább hely a
+   felületen, épp a legfontosabb pillanatban üresen. */
+
+.dash { padding: 14px 16px 24px; }
+
+/* Visszaút a kiválasztott ügyből. Az Esc ugyanezt csinálja. */
+.cv-back {
+  flex: 0 0 auto; padding: 3px 10px;
+  border: 1px solid var(--c-border); border-radius: 5px;
+  background: transparent; color: var(--c-muted);
+  cursor: pointer; font: inherit; font-size: 11.5px; line-height: 1.5;
+}
+.cv-back:hover { background: var(--c-teal); border-color: var(--c-teal); color: #fff; }
+
+/* ── Számlálók ───────────────────────────────────────────────────────────── */
+
+.dash-stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+
+.dash-stat {
+  flex: 1 1 130px; min-width: 110px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-border); border-radius: 10px;
+  background: var(--c-bg); cursor: pointer; font: inherit; text-align: left;
+  border-left-width: 3px;
+}
+.dash-stat:hover { background: var(--c-card); border-color: var(--c-teal); }
+.dash-stat__num   { font-size: 22px; font-weight: 700; line-height: 1.1; color: var(--c-text); }
+.dash-stat__label { font-size: 11px; color: var(--c-muted); }
+
+.dash-stat--red     { border-left-color: var(--c-red); }
+.dash-stat--amber   { border-left-color: var(--c-amber); }
+.dash-stat--neutral { border-left-color: var(--c-slate); }
+.dash-stat--red.is-zero,
+.dash-stat--amber.is-zero { border-left-color: var(--c-border); }
+/* A nulla nem hír: halványan marad, hogy a nem-nulla ugorjon ki. */
+.dash-stat.is-zero .dash-stat__num { color: var(--c-muted); font-weight: 600; }
+
+/* ── „Nincs teendő" ──────────────────────────────────────────────────────── */
+
+.dash-ok {
+  padding: 14px 16px; margin-bottom: 16px;
+  border: 1px solid var(--c-border); border-left: 3px solid var(--c-green);
+  border-radius: 10px; background: var(--c-bg);
+}
+.dash-ok__title { font-size: 13.5px; font-weight: 600; color: var(--c-text); }
+.dash-ok__sub   { font-size: 12px; color: var(--c-muted); margin-top: 3px; line-height: 1.5; }
+
+/* ── Blokkok ─────────────────────────────────────────────────────────────── */
+
+.dash-block {
+  margin-bottom: 16px; padding: 12px 14px;
+  border: 1px solid var(--c-border); border-radius: 10px; background: var(--c-bg);
+  border-left-width: 3px;
+}
+.dash-block--red   { border-left-color: var(--c-red); }
+.dash-block--amber { border-left-color: var(--c-amber); }
+
+.dash-block__title { font-size: 13px; font-weight: 600; color: var(--c-text); }
+.dash-block__sub   { font-size: 11.5px; color: var(--c-muted); margin-top: 3px; line-height: 1.45; }
+
+.dash-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.dash-pill {
+  padding: 3px 9px; border-radius: 11px;
+  font-size: 11px; font-weight: 600;
+}
+.dash-pill--green { background: #E3F3E7; color: #1F6B36; }
+.dash-pill--amber { background: #FDF3DD; color: #8A6410; }
+.dash-pill--red   { background: #FBE9E9; color: #8C2020; }
+
+/* ── Sorok ───────────────────────────────────────────────────────────────── */
+
+.dash-list { margin-top: 8px; max-height: 260px; overflow-y: auto; }
+
+.dash-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 7px 8px; border: none; border-radius: 6px;
+  border-bottom: 1px solid var(--c-border);
+  background: transparent; text-align: left; cursor: pointer; font: inherit;
+}
+.dash-row:last-child { border-bottom: none; }
+.dash-row:hover { background: var(--c-card); }
+
+.dash-row__main {
+  flex: 1 1 auto; min-width: 0; font-size: 12.5px; color: var(--c-text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dash-row__meta {
+  flex: 0 1 auto; font-size: 11.5px; color: var(--c-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dash-row__meta.is-late { color: var(--c-red); font-weight: 600; }
+
+/* A következő lépés a soron belül van kimondva – hover nélkül is látszik,
+   hogy a kattintás mit fog csinálni. */
+.dash-row__go {
+  flex: 0 0 auto; font-size: 10.5px; color: var(--c-teal); font-weight: 600;
+  opacity: .75;
+}
+.dash-row:hover .dash-row__go { opacity: 1; }
+
+@media (max-width: 760px) {
+  .dash-row__go { display: none; }
+  .dash-stat    { flex-basis: 100px; }
+}

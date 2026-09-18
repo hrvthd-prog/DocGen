@@ -484,6 +484,27 @@ munkavállalónak nincs magyar személyi igazolványa.
 
 ## Ügyek és határidők
 
+### Áttekintő
+
+Az **Ügyek** fül jobb oldala alapból az áttekintőt mutatja — amíg nem
+választasz ügyet. Négy blokk, mindegyik kattintható:
+
+| Blokk | Mire való |
+|---|---|
+| **Számlálók** | Lejárt / sürgős / nyitott. Kattintásra a lista szűrődik. |
+| **Nincs még ügye** | Lejáró engedély, amihez nem indult meghosszabbítás. Egy kattintással nyitható rá ügy. |
+| **Benyújtási ablak** | Kinél lehet most beadni, kinél záródik, ki késte le. |
+| **Határidő nélkül** | Amit sem határidő, sem ablak nem időz — ezek sosem jeleznek maguktól. |
+
+A legfontosabb a **„Nincs még ügye"**: a lejárt ügy már látszik (piros pötty
+a fül címkéjén, szűrő a listán), a *nem létező* ügy viszont láthatatlan, amíg
+baj nem lesz belőle. A 90 napos előretekintés nem önkényes: a benyújtási
+ablak pontosan ennyivel a lejárat előtt nyílik.
+
+Egy ügy megnyitása után a felső sáv **„⌂ Áttekintés"** gombja (vagy az
+**Esc**) hozza vissza ezt a nézetet.
+
+
 Az idegenrendészeti ügyintézés nem állapot, hanem folyamat: a kérelmek egymás
 után következnek, és közben be- meg kijelentéseket is határidőre kell tenni.
 Az **Ügyek** fül ezt követi.
