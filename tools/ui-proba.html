@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <title>DocGen – UI próba</title>
+  <!--
+    UI-próbalap – az Ügyek fül megjelenítésének szemrevételezéséhez.
+
+    MIÉRT VAN: a Node-tesztek a SZÁMÍTÁSOKAT fedik, a felületet nem – az
+    `index.html` viszont üres kezdőállapotot mutat, mert adatmappát kér, ahhoz
+    pedig felhasználói gesztus kell. Ez a lap memória-háttérrel tölti fel az
+    appot valós alakú adattal (magyar, vietnámi, cirill, török, román nevek),
+    így egy pillantással látszik, mit csinál a felület.
+
+    ÉLES ADATHOZ NEM NYÚL: csak memória-hátteret használ, fájlt nem ír, a
+    választott adatmappát nem is kérdezi.
+
+    HASZNÁLAT
+      Duplakattintás, vagy képernçokép parancssorból:
+
+      chrome.exe --headless=new --disable-gpu --hide-scrollbars         --virtual-time-budget=6000 --window-size=1600,1000         --screenshot=ki.png "file:///.../tools/ui-proba.html"
+
+      Paraméterek:  ?ugy=1            – kiválaszt egy ügyet (a visszatérő gomb is látszik)
+                    ?nezet=atutalasok – az Átutalások nézet
+  -->
+  <link rel="stylesheet" href="../css/app.css">
+  <link rel="stylesheet" href="../css/registry.css">
+  <link rel="stylesheet" href="../css/cases.css">
+  <link rel="stylesheet" href="../css/transfers.css">
+  <style>
+    html, body { margin: 0; height: 100%; }
+    .app-root { display: flex; flex-direction: column; height: 100vh; }
+    .tab-content { flex: 1; min-height: 0; }
+  </style>
+</head>
+<body>
+  <div class="app-root">
+    <header class="app-header">
+      <div class="app-logo"><span class="app-logo__text">DocGen <span class="app-logo__sub">UI próba</span></span></div>
+      <div id="header-breadcrumb" class="header-breadcrumb"></div>
+      <div class="header-user"><span class="header-verzio">próba</span></div>
+    </header>
+    <nav class="tab-nav">
+      <button class="tab-btn active" type="button" data-tab="cases"><span>Ügyek</span></button>
+    </nav>
+    <div id="tab-cases" class="tab-content active"></div>
+  </div>
+  <div id="toast-container"></div>
+  <div id="dialog-overlay" class="dialog-overlay hidden"></div>
+
+  <script src="../vendor/pdf-lib.min.js"></script>
+  <script src="../vendor/fontkit.umd.min.js"></script>
+  <script src="../js/logger.js"></script>
+  <script src="../js/services/settings-service.js"></script>
+  <script src="../js/services/fs-service.js"></script>
+  <script src="../js/services/pdf-service.js"></script>
+  <script src="../js/services/employee-repo.js"></script>
+  <script src="../js/schema/value-codec.js"></script>
+  <script src="../js/schema/seed-schema.js"></script>
+  <script src="../js/schema/schema-store.js"></script>
+  <script src="../js/utils.js"></script>
+  <script src="../js/schema/case-types.js"></script>
+  <script src="../js/services/case-repo.js"></script>
+  <script src="../js/services/transfer-repo.js"></script>
+  <script src="../js/services/transfer-pdf.js"></script>
+  <script src="../js/modules/cases/case-timeline.js"></script>
+  <script src="../js/modules/cases/case-form.js"></script>
+  <script src="../js/modules/cases/case-eh.js"></script>
+  <script src="../js/modules/cases/cases-dashboard.js"></script>
+  <script src="../js/modules/cases/transfers-view.js"></script>
+  <script src="../js/modules/cases/cases-view.js"></script>
+
+  <script>
+  'use strict';
+  // Az app.js-ből csak az a néhány globális kell, amit a nézetek használnak.
+  window.escHtml = s => String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  window.toast = () => {};
+  window.showDialog = ({ title, body, footer }) => {
+    const o = document.getElementById('dialog-overlay');
+    o.innerHTML = `<div class="dialog-box"><div class="dialog-title">${escHtml(title)}</div>
+      <div class="dialog-body">${body}</div><div class="dialog-footer">${footer || ''}</div></div>`;
+    o.classList.remove('hidden');
+  };
+  window.closeDialog = () => document.getElementById('dialog-overlay').classList.add('hidden');
+
+  function nap(n) {
+    const d = new Date();
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+
+  (async () => {
+    SchemaStore.loadFrom(SEED_SCHEMA);
+    CaseTypes.loadFrom(null);
+    EmployeeRepo.useBackend(EmployeeRepo.createMemoryBackend());
+    CaseRepo.useBackend(CaseRepo.createMemoryBackend());
+    TransferRepo.useBackend(TransferRepo.createMemoryBackend());
+    await EmployeeRepo.load();
+    await CaseRepo.load();
+    await TransferRepo.load();
+
+    const uj = (vez, ker, extra = {}) => EmployeeRepo.create({ fields: Object.assign({
+      surname: vez, forename: ker, date_of_birth: '1994-03-11',
+      citizenship: 'vietnámi', personnel_reg_number: String(10000 + Math.floor(Math.random()*9000)),
+    }, extra) });
+
+    // Hiányzó ügyek (lejáró engedély, nincs meghosszabbítás)
+    uj('Nguyễn', 'Thị Hạnh',   { expiration_of_rp: nap(18) });
+    uj('Kőműves', 'Győző',     { expiration_of_rp: nap(44), citizenship: 'magyar' });
+    uj('Ковальчук', 'Олександр', { expiration_of_rp: nap(-6), citizenship: 'ukrán' });
+
+    // Benyújtási ablak: záródik / beadható
+    const b = uj('Şahin', 'Gülşen', { expiration_of_rp: nap(22), citizenship: 'török' });
+    CaseRepo.create({ employeeId: b.id, type: 'rp_hosszabbitas', ehNumber: 'EH16262631' });
+    const c = uj('Mureșan', 'Ștefan', { expiration_of_rp: nap(65), citizenship: 'román' });
+    CaseRepo.create({ employeeId: c.id, type: 'rp_hosszabbitas', ehNumber: 'EH16262632' });
+
+    // Határidő nélküli ügy
+    const d2 = uj('Wójcik', 'Łukasz', { citizenship: 'lengyel' });
+    CaseRepo.create({ employeeId: d2.id, type: 'szallashely_valtozas' });
+
+    // Lejárt és sürgős határidő
+    const e = uj('Čermák', 'Václav', { citizenship: 'cseh' });
+    CaseRepo.create({ employeeId: e.id, type: 'rp_elso', dueAt: nap(-4), ehNumber: 'EH16262640' });
+    const f = uj('Nagy', 'Béla', { citizenship: 'magyar' });
+    CaseRepo.create({ employeeId: f.id, type: 'munkaviszony_bejelentes', dueAt: nap(6) });
+
+    // Átutalási köteg, hogy az a nézet is legyen mit mutasson
+    const kot = TransferRepo.openBatch();
+    for (const emp of EmployeeRepo.all().slice(0, 3)) {
+      const ugy = CaseRepo.forEmployee(emp.id)[0] ||
+        { id: 'x', employeeId: emp.id, ehNumber: 'EH1626' + (2700 + Math.floor(Math.random()*90)) };
+      TransferRepo.addRow(kot.id, TransferRepo.rowFromCase(ugy, emp, { amount: 26000, handler: 'Horváth D' }));
+    }
+
+    const p = new URLSearchParams(location.search);
+    Settings.set('cases_side_collapsed', false);
+
+    CasesModule.init(document.getElementById('tab-cases'));
+
+    // A nézetváltás kattintással megy: a `state.nezet` a modul betöltésekor
+    // olvassa ki a beállítást, utólag írni hatástalan lenne.
+    if (p.get('nezet') === 'atutalasok') {
+      const gomb = document.querySelector('.cv-viewbtn[data-nezet="atutalasok"]');
+      if (gomb) gomb.click();
+    }
+    // Kérésre kiválaszt egy ügyet – így a visszatérő gomb is látszik.
+    if (p.get('ugy')) {
+      const el = document.querySelector('.cv-row');
+      if (el) el.click();
+    }
+    document.title = 'kész';
+  })().catch(e => {
+    document.body.insertAdjacentHTML('afterbegin',
+      `<pre style="color:#b00;padding:12px;font:12px monospace">${e && e.stack || e}</pre>`);
+    document.title = 'hiba';
+  });
+  </script>
+</body>
+</html>
