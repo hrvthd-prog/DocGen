@@ -68,6 +68,49 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-09-18 (2.) — A PDF-átalakító csak a legutóbbi generálást viszi
+
+**Cél:** hibajelentés éles próbából: „a VBS nem csak a kiválasztott docx-ekből
+készít PDF-et, hanem minden egyes docx-ből, ami a kimenet mappában van."
+
+**Változás** (`v10.59`):
+- `tools/docx-pdf.vbs` — ha a mappában ott a `docgen-generalas.json`
+  kísérőfájl, CSAK az abban felsorolt dokumentumokat alakítja át. Enélkül
+  marad az eredeti, rekurzív viselkedés.
+- Új `/lista` kapcsoló: szárazfutás, kiírja a munkalistát, és nem nyúl a Wordhöz.
+- `test/docx-pdf.test.js` — 10 teszt, Word nélkül, a `/lista`-ra épülve.
+- `README.md` — a PDF szakasz pontosítva.
+
+**Miért / döntés:**
+- **A szkript nem volt hibás, a szerepe változott meg.** Eredetileg önálló,
+  „húzd rá a mappát" eszköznek készült, ahol épp az a hasznos, hogy mindent
+  visz. Amióta az app a kimeneti mappába másolja, ott már a *legutóbbi
+  generálás* a kérdés. Ezért nem cseréltük le a viselkedést, hanem kísérőfájl
+  jelenlétéhez kötöttük — a ráhúzós használat változatlan marad.
+- **Almappákba kísérőfájlos módban nem megyünk le.** Az app mindig a kimeneti
+  mappa gyökerébe ír (`FsService.writeToDir`), tehát az almappa tartalma
+  definíció szerint nem a mostani generálásé.
+- **JSON-elemzés helyett soronkénti kiolvasás.** A fájlt gép írja, ismert
+  alakban; a fájlnevekben nem lehet idézőjel vagy visszaper (a `fileSafe()`
+  kiszedi), ezért escape-eléssel sem kell számolni. A ScriptControl-os
+  JSON-elemzés 32 bites és házirenddel tiltható — nem ér annyit.
+- **A kísérőfájl UTF-8, a szkript UTF-16.** Az FSO csak ANSI-t és UTF-16-ot
+  olvas, ezért ADODB.Stream `Charset = "utf-8"`. Enélkül az ékezetes fájlnév
+  nem talált volna rá a lemezen lévő fájlra, és NÉMÁN kimaradt volna — külön
+  teszt őrzi.
+- **A `/lista` nem kényelmi funkció, hanem a tesztelhetőség feltétele.** A
+  szkript Wordöt vezérel, vakon nem futtatható; a munkalista összeállítása
+  viszont pont az a rész, ahol a hiba volt.
+
+**Tesztek:** `node test/run-all.js` → 18 készlet, mind zöld. A `docx-pdf`
+készlet nem Windowson magát kihagyja (nincs cscript).
+
+**Nyitott / következő:**
+- **A kimeneti mappában lévő `PDF-keszites.vbs` másolat régi marad**, amíg egy
+  „DOCX + PDF" generálás felül nem írja. Aki most a régivel fut neki, továbbra
+  is mindent átalakít. Egy generálás megoldja.
+- A böngészős felület továbbra sincs végigkattintva.
+
 ## 2026-09-18 — Díjátutalási napló; a PDF-lánc helyreállítása
 
 **Cél:** (1) A `Procedural-Fee-Transfer-Log.xlsm` beépítése az Ügyek fülre,
