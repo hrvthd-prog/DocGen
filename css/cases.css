@@ -144,6 +144,10 @@
   height: calc(100vh - var(--header-h) - var(--tabnav-h));
   min-height: 0;
   overflow: hidden;
+  /* Oszlop-irány, mert a fülön két réteg van egymás ALATT: a nézetváltó sáv
+     (Ügylista | Átutalások) és a tartalom. A `.tab-content.active` sor-irányú
+     flexet ad (app.css) — enélkül a sáv a tartalom MELLÉ kerülne. */
+  flex-direction: column;
 }
 
 /* A .tab-content maga is flex-konténer, ezért a burkoló flex-ELEM: enélkül

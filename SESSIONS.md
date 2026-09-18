@@ -68,6 +68,52 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-09-18 — Díjátutalási napló; a PDF-lánc helyreállítása
+
+**Cél:** (1) A `Procedural-Fee-Transfer-Log.xlsm` beépítése az Ügyek fülre,
+helyi JSON-nel, CRUD-dal és naplózással, PDF-kimenettel. (2) Menet közben
+kiderült: „nem működik a PDF összefűzés és a PDF generálás" — a kettő ugyanaz
+a probléma, ezért a terv elé került.
+
+**Változás** (`v10.52`):
+- `js/services/pdf-service.js` + `vendor/fontkit.umd.min.js` + `vendor/fonts/Carlito-*`
+  + `vendor/carlito-fonts.js` (generált, `tools/font-bundle.js`) — az app első
+  Word-független PDF-rétege.
+- `js/modules/docgen/pdf-chain.js` — kísérőfájl, szkriptmásolás, lánc-állapot.
+- `js/modules/docgen/merge.js` — állapotsáv, lemezről dolgozó összefűzés,
+  néma siker megszüntetése, csoportosítás a generálás listájából.
+- `js/services/transfer-repo.js`, `transfer-pdf.js`, `js/modules/cases/transfers-view.js`,
+  `css/transfers.css` — a díjátutalási napló.
+- `tools/docx-pdf.vbs` (mappa megjegyzése + protokollhívás), új `tools/telepit-protokoll.vbs`.
+- Tesztek: `pdf-service` (16), `pdf-chain` (12), `transfers` (34), `transfer-pdf` (12).
+
+**Miért / döntés:** részletesen a [TERV-dijatutalas.md](TERV-dijatutalas.md)-ben.
+A három, mérésből jött fordulat:
+- **A `subset: true` tönkreteszi a betűket.** 34 glifából 13 olvashatatlan, 4
+  üres — a lapon a szöveg fele hiányzott, miközben a PDF *szövegrétege*
+  hibátlan maradt, tehát minden szöveges ellenőrzés átengedte volna.
+- **A Carlito `liga` táblája „ti"/„fi" ligatúrát tartalmaz.** „Nationality" →
+  „Nati onality", a szövegrétegben U+08A2. A `font-bundle.js` kiveszi a GSUB-ot.
+- **A `lastGenerated` NEM mehet localStorage-ba** — a `docgen.js:20` explicit
+  adatvédelmi döntést rögzít. A kísérőfájl ezért a kimeneti mappába kerül, ahol
+  ugyanazok a nevek már fájlnévként ott vannak.
+
+Két önálló, korábbi hiba is kiderült és javult: az összefűzés minden csomagnak
+ugyanazt a nevet adta (a nyers rekordból olvasott név-token mindig üres volt),
+és üres eredményre is „✓ összefűzve" üzenetet adott.
+
+**Tesztek:** `node test/run-all.js` → 17 készlet, mind zöld.
+
+**Nyitott / következő:**
+- A `docgenpdf://` protokoll **nincs éles gépen kipróbálva** — a két `.vbs`
+  nyelvtana ellenőrzött (azonnal kilépő másolattal parsoltatva), a
+  registry-bejegyzés nem. Futtasd egyszer a `tools/telepit-protokoll.vbs`-t.
+- A böngészős felület sincs végigkattintva: a Node-tesztek a tárolót, az
+  ellenőrzést és a PDF-et fedik, a nézetet nem.
+- A File System Access engedély minden indításnál újra kell (`file://` a
+  gyökere). Két lehetséges irány a TERV 4. pontjában — döntést igényel.
+- A PDF 566 kB a hibás részhalmazoló miatt. Ha zavaró, megbízható subsetter kell.
+
 ## 2026-09-07 — Ügy törlése; a szám-javítás átmegy az idővonalra; teljes dolgozólista
 
 **Cél:** három kérés. (1) A megnyitott ügy legyen törölhető úgy, hogy a

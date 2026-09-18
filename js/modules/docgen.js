@@ -50,7 +50,7 @@ const DocgenModule = (() => {
       buildRenderRow,
       firstEmployee: () => state.clientRows[0] || null,
     });
-    DocgenMerge.init({ state, q, employeeName });
+    DocgenMerge.init({ state, q, employeeName, nameTokens });
     DocgenGroups.init({ state, refreshTemplates, rebuildGroupFilterBtns, saveSettings });
 
     // A nyilvántartás betöltése az első render ELŐTT: az összesítő a belső
@@ -590,7 +590,6 @@ const DocgenModule = (() => {
               </button>
               <div class="dg-alt-panel dg-alt-panel--open" id="dg-alt-panel">
                 <button id="dg-gen-docx" class="btn btn-secondary btn-full">Csak DOCX</button>
-                <button id="dg-gen-pdf"  class="btn btn-purple btn-full">Csak PDF</button>
               </div>
             </div>
             <div class="dg-result-card" id="dg-result-card">
@@ -723,8 +722,6 @@ const DocgenModule = (() => {
     if (genBoth) genBoth.addEventListener('click', () => runGenerate({ docx: true,  pdf: true  }));
     const genDocx = q('#dg-gen-docx');
     if (genDocx) genDocx.addEventListener('click', () => runGenerate({ docx: true,  pdf: false }));
-    const genPdf = q('#dg-gen-pdf');
-    if (genPdf) genPdf.addEventListener('click',  () => runGenerate({ docx: false, pdf: true  }));
     // ── Mai nap kártya ────────────────────────────────────────────────────────
     const maiNapInput = q('#dg-mai-nap-input');
     if (maiNapInput) {
@@ -909,6 +906,18 @@ const DocgenModule = (() => {
   function employeeName(emp) {
     const v = SchemaStore.resolveValues(emp.fields, 'hu');
     return v.full_name || v.surname || v.forename || '(névtelen)';
+  }
+
+  /**
+   * A fájlnév-minták két név-tokenje, a sémából feloldva.
+   *
+   * A `clientRows` elemei `fields`-alapú rekordok, nem magyar címkés sorok:
+   * a közvetlen `emp['Vezetéknév']` mindig undefined. Az összefűzés korábban
+   * pont ezt csinálta, ezért kapta minden csomag ugyanazt a nevet.
+   */
+  function nameTokens(emp) {
+    const v = SchemaStore.resolveValues((emp && emp.fields) || {}, 'hu');
+    return { 'Vezetéknév': v.surname || '', 'Keresztnév': v.forename || '' };
   }
 
   /** Belső azonosítóból megjelenítendő név — a UUID sosem kerül a felületre. */
@@ -1452,7 +1461,7 @@ const DocgenModule = (() => {
 
   function updateGenButtons() {
     const ready = state.selectedClients.length > 0 && state.chosenTemplates.size > 0 && !!state.templatesDir;
-    ['#dg-gen-both','#dg-gen-docx','#dg-gen-pdf'].forEach(sel => {
+    ['#dg-gen-both','#dg-gen-docx'].forEach(sel => {
       const el = q(sel); if (el) el.disabled = !ready;
     });
     // Primer gomb visszaállítása alapállapotra
@@ -1495,7 +1504,7 @@ const DocgenModule = (() => {
   }
 
   function setGenButtons(enabled) {
-    ['#dg-gen-both','#dg-gen-docx','#dg-gen-pdf'].forEach(s => {
+    ['#dg-gen-both','#dg-gen-docx'].forEach(s => {
       const e = q(s); if (e) e.disabled = !enabled;
     });
   }
@@ -1754,7 +1763,9 @@ const DocgenModule = (() => {
                 `client=${clientName}, user=${currentUser}`);
             }
             progress.setDone(itemIdx);
-            generated.push({ buf: outBuf, name, itemIdx, templateName, clientName });
+            const tokenek = nameTokens(row);
+            generated.push({ buf: outBuf, name, itemIdx, templateName, clientName,
+              vezeteknev: tokenek['Vezetéknév'], keresztnev: tokenek['Keresztnév'] });
             done++;
           } catch (e) {
             BevLogger.error('DOCGEN', `Generálási hiba: ${clientName} / ${templateName}`,
@@ -1797,11 +1808,18 @@ const DocgenModule = (() => {
       // Ezt jegyezzük meg, hogy az összefűzés utólag megtalálja a PDF-eket:
       state.lastGenerated = generated.map(g => ({
         name: g.name, clientName: g.clientName, templateName: g.templateName,
+        vezeteknev: g.vezeteknev, keresztnev: g.keresztnev,
       }));
 
-      if (pdf && generated.length) {
-        // Tartalék út, ha valakinél nem működik a .vbs: böngészős nyomtatás.
-        openPrintSelectDialog(generated);
+      // ── A PDF-lánc előkészítése ───────────────────────────────────────────
+      // A memóriabeli lista az ablak bezárásáig él; a kísérőfájl viszont a
+      // kimeneti mappában marad, így az összefűzés holnap is folytatható.
+      // A konvertáló szkript a DOCX-ek MELLÉ kerül: eddig a repó tools/
+      // mappájában lapult, és kézzel kellett rátalálni — ez volt a lánc
+      // leggyakoribb szakadási pontja.
+      if (state.outputDir && generated.length) {
+        await DocgenPdfChain.writeManifest(state.outputDir, state.lastGenerated);
+        if (pdf) await DocgenPdfChain.copyScript(state.outputDir);
       }
 
       progress.finish(errors.length);
@@ -1817,6 +1835,40 @@ const DocgenModule = (() => {
           : `✓ ${generated.length} dokumentum sikeresen generálva`;
         if (errors.length) rc.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         ra.innerHTML = '';
+
+        // ── A következő lépés kimondása ───────────────────────────────────
+        // Eddig itt a böngészős nyomtatás dialógusa nyílt meg. Az mammothon
+        // keresztül HTML-lé alakít, vagyis a fejlécet, láblécet, szakaszokat
+        // és a tördelést eldobja – hivatalos nyomtatványnál használhatatlan.
+        // A formahű PDF-et a Word adja, ezért itt már csak az van, hogy mi a
+        // teendő: egy duplakattintás a kimeneti mappában.
+        if (pdf && generated.length) {
+          const lepes = document.createElement('div');
+          lepes.style.cssText = 'font-size:11.5px;line-height:1.5;margin:6px 0 2px';
+          lepes.innerHTML = state.outputDir
+            ? `<b>Következő lépés a PDF-hez:</b> nyisd meg a
+               <code>${escHtml(state.outputDir.name)}</code> mappát, és kattints duplán a
+               <code>${escHtml(DocgenPdfChain.SCRIPT_OUT)}</code> fájlra.
+               Utána a PDF összefűzés kártyán az <i>Ellenőrzés</i> mutatja az eredményt.`
+            : `<span style="color:var(--c-amber)">Nincs kimeneti mappa, ezért a PDF-lánc nem
+               készíthető elő — a dokumentumok letöltésként érkeztek.</span>`;
+          ra.appendChild(lepes);
+
+          // A böngészős nyomtatás megmarad, de azzá válik, ami: gyorsnézet.
+          // Nem automatikus és nem javasolt út — ezt a felirat is kimondja,
+          // hogy senki ne hivatalos iratként küldje tovább az eredményét.
+          const gyors = document.createElement('button');
+          gyors.className = 'btn btn-ghost btn-sm';
+          gyors.style.fontSize = '11px';
+          gyors.textContent = 'Gyorsnézet nyomtatással (nem formahű)';
+          gyors.title = 'Csak a tartalom ellenőrzésére. A fejlécet, láblécet és a '
+                      + 'tördelést nem adja vissza — hivatalos irathoz a Wordből mentett PDF kell.';
+          gyors.addEventListener('click', () => openPrintSelectDialog(generated));
+          ra.appendChild(gyors);
+
+          DocgenMerge.refreshChainPanel();
+        }
+
         if (errors.length) {
           const errBtn = document.createElement('button');
           errBtn.className = 'btn btn-ghost btn-sm';
