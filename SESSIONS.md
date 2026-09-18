@@ -111,10 +111,18 @@ azonos —, a `SESSIONS.md`-ben mindkét ág bejegyzései megmaradtak. A verzió
 merge közben nem lépett (a hook ott kihagyja magát), ezért külön commit
 rendezte 10.57-re.
 
-**Tag-ütközés — RENDEZENDŐ:** ez az ág a 10.51-ről indult, ezért a helyi hook
+**Tag-ütközés (rendezve):** ez az ág a 10.51-ről indult, ezért a helyi hook
 a saját commitját is `v10.52`-nek számolta, és a `git push --follow-tags` ezt
 fel is tette a távolira. A `v10.52` viszont a `7c2cb75`-é (EH szám) — annak a
-`js/version.js`-e is 10.52. A `v10.53` és `v10.54` tag hiányzik a távoliról.
+`js/version.js`-e is 10.52, és a `v10.53` / `v10.54` is hiányzott a távoliról.
+Utólag rendezve: a `v10.52` áthelyezve a `7c2cb75`-re
+(`--force-with-lease`), a `v10.53` és `v10.54` felküldve. Ennek az ágnak a
+végleges tagje a `v10.57`; a `9eec706` szándékosan tag nélkül maradt.
+
+**Tanulság:** ha az ág nem a legfrissebb `main`-ről indul, a helyi hook a
+commit-számból olyan verziót számol, amit a távolin már más commit visel.
+Push előtt érdemes `git fetch` + `git log origin/main..HEAD`, és csak utána
+`--follow-tags`.
 
 **Nyitott / következő:**
 - A `docgenpdf://` protokoll **nincs éles gépen kipróbálva** — a két `.vbs`
