@@ -109,9 +109,20 @@ megjelenjen.
 
 **Tesztek:** `node test/run-all.js` → 19 készlet, mind zöld.
 
+**Utólag, az első szemrevételezés után:** készült egy `tools/ui-proba.html`
+próbalap (memória-háttér, valós alakú adat), és a Chrome fejnélküli
+`--screenshot` módjával ránéztünk a felületre. Két dolog derült ki, amit
+vakon nem lehetett volna:
+- A benyújtási ablak blokkja kiírta, hogy „1 most beadható", de azt nem,
+  hogy KI. Pedig az is cselekvés — sőt az az ideális pillanat. Most a
+  lekésett és a záródó után az ideálisak is listázódnak.
+- A „Határidő nélkül" blokk jobb oszlopa mezőnevet mondott („Költözés
+  napja"), miközben mindenhol máshol cselekvés áll ott. A szem cselekvést
+  keres. Most: meta = „hiányzik: …", a jobb oszlop = „Megnyitás".
+
 **Nyitott / következő:**
-- A böngészős felület továbbra sincs végigkattintva — a 20 teszt a SZÁMOKAT
-  fedi (`adatok()`), a megjelenítést nem.
+- A felület KATTINTÁSAI továbbra sincsenek végigpróbálva — a próbalap
+  állóképet ad, nem interakciót.
 - Ha a lista tovább nő, a `dash-list` 260 px-es maximuma kevés lehet; ma
   görget, de lehet, hogy inkább „+ még N" kellene.
 

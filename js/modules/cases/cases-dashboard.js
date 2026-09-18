@@ -192,6 +192,10 @@ const CasesDashboard = (() => {
     const beadhato = d.ablak.idealis.length;
     if (!surgeto.length && !beadhato) return '';
 
+    // A sürgetők elöl, de a „most beadható" is listázódik: az is cselekvés, és
+    // a pill önmagában csak annyit mondana, HOGY van ilyen — azt nem, hogy ki.
+    const listazando = [...d.ablak.lekesve, ...d.ablak.siess, ...d.ablak.idealis];
+
     const fej = [];
     if (beadhato) fej.push(`<span class="dash-pill dash-pill--green">${beadhato} most beadható</span>`);
     if (d.ablak.siess.length)   fej.push(`<span class="dash-pill dash-pill--amber">${d.ablak.siess.length} ablak záródik</span>`);
@@ -202,8 +206,8 @@ const CasesDashboard = (() => {
       `Meghosszabbításnál nem a határidő a kérdés, hanem hogy mikor lehet
        egyáltalán beadni.`,
       `<div class="dash-pills">${fej.join('')}</div>
-       ${surgeto.length ? `<div class="dash-list">
-         ${surgeto.map(t => `
+       ${listazando.length ? `<div class="dash-list">
+         ${listazando.map(t => `
            <button class="dash-row" data-open-case="${escHtml(t.ugy.id)}" type="button">
              <span class="dash-row__main">${escHtml(nev(t.ugy.employeeId))}</span>
              <span class="dash-row__meta ${t.allapot.phase === 'lekesve' ? 'is-late' : ''}">
@@ -225,8 +229,8 @@ const CasesDashboard = (() => {
         ${d.hataridoNelkul.map(c => `
           <button class="dash-row" data-open-case="${escHtml(c.id)}" type="button">
             <span class="dash-row__main">${escHtml(nev(c.employeeId))}</span>
-            <span class="dash-row__meta">${escHtml(CaseTypes.label(c.type))}</span>
-            <span class="dash-row__go">${escHtml(CaseTypes.triggerLabel(c.type) || 'Megnyitás')}</span>
+            <span class="dash-row__meta">hiányzik: ${escHtml(CaseTypes.triggerLabel(c.type) || CaseTypes.label(c.type))}</span>
+            <span class="dash-row__go">Megnyitás</span>
           </button>`).join('')}
       </div>`);
   }

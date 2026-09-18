@@ -810,6 +810,26 @@ nem a fájlnév alapján. A lépés **visszafordítható**: a jelenlegi (akár s
 
 ## Fejlesztés
 
+### A felület szemrevételezése
+
+A Node-tesztek a számításokat fedik, a megjelenítést nem. Az `index.html`
+viszont üres kezdőállapotot mutat, mert adatmappát kér — ahhoz pedig
+felhasználói gesztus kell. Erre való a próbalap:
+
+```bash
+# duplakattintás, vagy képernyőkép parancssorból:
+chrome.exe --headless=new --disable-gpu --hide-scrollbars \
+  --virtual-time-budget=6000 --window-size=1600,1000 \
+  --screenshot=ki.png "file:///<teljes út>/tools/ui-proba.html"
+```
+
+Memória-háttérrel tölti fel az appot valós alakú adattal (magyar, vietnámi,
+cirill, török, román nevekkel), **éles adathoz nem nyúl**. Paraméterek:
+`?ugy=1` kiválaszt egy ügyet, `?nezet=atutalasok` az Átutalások nézetre vált.
+
+Nem kell hozzá npm-függőség: a fejnélküli képernyőkép a Chrome beépített
+képessége.
+
 ```bash
 node test/run-all.js
 ```
