@@ -35,10 +35,10 @@ const CaseEh = (() => {
   /**
    * A megjelenítendő érték és a hozzá tartozó jelzések.
    *
-   * A dátum SZÁNDÉKOSAN a nyers, tárolt alakban megy: a `resolveValues`
-   * magyarra formáz (1988.04.12.), az EH viszont ÉÉÉÉ-HH-NN-t vár – a
-   * formázott alakot elutasítaná. Itt a másolhatóság a szempont, nem az
-   * olvashatóság.
+   * A dátum és a szám SZÁNDÉKOSAN a nyers, tárolt alakban megy: a
+   * `resolveValues` olvashatóra formáz (1988.04.12., 450 000), az EH viszont
+   * ÉÉÉÉ-HH-NN-t és tagolatlan számot vár – a formázott alakot elutasítaná.
+   * Itt a másolhatóság a szempont, nem az olvashatóság.
    */
   function ertekOf(row, emp, feloldott, ugy) {
     if (row.const)    return { text: row.const,    fajta: 'const' };
@@ -48,7 +48,8 @@ const CaseEh = (() => {
     if (!row.key)     return { text: '', fajta: 'kezi' };
 
     const mezo = SchemaStore.field(row.key);
-    let text = (mezo && mezo.type === 'date')
+    const nyersen = mezo && (mezo.type === 'date' || mezo.type === 'number');
+    let text = nyersen
       ? String(emp.fields[row.key] || '')
       : String(feloldott[row.key] == null ? '' : feloldott[row.key]);
 

@@ -129,12 +129,14 @@ const RegistryModule = (() => {
 
   /**
    * Egyszeri séma-felhozatal: a `_hun` végű mezőkulcsok rövidítése, a kódba
-   * felvett új mezők pótlása, és a szándékosan visszavontak kiejtése. A
-   * rekordok adatai a kulccsal együtt mozognak, ezért a nyilvántartás
-   * betöltése UTÁN fut.
+   * felvett új mezők pótlása, a szándékosan visszavontak kiejtése, és a
+   * javított származtatási szabályok átvezetése. A rekordok adatai a kulccsal
+   * együtt mozognak, ezért a nyilvántartás betöltése UTÁN fut.
    *
    * A pótlás nélkül a mentett séma sosem kapná meg az új adatkört (a `load()`
    * a mentett configot használja, ha van), és az adatbekérőből is kimaradna.
+   * Ugyanez áll a szabályokra: egy kódban javított `lookup` lista a meglévő
+   * telepítést csak így éri el – lásd `refreshComputedRules`.
    */
   async function migrateLegacyKeys() {
     try {
@@ -142,13 +144,16 @@ const RegistryModule = (() => {
       const rovidult = SchemaStore.migrateLegacyKeys(emps);
       const uj = SchemaStore.addMissingSeedFields();
       const kiesett = SchemaStore.removeRetiredFields();
-      if (!rovidult && !uj && !kiesett) return;
+      const szabaly = SchemaStore.refreshComputedRules();
+      if (!rovidult && !uj && !kiesett && !szabaly) return;
       await SchemaStore.save();
       await EmployeeRepo.flush();
       if (rovidult) BevLogger.info('SEMA_MIGRACIO', 'A _hun mezőkulcsok rövidültek', '', '');
       if (uj) BevLogger.info('SEMA_MIGRACIO', `${uj} új mező került a sémába`, '', '');
       if (kiesett) BevLogger.info('SEMA_MIGRACIO',
         `${kiesett} visszavont mező kikerült a sémából`, '', '');
+      if (szabaly) BevLogger.info('SEMA_MIGRACIO',
+        `${szabaly} származtatási szabály frissült`, '', '');
     } catch (e) {
       BevLogger.warn('SEMA_MIGRACIO', 'A séma-felhozatal nem futott le', e.message, '');
     }

@@ -220,6 +220,42 @@ Itt zárul be a kör a meglévő modellel. Ha egy `producesIdentifier`-t deklar�
 Így utólag megválaszolható: *„ez az engedélyszám melyik kérelemből származik?"* —
 ma ez sehol nincs rögzítve.
 
+### Az ügy száma a dokumentumokon
+
+A hatósági iratok egy részén fel kell tüntetni az **EH számot** (és mellette az
+iktatószámot). A munkavállalónak viszont **nincs — és nem is lehet — ilyen
+mezője**: az azonosítót nem a személy kapja, hanem az ÜGY, és egy dolgozónak
+több ügye futhat egyszerre. Egy `eh_number` séma-mező tehát rossz kérdésre
+válaszolna („melyik dolgozó?" helyett „melyik ügy?"), és az első kettős ügynél
+összecsúszna.
+
+A dokumentumgenerálás ezért **nem a nyilvántartásból, hanem az ügyekből** kéri
+el (`CaseRepo.docIdentifiers()` / `docTags()`), a következő szabállyal:
+
+1. **csak NYITOTT ügy** jöhet szóba,
+2. közülük a **legutóbb megnyitott**, amelyiknek már van száma,
+3. a két szám **ugyanabból az ügyből** — nem a legfrissebb EH szám a legfrissebb
+   iktatószámmal párosítva.
+
+Az (1) nem szigorúság: egy lezárt ügy száma egy most készülő beadványon nem
+hiányos adat, hanem **téves** — rossz ügyre hivatkozna. Ha nincs nyitott ügy, a
+jelölő üres marad, és a *Hiányzó adatok naplója* kiírja, melyik dokumentumból
+maradt ki. Az üres mező javítható, a rossz szám észrevétlen marad.
+
+A (3) azért kötelező, mert a hatóság a két szám **párosából** azonosítja az
+ügyet: a frissebb EH szám a régebbi ügy iktatószámával együtt olyan hivatkozást
+adna, ami sehová nem mutat.
+
+Ha több nyitott ügy is hordoz számot, a (2) szerinti választás **nem néma**: a
+`docIdentifiers()` `ambiguous` mezője jelzi, a docgen összesítője `⚠`-gal
+mutatja a kiválasztott számot, és a generálás naplózza (`CASE_EH_AMBIGUOUS`),
+melyik ügy száma ment ki az iratra. Ez utólag megválaszolható kérdés kell hogy
+maradjon.
+
+> A jelölő több néven is elérhető (`{{EH szám}}`, `{{EH-szám}}`, `{{ehNumber}}`,
+> `{{eh_number}}` …). A sablonokat emberek írják kézzel; a kötőjel megléte nem
+> lehet az a részlet, amin egy beadvány elcsúszik.
+
 ## 6. Felület a nyilvántartásban
 
 **A dolgozó adatlapján: idővonal.** Az ügyek fordított időrendben, a nyitottak

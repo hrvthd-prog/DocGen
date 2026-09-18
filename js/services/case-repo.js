@@ -279,6 +279,74 @@ const CaseRepo = (() => {
     );
   }
 
+  // ── Azonosítók a dokumentumokba ────────────────────────────────────────────
+
+  /**
+   * Sablon-jelölő → melyik mezőből jön. A sablonokat emberek írják, ezért egy
+   * mező több néven is elérhető: az „EH szám" / „EH-szám" / „ehNumber" közti
+   * különbség nem lehet hibaforrás. A DocxService a jelölő nevét kisbetűsíti és
+   * az aláhúzást szóközre cseréli, ezért ez a lista ennél több alakot lefed
+   * (`{{EH_szám}}`, `{{eh_number}}` is ide talál).
+   */
+  const DOC_TAGS = {
+    ehNumber:   ['EH szám', 'EH-szám', 'EH szam', 'EH number', 'ehNumber'],
+    fileNumber: ['Iktatószám', 'Iktatoszam', 'File number', 'fileNumber'],
+  };
+
+  /**
+   * A dokumentumra kerülő hatósági azonosítók egy dolgozóhoz.
+   *
+   * A munkavállalónak nincs — és nem is lehet — „EH szám" mezője: az azonosítót
+   * az ÜGY kapja a hatóságtól, egy dolgozónak pedig több ügye futhat egyszerre.
+   * A sablonnak viszont egyetlen érték kell, ezért itt választunk:
+   *
+   *   1. csak NYITOTT ügy jöhet szóba,
+   *   2. a legutóbb megnyitott, amelyiknek már van száma,
+   *   3. a két szám UGYANABBÓL az ügyből — nem a legfrissebb EH szám a
+   *      legfrissebb iktatószámmal párosítva.
+   *
+   * Miért csak nyitott: egy lezárt ügy száma egy most készülő beadványon nem
+   * hiányos adat, hanem téves — rossz ügyre hivatkozna. Ha nincs nyitott ügy,
+   * a mező üres marad, és a hiányzó adatok naplója kiírja, melyik dokumentumból
+   * maradt ki.
+   *
+   * A (3) azért kötelező, mert az iraton a két számnak egymásra kell mutatnia:
+   * a hatóság az EH szám és az iktatószám párosából azonosítja az ügyet.
+   *
+   * Ha több nyitott ügy is hordoz számot, a választás nem lehet néma: az
+   * `ambiguous` ezt jelzi, a hívó pedig naplózza.
+   */
+  function docIdentifiers(employeeId) {
+    ensureLoaded();
+    const nyitott = cache.cases
+      .filter(c => c.employeeId === employeeId && !c.closedAt)
+      .sort((a, b) => String(b.openedAt).localeCompare(String(a.openedAt)) ||
+                      String(b.createdAt).localeCompare(String(a.createdAt)));
+
+    const forras = nyitott.find(c => c.ehNumber) || nyitott.find(c => c.fileNumber) || null;
+    const ehSzamok = [...new Set(nyitott.map(c => c.ehNumber).filter(Boolean))];
+
+    return {
+      ehNumber:   forras ? forras.ehNumber   : '',
+      fileNumber: forras ? forras.fileNumber : '',
+      caseId:     forras ? forras.id   : null,
+      caseType:   forras ? forras.type : '',
+      openCases:  nyitott.length,
+      ehNumbers:  ehSzamok,
+      ambiguous:  ehSzamok.length > 1,
+    };
+  }
+
+  /** Ugyanez sablon-jelölőkre bontva – ez kerül a generálandó sorba. */
+  function docTags(employeeId) {
+    const azon = docIdentifiers(employeeId);
+    const out = {};
+    for (const mezo of Object.keys(DOC_TAGS)) {
+      for (const nev of DOC_TAGS[mezo]) out[nev] = azon[mezo];
+    }
+    return out;
+  }
+
   // ── Idővonal ───────────────────────────────────────────────────────────────
 
   /**
@@ -824,6 +892,7 @@ const CaseRepo = (() => {
     useBackend, hasBackend, onChange, createFileBackend, createIdbBackend, createMemoryBackend,
     load, save, scheduleSave, flush,
     all, get, forEmployee, isOpen, daysLeft, urgency, isAdvisory, deadlineText, openCases, search,
+    docIdentifiers, docTags, DOC_TAGS,
     timeline, submissionStatus,
     create, update, setStatus, addEvent, updateEvent, recordProducedIdentifier,
     openNextCase, hasOpenCaseOfType, isBackdated, summary, EXPIRY_FIELD_MAP,

@@ -187,7 +187,8 @@ const SchemaStore = (() => {
   function renderValue(f, raw, lang = 'hu') {
     if (f.type === 'enum') return ValueCodec.render(f, raw, lang);
     const s = raw == null ? '' : String(raw);
-    if (f.type === 'date') return formatDate(s);
+    if (f.type === 'date')   return formatDate(s);
+    if (f.type === 'number') return formatNumber(s);
     if (f.type !== 'text' || !s) return s;
     return translate(s, lang) || s;
   }
@@ -209,6 +210,42 @@ const SchemaStore = (() => {
     const s = String(iso == null ? '' : iso).trim();
     const m = /^(\d{4})[-.\/](\d{1,2})[-.\/](\d{1,2})\.?$/.exec(s);
     return m ? `${m[1]}.${String(m[2]).padStart(2,'0')}.${String(m[3]).padStart(2,'0')}.` : s;
+  }
+
+  /**
+   * Tárolt szám → olvasható, ezres tagolású alak: 450000 → 450 000.
+   *
+   * A dátumhoz hasonlóan ez az EGYETLEN hely, ahol a szám olvasható alakra
+   * vált: tárolni tagolatlanul tárolunk (az adatbekérő útmutatója is „digits
+   * only, without currency sign or spaces"-t kér), az export és az importált
+   * érték érintetlen marad. Egy hatósági iraton viszont a 450000 nehezen
+   * olvasható — háromjegyű csoportokban egy pillantással ellenőrizhető.
+   *
+   * Ez a `number` TÍPUSÚ mezőkre hat, nem külön felsorolt kulcsokra: a típust
+   * ember állítja be a séma-szerkesztőben, és a „szám" itt mennyiséget jelent
+   * (bér, összeg). Aminek a tagolás rossz volna — évszám, azonosító —, az
+   * `text` vagy `date` mező, mint ma is (a helyrajzi szám, az irányítószám és
+   * a FEOR mind szöveg).
+   *
+   * Elválasztó: NEM TÖRŐ szóköz. A magyar helyesírás szóközzel tagol, egy
+   * iraton viszont a szám nem törhet ketté a sor végén. (Ugyanezt adja a
+   * `toLocaleString('hu-HU')`, csak az a böngésző területi adataitól függ —
+   * itt kiszámítható alak kell.)
+   *
+   * Amit nem ismerünk fel tiszta számként, azt VÁLTOZATLANUL hagyjuk: a
+   * „450000 Ft/hó" átírása találgatás lenne, ugyanaz az elv, mint a csonka
+   * dátumnál. A már beírt tagolást (szóköz) viszont újratagoljuk, hogy a
+   * kimenet ne függjön attól, ki hogyan gépelte be.
+   */
+  const EZRES_ELVALASZTO = '\u00A0';
+
+  function formatNumber(raw) {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return s;
+    const m = /^(-?)(\d+)([.,]\d+)?$/.exec(s.replace(/[\s\u00A0]/g, ''));
+    if (!m) return s;
+    const tagolt = m[2].replace(/\B(?=(\d{3})+(?!\d))/g, EZRES_ELVALASZTO);
+    return m[1] + tagolt + (m[3] || '');
   }
 
   // ── Lekérdezés ─────────────────────────────────────────────────────────────
@@ -402,12 +439,23 @@ const SchemaStore = (() => {
    */
   function computeLookup(f, values, lang = 'hu') {
     const c = f.computed;
-    const forras = ValueCodec.normalize(values[(c.from || [])[0]]);
+    const nyers = values[(c.from || [])[0]];
+    const forras = ValueCodec.normalize(nyers);
     if (!forras) return '';
+
+    // A szótári párja is illeszkedik: aki „Ukraine"-t írt az állampolgárság
+    // rovatba, ugyanoda tartozik, mint aki „Ukrajná"-t – a pár amúgy is fel
+    // van véve. Így egy szótárbővítés a szabályokon is segít, és nem kell
+    // minden alakot a listába másolni.
+    const alakok = new Set([forras]);
+    for (const l of ['hu', 'en']) {
+      const par = translate(nyers, l);
+      if (par) alakok.add(ValueCodec.normalize(par));
+    }
 
     let kimenet = c.default || '';
     for (const [ertek, lista] of Object.entries(c.lookup)) {
-      if ((lista || []).some(x => ValueCodec.normalize(x) === forras)) { kimenet = ertek; break; }
+      if ((lista || []).some(x => alakok.has(ValueCodec.normalize(x)))) { kimenet = ertek; break; }
     }
     // A kimenet a szótáron megy át, mint bármelyik szabad szöveg
     return kimenet ? (translate(kimenet, lang) || kimenet) : '';
@@ -708,6 +756,64 @@ const SchemaStore = (() => {
     return kiesik.length;
   }
 
+  /**
+   * Elavult SZABÁLYOK felhozatala a már mentett sémán.
+   *
+   * Az `addMissingSeedFields` párja egy szinttel beljebb: az csak hiányzó
+   * MEZŐT pótol, a meglévő mező szabályához nem nyúl. Márpedig a `load()` a
+   * mentett configot használja, ha van — vagyis egy kódban javított
+   * `lookup` lista a meglévő telepítést SOHA nem érné el. Csendben maradna a
+   * régi, hibás szabály: pontosan az a fajta hiba, amit a legnehezebb észrevenni.
+   *
+   * Amihez NEM nyúlunk: a saját kalibrálás. Csak akkor cserélünk, ha a mentett
+   * szabály betűre a lent rögzített RÉGI alak (vagyis senki nem írta át), vagy
+   * ha egyáltalán nincs `lookup`-ja (az még a szabály előtti időkből maradt).
+   * Aki a Beállítások → Séma lapon hozzáigazította a saját országaihoz, annak
+   * a listája marad.
+   */
+  const REGI_SZABALYOK = {
+    // 2026-09: a hazautazás módja csak a magyar ORSZÁGNEVET ismerte, ezért az
+    // „ukrán" / „Ukrainian" állampolgárságú dolgozó némán repülőt kapott.
+    transport_type: {
+      bus: ['Ausztria', 'Szlovákia', 'Ukrajna', 'Románia',
+            'Szerbia', 'Horvátország', 'Szlovénia'],
+    },
+  };
+
+  /** Egy lookup összehasonlítható ujjlenyomata (sorrendtől függetlenül). */
+  function lookupUjjlenyomat(lookup) {
+    if (!lookup || typeof lookup !== 'object') return '';
+    return Object.keys(lookup).sort().map(k =>
+      k + '=' + (lookup[k] || []).map(v => ValueCodec.normalize(v)).sort().join('|')
+    ).join(';');
+  }
+
+  /** @returns {number} a frissített szabályok száma (0 = nem volt mit tenni) */
+  function refreshComputedRules(seed = (typeof SEED_SCHEMA !== 'undefined' ? SEED_SCHEMA : null)) {
+    ensureLoaded();
+    if (!seed || !Array.isArray(seed.fields)) return 0;
+
+    let db = 0;
+    for (const kulcs of Object.keys(REGI_SZABALYOK)) {
+      const mezo = schema.fields.find(f => f.key === kulcs && f.type === 'computed');
+      const seedMezo = (seed.fields || []).find(f => f.key === kulcs);
+      if (!mezo || !seedMezo || !seedMezo.computed || !seedMezo.computed.lookup) continue;
+
+      const mostani = lookupUjjlenyomat(mezo.computed && mezo.computed.lookup);
+      const erintetlen = mostani === lookupUjjlenyomat(REGI_SZABALYOK[kulcs]) || mostani === '';
+      if (!erintetlen) continue;                       // saját kalibrálás – marad
+      if (mostani === lookupUjjlenyomat(seedMezo.computed.lookup)) continue;   // már friss
+
+      mezo.computed = Object.assign({}, mezo.computed, {
+        lookup:  clone(seedMezo.computed.lookup),
+        default: seedMezo.computed.default != null ? String(seedMezo.computed.default) : '',
+      });
+      db++;
+    }
+    if (db) { schema.version = (schema.version || 1) + 1; emit(); }
+    return db;
+  }
+
   /** Mező törlése előtti hatásvizsgálat – mi veszne el. */
   function usageOf(key, employees = []) {
     ensureLoaded();
@@ -726,7 +832,7 @@ const SchemaStore = (() => {
     dictionary, setDictionary, translate, isUntranslated,
     validateValues, validateSchema, validateDictionary,
     migrateValues, renameFieldKey, migrateLegacyKeys, addMissingSeedFields,
-    removeRetiredFields, usageOf,
-    _normalize: normalize, _datePart: datePart,
+    removeRetiredFields, refreshComputedRules, usageOf,
+    _normalize: normalize, _datePart: datePart, _formatNumber: formatNumber,
   };
 })();

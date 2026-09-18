@@ -489,14 +489,28 @@ const SEED_SCHEMA = {
     // NEM kérdezzük meg a kitöltőtől: az állampolgárságból következik, a
     // szomszédos országokból busszal, távolabbról repülővel megy haza az ember.
     // A lista a Beállítások → Séma lapon bővíthető, ha új küldő ország jön.
+    //
+    // Országonként NÉGY-ÖT alak, mert az `Állampolgárság` rovatba mind érkezik.
+    // A mező útmutatója magyar ORSZÁGNEVET kér („Ukrajna"), a valóságban
+    // viszont ott van a melléknév („ukrán") és az angol alak („Ukraine",
+    // „Ukrainian") is. A régi lista csak a magyar országnevet ismerte, és az
+    // illesztés nem tippel: az ukrán dolgozó némán a `default`-ot, vagyis
+    // REPÜLŐT kapott. Ez valódi hibabejelentésből jött.
     { key: 'transport_type', group: 'szamitott', type: 'computed',
       label: { hu: 'Hazautazás módja', en: 'Means of Transport' },
       tags: ['Közlekedési eszköz'],
       computed: {
         from: ['citizenship'],
         lookup: {
-          bus: ['Ausztria', 'Szlovákia', 'Ukrajna', 'Románia',
-                'Szerbia', 'Horvátország', 'Szlovénia'],
+          bus: [
+            'Ausztria',     'osztrák', 'Austria',  'Austrian',
+            'Szlovákia',    'szlovák', 'Slovakia', 'Slovak', 'Slovakian',
+            'Ukrajna',      'ukrán',   'Ukraine',  'Ukrainian',
+            'Románia',      'román',   'Romania',  'Romanian',
+            'Szerbia',      'szerb',   'Serbia',   'Serbian',
+            'Horvátország', 'horvát',  'Croatia',  'Croatian',
+            'Szlovénia',    'szlovén', 'Slovenia', 'Slovenian', 'Slovene',
+          ],
         },
         default: 'airplane',
       } },
