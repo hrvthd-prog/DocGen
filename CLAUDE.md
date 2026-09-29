@@ -17,7 +17,8 @@ Munkavállalói nyilvántartás + `.docx` dokumentumgenerálás idegenrendészet
 nem jó — hiányzik a mappaválasztó API). SAP-kiegészítő, nem kiváltó.
 
 A *miért*-et a tervdokumentumok őrzik: `TERV.md` (alapterv),
-`TERV-esemenyek.md` (ügykövetés), `TERV-tesztanyag.md`, `TERV-adatbiztonsag.md`.
+`TERV-esemenyek.md` (ügykövetés), `TERV-tesztanyag.md`, `TERV-adatbiztonsag.md`,
+`TERV-mappaszerkezet.md` (a PDF Műhellyel közös mappaszerkezet + `fs-service`).
 A használat: `README.md`.
 
 ## Tesztek

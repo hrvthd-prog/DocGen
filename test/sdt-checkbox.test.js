@@ -100,6 +100,24 @@ for (const t of ['marital_status:married', 'marital_status:divorced',
   ok(`üresen marad: ${t}`, !checkedTags.has(t));
 }
 
+// ── DocGen-bélyeg a core.xml Keywords-be ───────────────────────────────────
+// A generált irat PDF-jét a Word készíti (docx-pdf.vbs), és a Keywords-öt átviszi
+// a PDF metaadatába. Ebből tudja a PDF Műhely, hogy az irat GENERÁLT (tehát még
+// nem aláírt) — a hiányából, hogy szkennerből jött.
+{
+  console.log('\n[DocGen-bélyeg]');
+  const stamped = DocxService.stampDocGen(fs.readFileSync(SABLON));
+  const core = new PizZip(stamped).file('docProps/core.xml').asText();
+  ok('a Keywords-ben ott a docgen bélyeg', /<cp:keywords>docgen/.test(core),
+     (core.match(/<cp:keywords>[^<]*<\/cp:keywords>/) || ['(nincs keywords)'])[0]);
+  ok('a core.xml egyébként érvényes marad', /<\/cp:coreProperties>\s*$/.test(core.trim()));
+  const twice = new PizZip(DocxService.stampDocGen(stamped))
+    .file('docProps/core.xml').asText();
+  ok('kétszeri bélyegzés nem duplázza a mezőt',
+     (twice.match(/<cp:keywords>/g) || []).length === 1,
+     (twice.match(/<cp:keywords>/g) || []).length + ' db');
+}
+
 console.log('\n' + '='.repeat(60));
 console.log(`Eredmény: ${passed} sikeres / ${failed} hibás (összesen ${passed + failed})`);
 console.log(failed ? 'VAN hibás ✗' : 'Mind sikeres ✓');

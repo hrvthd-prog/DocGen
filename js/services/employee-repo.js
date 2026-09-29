@@ -112,6 +112,7 @@ const EmployeeRepo = (() => {
   let dirty   = false;
   let saveTimer = null;
   const listeners = new Set();
+  const saveErrorListeners = new Set();
 
   // ── Segédfüggvények ────────────────────────────────────────────────────────
 
@@ -322,6 +323,12 @@ const EmployeeRepo = (() => {
       save().catch(err => {
         if (typeof BevLogger !== 'undefined') {
           BevLogger.error('REPO_SAVE', 'A nyilvántartás mentése nem sikerült', err.message, '');
+        }
+        // Az automata mentés hibája eddig CSAK a naplóba ment — a felhasználó
+        // azt hitte, mentve van. Egy ütközésnél (StaleWriteError) ez a némaság
+        // épp azt hozná vissza, amit javítani akarunk: az elveszett munkát.
+        for (const fn of saveErrorListeners) {
+          try { fn(err); } catch {}
         }
       });
     }, delayMs);
@@ -584,6 +591,14 @@ const EmployeeRepo = (() => {
 
   function onChange(fn)  { listeners.add(fn); return () => listeners.delete(fn); }
 
+  /** Az automata mentés hibája (pl. ütközés) — a felületnek szólnia kell róla. */
+  function onSaveError(fn) {
+    saveErrorListeners.add(fn);
+    return () => saveErrorListeners.delete(fn);
+  }
+
+  function isStaleWriteError(e) { return !!(e && e.name === 'StaleWriteError'); }
+
   /**
    * Fájl-alapú háttér: egy JSON az adatmappában, minden mentés előtt
    * időbélyeges biztonsági másolattal. Ez az elsődleges tárolás – látható,
@@ -594,6 +609,52 @@ const EmployeeRepo = (() => {
     backupDir = 'backup',
     keepBackups = 20,
   } = {}) {
+    // ── Frissesség-ellenőrzés (TERV-adatbiztonsag.md 7.) ────────────────────
+    // 2-5 felhasználó dolgozik közös mappán, gyakran egyszerre. A mentés
+    // read-modify-write: A betölt, B betölt, A ment, B ment → A munkája ELTŰNIK,
+    // néma módon. Ezért betöltéskor feljegyezzük, mit láttunk, és mentés előtt
+    // visszaolvasunk: ha közben más írt, NEM írunk, hanem szólunk.
+    //
+    // Nem zárolás-fájl: az elárvul (összeomlás, bezárt fül, hálózati szakadás),
+    // és lejárat + heartbeat + kézi feloldás kellene hozzá. Ez nem előzi meg az
+    // ütközést, de LÁTHATÓVÁ teszi — ez a lényegi különbség a némán eltűnő
+    // adathoz képest.
+    let seen = null;          // { updatedAt, count } — amit legutóbb láttunk
+
+    // Ugyanez a háttér szolgálja az employees, a cases és a transfers fájlt is,
+    // más-más kulccsal ({employees:[]}, {cases:[]}, …). Ezért nem egy kulcsot
+    // keresünk, hanem MINDEN felső szintű tömböt — különben a cases.json csendben
+    // védelem nélkül maradna, és a hiba pont olyan néma lenne, mint amit javítunk.
+    function records(data) {
+      if (Array.isArray(data)) return data;
+      if (!data || typeof data !== 'object') return [];
+      return Object.values(data).filter(Array.isArray).flat();
+    }
+
+    function fingerprint(data) {
+      const list = records(data);
+      let newest = '';
+      for (const e of list) {
+        const t = String((e && (e.updatedAt || e.createdAt)) || '');
+        if (t > newest) newest = t;
+      }
+      return { updatedAt: newest, count: list.length };
+    }
+
+    function sameAsSeen(fp) {
+      return !!seen && seen.updatedAt === fp.updatedAt && seen.count === fp.count;
+    }
+
+    function whoLast(data) {
+      const list = records(data);
+      let best = null;
+      for (const e of list) {
+        const t = String((e && (e.updatedAt || e.createdAt)) || '');
+        if (!best || t > String(best.updatedAt || best.createdAt || '')) best = e;
+      }
+      return best ? (best.updatedBy || 'ismeretlen') : 'ismeretlen';
+    }
+
     return {
       describe: () => `fájl: ${dirHandle.name}/${filename}`,
 
@@ -613,7 +674,8 @@ const EmployeeRepo = (() => {
         try {
           text = await FsService.readTextFromDir(dirHandle, filename);
         } catch {
-          return null;                       // nincs még adatfájl
+          seen = { updatedAt: '', count: 0 };  // nincs fájl: ezt „láttuk”
+          return null;                         // nincs még adatfájl
         }
 
         // Az üres fájl is sérülés: félbeszakadt írás után keletkezik
@@ -621,13 +683,35 @@ const EmployeeRepo = (() => {
           throw makeCorruptError(filename, 'a fájl üres');
         }
         try {
-          return JSON.parse(text);
+          const data = JSON.parse(text);
+          seen = fingerprint(data);            // innen számít a frissesség
+          return data;
         } catch (e) {
           throw makeCorruptError(filename, e.message);
         }
       },
 
       async save(data) {
+        // ── Közben más írt? Akkor NEM írunk. ─────────────────────────────────
+        // A visszaolvasás hibáját (nincs fájl, olvashatatlan) nem tekintjük
+        // ütközésnek: a mentés ilyenkor épp a helyreállítás útja.
+        try {
+          const cur = JSON.parse(await FsService.readTextFromDir(dirHandle, filename));
+          const fp = fingerprint(cur);
+          if (!sameAsSeen(fp)) {
+            const e = new Error(
+              `A nyilvántartás közben megváltozott (utoljára: ${whoLast(cur)}). ` +
+              'Töltsd újra, és ismételd meg a módosítást — így nem írod felül ' +
+              'valaki más munkáját.');
+            e.name = 'StaleWriteError';
+            e.utkozes = { seen, current: fp };
+            throw e;
+          }
+        } catch (e) {
+          if (e && e.name === 'StaleWriteError') throw e;
+          // egyéb (nincs fájl, sérült JSON): megy tovább a mentés
+        }
+
         // Mentés előtt félretesszük az előző állapotot
         try {
           if (await FsService.fileExists(dirHandle, filename)) {
@@ -646,6 +730,7 @@ const EmployeeRepo = (() => {
           }
         }
         await FsService.writeTextToDir(dirHandle, filename, JSON.stringify(data, null, 2));
+        seen = fingerprint(data);      // amit kiírtunk, azt most már „láttuk”
       },
 
       /**
@@ -745,7 +830,7 @@ const EmployeeRepo = (() => {
 
   return {
     ID_TYPES, NATURAL_KEY_FIELDS, IDENTIFIER_FIELD_MAP, EXIT_DATE_FIELD,
-    applyIdentifiersToFields, isCorruptError,
+    applyIdentifiersToFields, isCorruptError, onSaveError, isStaleWriteError,
     // tároló
     useBackend, hasBackend, describeBackend, onChange,
     createFileBackend, createIdbBackend, createMemoryBackend,

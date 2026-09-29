@@ -50,6 +50,7 @@ const CaseRepo = (() => {
   let cache   = null;          // { version, savedAt, cases: [] }
   let dirty   = false;
   let saveTimer = null;
+  const saveErrorListeners = new Set();
   const listeners = new Set();
 
   // ── Segédfüggvények ────────────────────────────────────────────────────────
@@ -169,6 +170,11 @@ const CaseRepo = (() => {
       save().catch(err => {
         if (typeof BevLogger !== 'undefined') {
           BevLogger.error('CASE_SAVE', 'Az ügyek mentése nem sikerült', err.message, '');
+        }
+        // A néma naplózás önmagában nem elég: közös mappán az ütközés gyakori, és
+        // a felhasználó azt hinné, mentve van (TERV-adatbiztonsag.md 7.).
+        for (const fn of saveErrorListeners) {
+          try { fn(err); } catch {}
         }
       });
     }, delayMs);
@@ -890,6 +896,7 @@ const CaseRepo = (() => {
 
   return {
     useBackend, hasBackend, onChange, createFileBackend, createIdbBackend, createMemoryBackend,
+    onSaveError: (fn) => { saveErrorListeners.add(fn); return () => saveErrorListeners.delete(fn); },
     load, save, scheduleSave, flush,
     all, get, forEmployee, isOpen, daysLeft, urgency, isAdvisory, deadlineText, openCases, search,
     docIdentifiers, docTags, DOC_TAGS,

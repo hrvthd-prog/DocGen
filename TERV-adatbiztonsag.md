@@ -183,6 +183,72 @@ nem ér. Szándékosan elrontom, hogy lássam a bukást.
 - **Egyidejű szerkesztés két gépről.** Ha a `data/` közös meghajtón van, két
   felhasználó felülírhatja egymást. Ez külön kérdés (zárolás-fájl), és a
   jelenlegi egyfelhasználós használatnál nem sürgős.
+  **→ 2026-09-29: a premissza megdőlt** (2-5 felhasználó, közös mappa, gyakran
+  egyszerre). A feloldás a 7. fejezetben.
 - **A böngésző-tároló (IndexedDB) mentése.** Ott nincs `backup/` mappa. Aki
   fájl-alapú tárolás nélkül használja az appot, annak nincs mentése — ezt a
   README-nek ki kell mondania.
+
+## 7. Egyidejű szerkesztés közös mappán (2026-09-29)
+
+*A 6. pont első sorának feloldása: a „jelenlegi egyfelhasználós használat” premisszája megdőlt. A felhasználó válasza: **2-5 fő, közös mappa, gyakran egyszerre**.*
+
+### A hiba
+
+A nyilvántartás **egyetlen fájlban** él (`docgen-employees.json`, `docgen-cases.json`), és a mentés **read-modify-write, zárolás nélkül**: `js/services/employee-repo.js` beolvas (`FsService.readTextFromDir`), a memóriában módosít, majd visszaír (`FsService.writeTextToDir`). Sem mentés előtti frissesség-ellenőrzés, sem zárolás nincs.
+
+Két felhasználó egyidejű munkájának menete:
+
+```
+A megnyitja       → a memóriában a 14:00-as állapot
+B megnyitja       → a memóriában a 14:00-as állapot
+A felvesz egy dolgozót, ment  → a fájlban 15 dolgozó
+B módosít egy címet, ment     → a fájlban 14 dolgozó — A munkája eltűnt
+```
+
+**Nincs hibajelzés, nincs ütközés, nincs nyom** a felületen. B a saját, helyes mentését látja; A legközelebb veszi észre, hogy a felvett dolgozó nincs meg — vagy nem veszi észre.
+
+**Enyhítő körülmény:** az `employee-repo.js` írás előtt elteszi az előző példányt időbélyeggel a backup mappába, tehát az adat **helyreállítható**. De nem érzékelhető, és a visszaállítás A többi közben tett módosítását is visszapörgeti.
+
+**Miért most:** ez a kockázat **nagyobb tétel, mint a két alkönyvtár mappaszerkezete** (`TERV-mappaszerkezet.md`), mert nem kényelmi kérdés, hanem adatvesztés. És pont akkor lép életbe, amikor többen elkezdenek a közös mappában dolgozni — tehát **a többfelhasználós használat megkezdése előtt** kell rendezni, nem utána.
+
+### A megoldás — frissesség-ellenőrzés, nem zárolás
+
+Mentés előtt olvassuk vissza a fájlt, és hasonlítsuk össze azzal, amiből kiindultunk:
+
+1. Betöltéskor jegyezzük fel a fájl azonosítóját — `File.lastModified` **és** a benne lévő legnagyobb `updatedAt`, a kettő közül a megbízhatóbbat használva (hálózati meghajtón az óra elcsúszhat, ezért az `updatedAt` a vezető jel).
+2. Mentés előtt olvassuk vissza. Ha a fájl azonosítója eltér a feljegyzettől → **ne írjunk**, hanem szóljunk: „A nyilvántartás közben megváltozott (utoljára <felhasználó>, <időpont>). Töltsd újra, és ismételd meg a módosítást.”
+3. Sikeres írás után frissítsük a feljegyzett azonosítót.
+
+**Miért ez, és nem zárolás-fájl:** a lockfájl elárvul (összeomlás, bezárt fül, hálózati szakadás), ezért lejárat, heartbeat és kézi feloldás is kell hozzá — 2-5 fős csapatnál ez több kód és több hibalehetőség, mint amennyi haszon. A frissesség-ellenőrzés **nem előzi meg** az ütközést, de **láthatóvá teszi**, és ez a lényegi különbség a mai állapothoz: ma az adat némán tűnik el.
+
+**A `updatedBy` már ott van.** Az `employee-repo.js` és a `case-repo.js` minden módosításnál kitölti (`currentUserName()`), és a személyeknek `history` tömbjük is van — tehát az ütközési üzenet meg tudja nevezni, **ki** írt közben, új adatmező nélkül.
+
+### Amit NEM csinálunk
+
+- **Nincs automatikus összefésülés.** Ha a fájl közben változott, az újratöltés és a módosítás megismétlése a felhasználó dolga. Rekordszintű merge-hez konfliktusfeloldó felület kellene; erre nincs igény.
+- **Nincs zárolás-fájl** (lásd fentebb).
+- **Nincs valós idejű figyelés.** A `FileSystemObserver` még nem elérhető mindenhol, `file://`-n pedig nem mértük. Az ellenőrzés mentés előtt fut, nem folyamatosan.
+- **Nincs áttérés kiszolgálóra.** Az egyidejűséget egy közös backend végleg megoldaná, de a projekt kliensoldali, telepítést nem igénylő volta szándékos döntés.
+
+### Ellenőrzés
+
+- Node-teszt: két „munkamenet” (két betöltött állapot) ugyanarra a fixture-fájlra; a második mentés **utasítsa el** magát, és a fájl tartalma maradjon az elsőé.
+- Node-teszt: egyetlen munkamenet ismételt mentése **menjen át** (a feljegyzett azonosító frissül) — különben minden második mentés elbukna.
+- Kézi: két böngészőablak, ugyanaz a mappa, párhuzamos felvétel.
+
+### Megvalósítva (2026-09-29)
+
+`test/employee-repo.test.js` — az „Egyidejű szerkesztés: elveszett mentés” szakasz, 5 teszt a **valódi** `createFileBackend`-en, hamis fájlrendszerrel.
+
+Két dolog került be a tervhez képest, mert a megvalósításkor derült ki:
+
+**1. A lenyomat MINDEN felső szintű tömböt figyel, nem az `employees` kulcsot.** Ugyanezt a háttéret használja a `CaseRepo` (`{cases: []}`) és a `TransferRepo` (`{batches: [], audit: []}`) is. Ha csak az `employees`-t ismerné, a `docgen-cases.json` **némán védelem nélkül maradt volna** — pont olyan csendes hiba, mint amit javítunk. Erre külön teszt van.
+
+**2. A mentési hiba eddig CSAK a naplóba ment.** A `scheduleSave` `catch`-e `BevLogger.error`-t hívott és kész — a felhasználó azt hitte, mentve van. Ütközésnél ez visszahozta volna az elveszett munkát: az adat ugyan nem íródik felül, de a módosítás akkor is elvész. Ezért:
+
+- `onSaveError(fn)` hook mindhárom repóban (az `onChange` mintájára),
+- a `registry-view.js` `hookSaveErrors()`-a `StaleWriteError`-nál **párbeszédet** nyit („a módosításod még a képernyőn van, de NEM került a fájlba”), Újratöltés gombbal; más hibánál `toast`-ot,
+- `EmployeeRepo.isStaleWriteError(e)` a megkülönböztetéshez, az `isCorruptError` mintájára.
+
+**Ami maradt szándékosan:** nincs automatikus összefésülés, nincs zárolás-fájl, nincs valós idejű figyelés (lásd fentebb).

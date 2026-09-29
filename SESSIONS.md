@@ -68,6 +68,61 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-09-29 (2.) — fs-service felújítás, 01_Elokeszitett célmappa, DocGen-bélyeg, ütközésvédelem
+
+**Cél:** az előző bejegyzés tervének megvalósítása (F4.5 → F5 → ütközésvédelem). Ugyanaz a munkamenet, ugyanaz a commit (`v10.62`); az előző bejegyzés a tervezési fázist írja le, ez a megvalósítást.
+
+**Változás** (`v10.62`):
+- `js/services/fs-service.js` — `getSubDir` már csak `NotFoundError`-nál ad `null`-t, minden mást dob (+ `getSubDirOrNull` a tudatosan elnyelő változat); `getOrRequestDir` **readwrite** engedélyt igazol; `writeToDir` `try/finally` + `abort()` + méret-visszaolvasás, a `writeTextToDir` erre épül; `fileExists`/`deleteFromDir` engedélyhibát dob; `_scanRecursive` mélységi korlát (4) + pont-szűrés + a 01/02 kihagyása; `getOrRequestFile` megkapta a `force` opciót. Új: `DIR_PREP`/`DIR_UP`, `foldName`, `listSubDirs`, `matchWorkerDir`.
+- `js/modules/docgen.js` — `state.outputWritable`; `rerenderSidebarSettings` harmadik állapota (`🔒 Kimeneti mappa (hozzáférés szükséges)`, a 3. lépés nem „kész”); `onSetOutput` a tárolt handle-re **kér engedélyt** picker helyett; `resolveWorkerTarget` + `askWorkerDir` (dolgozói mappa feloldása, rákérdezéssel); a DOCX-mentés a dolgozó `01_Elokeszitett`-jébe megy, és a hibát **jelenti**, nem esik némán letöltésre.
+- `js/services/docx-service.js` — `stampDocGen()`: DocGen-bélyeg a `docProps/core.xml` Keywords-be; a `generateDocx` ezen át ad vissza.
+- `js/modules/docgen/merge.js` — `_savePdfBuffer` nem nyeli el az írási hibát; az összefűzött csomag `setProducer`/`setKeywords` bélyeget kap.
+- `js/services/employee-repo.js` — frissesség-ellenőrzés a `createFileBackend`-ben (`fingerprint`, `sameAsSeen`, `whoLast`, `StaleWriteError`), `onSaveError`, `isStaleWriteError`.
+- `js/services/case-repo.js`, `js/services/transfer-repo.js` — `onSaveError` ugyanígy (saját `scheduleSave`-ük van).
+- `js/modules/registry/registry-view.js` — `hookSaveErrors()`: ütközésnél párbeszéd Újratöltés gombbal, egyébként toast.
+- **új:** `test/fs-service.test.js` (18 teszt), felvéve a `run-all.js`-be. `test/employee-repo.test.js` +5, `test/sdt-checkbox.test.js` +3.
+- `TERV-mappaszerkezet.md`, `TERV-adatbiztonsag.md` — a megvalósítás eltérései beírva.
+
+**Miért / döntés:**
+- **A bélyeg a docx-be került, nem a PDF-be** — és ez nem ízlés kérdése volt. A generált irat PDF-jét a Word készíti (`tools/docx-pdf.vbs`), ami a docxet **ReadOnly** nyitja: a konverzió pillanatában nem tudunk tulajdonságot beállítani. A Word viszont a `Keywords`-öt **átviszi** a PDF metaadatába, tehát a docx `core.xml`-je a hordozó. A `docx-pdf.vbs`-hez így egy sort sem kellett nyúlni (és a ReadOnly-nyitás megmaradt, ami szándékos volt).
+- **A dolgozói mappát SOSEM hozzuk létre magától.** `matchWorkerDir` ékezet- és kisbetű-függetlenül párosít, és bizonytalanságnál `null`-t ad → `askWorkerDir` kérdez. Enélkül eltérő névformátumból (nagybetűs vezetéknév, EH-szám, más sorrend) párhuzamos mappák keletkeznének, és a Műhely Áttekintője két fél dolgozót látna. A válasz munkamenetre megjegyzésre kerül, hogy kötegelt generálásnál ne kérdezzen ismételten.
+- **A frissesség-lenyomat MINDEN felső szintű tömböt figyel**, nem az `employees` kulcsot. Ugyanez a háttér szolgálja a `cases`-t és a `batches`/`audit`-ot is: egy kulcsra szűkítve a `docgen-cases.json` **némán védelem nélkül** maradt volna — pont az a fajta csendes hiba, amit javítunk. Külön teszt fedi.
+- **Menet közbeni találat: az automata mentés hibája eddig CSAK a naplóba ment.** A `scheduleSave` `catch`-e `BevLogger.error`-t hívott, és kész — a felhasználó azt hitte, mentve van. Ütközésnél ez visszahozta volna az elveszett munkát (az adat nem íródik felül, de a módosítás akkor is elvész). Ezért kellett az `onSaveError` hook mindhárom repóba és a párbeszéd a felületre. **Ez a javítás legalább annyira fontos, mint maga a frissesség-ellenőrzés.**
+- **A `saveAs` visszaesés csak `!hasFsApi` esetén marad.** Ha a böngésző tudja a mappaírást, de az elbukott, az hiba: a csendes letöltés a Letöltések mappába szórja a fájlokat, ahol a PDF Műhely nem is látja őket — és ez pont az a bizonytalanság, amit a két alkönyvtárral megszüntetünk.
+
+**Tesztek:** `node test/run-all.js` — **22 készlet, mind zöld** (a `fs-service.test.js` az új). `node tools/klon-proba.js` — „A friss klón önmagában is teljes." A PDF Műhely oldalán `python test/run-all.py`: önteszt 109/109, GUI 68/68, verzió és frissítő zöld.
+
+**Nyitott / következő:**
+- **A File System Access API-t a Node-tesztek nem fedik.** A mappaműveleteket **kézzel kell végigpróbálni éles gépen**, engedély megtagadásával is: (1) indulás után a kimeneti gomb `🔒`-t mutat-e, (2) rákattintva feljön-e az engedélykérés **mappaválasztó nélkül**, (3) generálás után a `01_Elokeszitett`-ben van-e az irat, (4) ismeretlen dolgozónévnél kérdez-e.
+- **Az engedély (a)/(b) döntése szándékosan nyitva** (`TERV-dijatutalas.md` 4., `TERV-mappaszerkezet.md` 1.): előbb mérjük egy-két hét használaton, elég-e a 10 soros javítás.
+- A korábbi szálak érvényben: `docgenpdf://` éles gépen nem próbált; `merge.js:139` a `clientRows` elemeit `row['Vezetéknév']`-ként olvassa; a PDF 566 kB a hibás részhalmazoló miatt.
+
+
+## 2026-09-29 — Közös mappaszerkezet a PDF Műhellyel + az fs-service felmérése (csak terv)
+
+**Cél:** a PDF Műhely dolgozónként két alkönyvtárra vált (`01_Elokeszitett` / `02_Feltoltheto`), és ehhez a DocGen-nek a `01_Elokeszitett`-be kell generálnia. A felhasználó jelezte, hogy előtte „a file access API-t nagyon át kell nézni, mert nem működik tökéletesen”. Ebben a körben **kód nem változott** — a felhasználó kérése az volt, hogy előbb a tervek kerüljenek írásba.
+
+**Változás** (`v10.62`, csak dokumentáció):
+- **új:** `TERV-mappaszerkezet.md` — az engedély-ergonómia gyökere, hat mért `fs-service.js` hiba, a célmappa és a PDF-bélyeg, fázisok (F4.5 → F5).
+- `TERV-adatbiztonsag.md` — új **7. fejezet**: egyidejű szerkesztés közös mappán. A 6. pont első sora („egyfelhasználós használatnál nem sürgős”) megjelölve: a premissza megdőlt.
+
+**Miért / döntés:**
+- **Az engedély-tünet nem hat bug, hanem egy aszimmetria.** A `restoreHandles` az engedély nélküli handle-t is beteszi `state.outputDir`-be, a `rerenderSidebarSettings` pedig csak azt kérdezi, *van-e* handle → a sidebar „kész”-nek jelöli a 3. lépést. A sablonmappa ugyanekkor `🔒 … (hozzáférés szükséges)` feliratot kap. Utána `onSetOutput` a `queryPermissionOnly` false ágán **mappaválasztót** nyit, holott a **bannerek már ma helyesen** `verifyPermission(handle, true)`-t hívnak a tárolt handle-re — és a gombnyomás maga a user gesture, tehát ott is szabályos a `requestPermission`. **A kód eldobja a jó handle-t, és újraválasztást kér helyette.** A javítás ~10 sor; a bannerekhez nem kell nyúlni.
+- **A felújítás blokkoló előfeltétel, nem takarítás.** A `getSubDir` minden kivételt `null`-ra fordít, a `getOrRequestDir` pedig csak `read` engedélyt igazol egy `readwrite` handle-re. A `01_Elokeszitett` létrehozása épp ezen az úton menne → engedélyhiba esetén a DocGen **csendben a gyökérbe írna**, a Műhely mátrixában besorolatlan lesz, és a hiba a migrációra tolódna. A két alkönyvtár egész célja, hogy a néma állapot látszódjon; néma hibákra épülve értelmetlen.
+- **Új követelmény a sablonmappára:** a felhasználó a Műhely munkamappáját szánja kimeneti mappának. A `_scanRecursive` mélységi korlát és pont-szűrés nélkül rekurzív, tehát a sablonkeresés bejárná az összes dolgozói mappát és a `.eredeti\`-t is. A Műhely `walk_files` mindenhol kihagyja a ponttal kezdődőt — itt is kell.
+- **Bélyeg csak a generált PDF-en**, docx-en nem: a docx-ből papír lesz, a metaadat a nyomtatás–aláírás–szkennelés kört nem éli túl. A bélyeg **egyetlen dolgot** dönt el (generált vagy szkennelt), és a **hiánya** a jel a szkenneltre. Iktatáskori bélyegzés kizárva: az a Műhely bájtazonos másolás-garanciáját törné.
+- **A tartós engedély (a)/(b) döntése nyitva marad**, szándékosan: előbb a 10 soros javítás, utána egy-két hét használat, és csak azután mérjük, kell-e még az egyesített „Hozzáférés megadása” képernyő vagy a `localhost` + telepítés. A 01/02 nem tesz hozzá új engedélykérdést (a kimeneti handle alatt vannak), tehát nem blokkol.
+- **Prioritásváltás:** a felhasználó megadta, hogy **2-5 fő, közös mappa, gyakran egyszerre** lesz a használat. Ezzel a `docgen-employees.json` zárolás nélküli read-modify-write mintája **nagyobb tétel, mint a mappaszerkezet** — néma adatvesztés, nem kényelmi kérdés. Ezért nem a mappaszerkezet-tervbe került, hanem a `TERV-adatbiztonsag.md` 7. fejezetébe, és **a többfelhasználós használat megkezdése előtt** kell rendezni. A választott irány a frissesség-ellenőrzés (visszaolvasás + `updatedAt`-összevetés), nem zárolás-fájl: a lockfájl elárvul, és 2-5 fősnél több kód, mint haszon. Az `updatedBy` már ma ki van töltve, tehát az ütközési üzenet meg tudja nevezni, ki írt közben.
+
+**Tesztek:** nem futtak — kódváltozás nincs. A tervek ellenőrzési pontjai le vannak írva; az F4.5-nél külön rögzítve, hogy **a Node-tesztek a File System Access API-t nem fedik**, ezért a mappaműveleteket kézzel kell végigpróbálni, engedély megtagadásával is.
+
+**Nyitott / következő:**
+- **F4.5** — `fs-service.js` felújítás a `TERV-mappaszerkezet.md` 4. fejezetének sorrendjében. Az 1) engedély-ergonómia önmagában is megéri, a 2)–3) blokkolja a 01/02-t.
+- **`TERV-adatbiztonsag.md` 7.** — a frissesség-ellenőrzés; időben a többfelhasználós indulás előtt.
+- **F5** — célmappa + bélyeg; a Műhely migrációs lépése (F2) **erre épül**, tehát az F5 előbb.
+- A korábbi nyitott szálak érvényben: `docgenpdf://` éles gépen nem próbált; `merge.js:139` a `clientRows` elemeit `row['Vezetéknév']`-ként olvassa; a PDF 566 kB a hibás részhalmazoló miatt.
+
+
 ## 2026-09-18 (3.) — Áttekintő az Ügyek fülön
 
 **Cél:** dashboard az aktuális ügyek számáról és állapotáról, plusz visszaút,

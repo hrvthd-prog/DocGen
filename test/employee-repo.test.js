@@ -468,6 +468,104 @@ atest('a sérülés-hiba megkülönböztethető a többitől', async () => {
   assertEq(Repo.isCorruptError(null), false);
 });
 
+// ── Egyidejű szerkesztés közös mappán (TERV-adatbiztonsag.md 7.) ────────────
+// 2-5 felhasználó dolgozik ugyanabban a mappában, gyakran egyszerre. A mentés
+// read-modify-write: enélkül az egyik munkája NÉMÁN eltűnik. Két munkamenetet
+// utánzunk: két külön repo-példány ugyanarra a hamis fájlrendszerre.
+asection('Egyidejű szerkesztés: elveszett mentés');
+
+function ketMunkamenet(fajlok) {
+  return [ujRepoFajlrendszerrel(fajlok), ujRepoFajlrendszerrel(fajlok)];
+}
+
+const KETTO = () => JSON.stringify({
+  version: 1,
+  employees: [
+    { id: 'a', updatedAt: '2026-09-29T10:00:00', updatedBy: 'anna', fields: { surname: 'Egy' } },
+    { id: 'b', updatedAt: '2026-09-29T10:01:00', updatedBy: 'anna', fields: { surname: 'Ketto' } },
+  ],
+});
+
+atest('B mentése ELUTASÍTVA, ha A közben írt', async () => {
+  const fajlok = { [FAJLNEV]: KETTO() };
+  const [A, B] = ketMunkamenet(fajlok);
+  await A.load();
+  await B.load();                                  // mindkettő a 10:01-es állapotot látja
+
+  A.create({ fields: { surname: 'A-tol' } });       // A felvesz és ment
+  await A.save();
+  const utanA = JSON.parse(fajlok[FAJLNEV]).employees.length;
+  assertEq(utanA, 3, 'A mentése nem ment át');
+
+  B.create({ fields: { surname: 'B-tol' } });       // B is felvesz, régi alapról
+  let dobott = null;
+  try { await B.save(); } catch (e) { dobott = e; }
+  assert(dobott, 'B mentése átment – A munkája némán elveszett');
+  assertEq(dobott.name, 'StaleWriteError', `más hiba jött: ${dobott.message}`);
+  assert(/közben megváltozott/.test(dobott.message), `érthetetlen üzenet: ${dobott.message}`);
+  assertEq(JSON.parse(fajlok[FAJLNEV]).employees.length, 3,
+           'a fájlba mégis beleírt, pedig ütközést jelzett');
+});
+
+atest('az üzenet megnevezi, ki írt közben', async () => {
+  const fajlok = { [FAJLNEV]: KETTO() };
+  const [A, B] = ketMunkamenet(fajlok);
+  await A.load();
+  await B.load();
+  fajlok[FAJLNEV] = JSON.stringify({
+    version: 1,
+    employees: [{ id: 'c', updatedAt: '2026-09-29T11:00:00', updatedBy: 'bela',
+                  fields: { surname: 'Masik' } }],
+  });
+  B.create({ fields: { surname: 'B-tol' } });
+  let dobott = null;
+  try { await B.save(); } catch (e) { dobott = e; }
+  assert(dobott && /bela/.test(dobott.message),
+         `nem nevezte meg az írót: ${dobott && dobott.message}`);
+});
+
+atest('ismételt mentés UGYANABBÓL a munkamenetből átmegy', async () => {
+  // Ez a fordított hiba, amitől óvni kell: ha a saját írásunkat ütközésnek
+  // vennénk, minden második mentés elbukna.
+  const fajlok = { [FAJLNEV]: KETTO() };
+  const R = ujRepoFajlrendszerrel(fajlok);
+  await R.load();
+  R.create({ fields: { surname: 'Elso' } });
+  await R.save();
+  R.create({ fields: { surname: 'Masodik' } });
+  await R.save();                                  // nem dobhat
+  assertEq(JSON.parse(fajlok[FAJLNEV]).employees.length, 4);
+});
+
+atest('első mentés üres mappába átmegy (nincs mit ütköztetni)', async () => {
+  const fajlok = {};
+  const R = ujRepoFajlrendszerrel(fajlok);
+  await R.load();
+  R.create({ fields: { surname: 'Elso' } });
+  await R.save();
+  assertEq(JSON.parse(fajlok[FAJLNEV]).employees.length, 1);
+});
+
+atest('a lenyomat a cases.json alakját is felismeri', async () => {
+  // Ugyanez a háttér szolgálja a cases/transfers fájlt is, más kulccsal. Ha a
+  // lenyomat csak az „employees” kulcsot ismerné, ott NÉMÁN nem védene.
+  const fajlok = {
+    [FAJLNEV]: JSON.stringify({ version: 1,
+      cases: [{ id: 'x', updatedAt: '2026-09-29T10:00:00', updatedBy: 'anna' }] }),
+  };
+  const [A, B] = ketMunkamenet(fajlok);
+  await A.load();
+  await B.load();
+  fajlok[FAJLNEV] = JSON.stringify({ version: 1,
+    cases: [{ id: 'x', updatedAt: '2026-09-29T12:00:00', updatedBy: 'bela' },
+            { id: 'y', updatedAt: '2026-09-29T12:01:00', updatedBy: 'bela' }] });
+  B.create({ fields: { surname: 'B-tol' } });
+  let dobott = null;
+  try { await B.save(); } catch (e) { dobott = e; }
+  assert(dobott && dobott.name === 'StaleWriteError',
+         'a cases alakú fájlnál nem vette észre az ütközést');
+});
+
 // ════════════════════════════════════════════════════════════════════════════
 asection('Változásnapló');
 

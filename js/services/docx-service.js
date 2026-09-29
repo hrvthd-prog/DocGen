@@ -161,7 +161,7 @@ const DocxService = (() => {
     // tartalom tizedannyi helyen elfér, és a hálózaton is annyival megy.
     const filled = doc.getZip().generate({ type: 'uint8array', compression: 'DEFLATE' });
     return {
-      buffer:    processCheckboxes(filled, data, opts.equals),
+      buffer:    stampDocGen(processCheckboxes(filled, data, opts.equals)),
       emptyTags: [...emptyTags].filter(t => t && !t.startsWith('CHECK:') && !t.startsWith('B:')),
     };
   }
@@ -259,6 +259,39 @@ const DocxService = (() => {
     return out;
   }
 
+  /**
+   * DocGen-bélyeg a docx `docProps/core.xml`-jébe (Keywords).
+   *
+   * Miért a docx-be, ha a bélyeg a PDF-en kell? Mert a generált irat PDF-jét NEM
+   * ez az app készíti, hanem a Word a `tools/docx-pdf.vbs`-en át — és a Word a
+   * Keywords tulajdonságot átviszi a PDF metaadatába. A `docx-pdf.vbs` a docxet
+   * szándékosan ReadOnly nyitja, ott tehát nem tudnánk beállítani.
+   *
+   * A PDF Műhely ebből tudja, hogy a PDF GENERÁLT (tehát még nem aláírt), és a
+   * bélyeg HIÁNYÁBÓL, hogy szkennerből jött — a fájlnév `aláírt` utótagja csak
+   * tartalék. (kepek-pdf-terv.md 12.6, TERV-mappaszerkezet.md 3.)
+   */
+  function stampDocGen(uint8) {
+    const verzio = (typeof window !== 'undefined' && window.APP_VERZIO)
+      ? window.APP_VERZIO.verzio : '';
+    const mark = 'docgen' + (verzio ? ';v' + verzio : '');
+    const zip = new PizZip(uint8);
+    const entry = zip.file('docProps/core.xml');
+    if (!entry) return uint8;                  // sablon nélküli core.xml: kihagyjuk
+    let xml = entry.asText();
+    if (/<cp:keywords>/i.test(xml)) {
+      xml = xml.replace(/<cp:keywords>[\s\S]*?<\/cp:keywords>/i,
+                        `<cp:keywords>${mark}</cp:keywords>`);
+    } else if (/<\/cp:coreProperties>/i.test(xml)) {
+      xml = xml.replace(/<\/cp:coreProperties>/i,
+                        `<cp:keywords>${mark}</cp:keywords></cp:coreProperties>`);
+    } else {
+      return uint8;
+    }
+    zip.file('docProps/core.xml', xml);
+    return zip.generate({ type: 'uint8array', compression: 'DEFLATE' });
+  }
+
   function processCheckboxes(uint8, rowData, equals) {
     const zip = new PizZip(uint8);
     const entry = zip.file('word/document.xml');
@@ -329,6 +362,7 @@ const DocxService = (() => {
 
   return {
     generateDocx,
+    stampDocGen,         // DocGen-bélyeg a core.xml Keywords-be (teszthez is)
     processCheckboxes,   // alacsonyszintű SDT-jelölő feldolgozás (teszthez is)
     makeParser,          // a jelölő-feloldás maga (a render nélkül, teszthez is)
     enrichClientRow,

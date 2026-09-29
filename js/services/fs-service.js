@@ -71,7 +71,10 @@ const FsService = (() => {
 
       if (handle) {
         try {
-          const ok = await verifyPermission(handle);
+          // readwrite kell: a handle-t írásra használjuk. Enélkül csak az olvasási
+          // engedélyt igazoltuk, és a createWritable() később, a generálás
+          // közepén dobott NotAllowedError-t.
+          const ok = await verifyPermission(handle, true);
           if (ok) return handle;
         } catch {}
       }
@@ -89,16 +92,21 @@ const FsService = (() => {
     }
   }
 
-  async function getOrRequestFile(key, description, accept) {
+  // force = true: átugorja a tárolt handle-t, ezért mindig feljön a fájlválasztó.
+  // Ugyanaz a hiba volt itt, mint a mappánál 2026-08-19 előtt: enélkül a még
+  // érvényes engedélyű RÉGI fájllal tér vissza, és a váltás nem csinál semmit.
+  async function getOrRequestFile(key, description, accept, { force = false } = {}) {
     const storeKey = userKey(key);
     let handle = null;
-    try { handle = await loadHandle(storeKey); } catch {}
+    if (!force) {
+      try { handle = await loadHandle(storeKey); } catch {}
 
-    if (handle) {
-      try {
-        const ok = await verifyPermission(handle);
-        if (ok) return handle;
-      } catch {}
+      if (handle) {
+        try {
+          const ok = await verifyPermission(handle);
+          if (ok) return handle;
+        } catch {}
+      }
     }
 
     if (!hasFsApi) return null;
@@ -117,6 +125,37 @@ const FsService = (() => {
     }
   }
 
+  // ── dolgozói mappa + a PDF Műhely két alkönyvtára ─────────────────────────
+  // A Műhely szerkezete: <munkamappa>\<Dolgozó Név>\01_Elokeszitett | 02_Feltoltheto
+  // A DocGen az ELŐKÉSZÍTETTBE generál: az irat nyomtatásra/aláírásra vár.
+  const DIR_PREP = '01_Elokeszitett';
+  const DIR_UP   = '02_Feltoltheto';
+
+  // Ékezet- és kisbetű-független kulcs — a Műhely strip_accents-ének párja.
+  const HU_MAP = { á:'a', é:'e', í:'i', ó:'o', ö:'o', ő:'o', ú:'u', ü:'u', ű:'u' };
+  function foldName(s) {
+    return String(s || '').toLowerCase().replace(/[áéíóöőúüű]/g, c => HU_MAP[c]).trim();
+  }
+
+  async function listSubDirs(dirHandle) {
+    const out = [];
+    for await (const [name, entry] of dirHandle.entries()) {
+      if (entry.kind === 'directory' && !name.startsWith('.')) out.push(name);
+    }
+    return out.sort((a, b) => a.localeCompare(b, 'hu'));
+  }
+
+  /** A Műhely resolve_worker-ének párja: pontos egyezés, vagy az EGYETLEN
+   *  részegyezés. Bizonytalanságnál null — a hívó kérdez, nem talál ki mappát. */
+  function matchWorkerDir(name, dirs) {
+    const f = foldName(name);
+    if (!f) return { dir: null, hits: dirs.slice() };
+    const exact = dirs.filter(d => foldName(d) === f);
+    if (exact.length === 1) return { dir: exact[0], hits: exact };
+    const part = dirs.filter(d => foldName(d).includes(f) || f.includes(foldName(d)));
+    return { dir: part.length === 1 ? part[0] : null, hits: part };
+  }
+
   async function listDocxFiles(dirHandle) {
     const files = [];
     for await (const [name, entry] of dirHandle.entries()) {
@@ -127,21 +166,31 @@ const FsService = (() => {
     return files.sort((a, b) => a.localeCompare(b, 'hu'));
   }
 
-  // Teljesen rekurzív szkennelés — visszaadja: [{name, subdir}]
+  // Rekurzív szkennelés — visszaadja: [{name, subdir}]
   // subdir: teljes relatív útvonal (pl. "Telephely/Alcsoport/nyomtatványok"), null ha a gyökérben van
+  //
+  // Mélységi korlát és pont-szűrés: ha a sablonmappa egybeesik (vagy átfed) a PDF
+  // Műhely munkamappájával, korlát nélkül bejárná az összes dolgozói mappát és a
+  // .eredeti\ mentéseket is. A Műhely walk_files-a mindenhol kihagyja a ponttal
+  // kezdődő mappát — itt is így kell.
+  const SCAN_MAX_DEPTH = 4;
+  const SKIP_DIRS = new Set(['01_Elokeszitett', '02_Feltoltheto']);
+
   async function listDocxFilesDeep(dirHandle) {
     const files = [];
-    await _scanRecursive(dirHandle, null, files);
+    await _scanRecursive(dirHandle, null, files, 0);
     return files.sort((a, b) => a.name.localeCompare(b.name, 'hu'));
   }
 
-  async function _scanRecursive(dirHandle, basePath, files) {
+  async function _scanRecursive(dirHandle, basePath, files, depth) {
     for await (const [name, entry] of dirHandle.entries()) {
       if (entry.kind === 'file' && name.toLowerCase().endsWith('.docx')) {
         files.push({ name, subdir: basePath });
       } else if (entry.kind === 'directory') {
+        if (depth + 1 > SCAN_MAX_DEPTH) continue;
+        if (name.startsWith('.') || SKIP_DIRS.has(name)) continue;
         const subPath = basePath ? `${basePath}/${name}` : name;
-        try { await _scanRecursive(entry, subPath, files); } catch {}
+        try { await _scanRecursive(entry, subPath, files, depth + 1); } catch {}
       }
     }
   }
@@ -157,17 +206,47 @@ const FsService = (() => {
     return file.arrayBuffer();
   }
 
+  // A writable Chromiumban swap-fájlon dolgozik, és a close() cseréli be. Ha a
+  // write és a close között hiba van, a stream nyitva marad, és .crswap maradék
+  // keletkezik – ezért a finally-ben abort(). Írás után visszaolvassuk a méretet:
+  // a csendes csonkolás (hálózati meghajtó, tele lemez) így nem marad észrevétlen.
   async function writeToDir(dirHandle, filename, buffer) {
     const fh = await dirHandle.getFileHandle(filename, { create: true });
     const writable = await fh.createWritable();
-    await writable.write(buffer);
-    await writable.close();
+    let closed = false;
+    try {
+      await writable.write(buffer);
+      await writable.close();
+      closed = true;
+    } finally {
+      if (!closed) { try { await writable.abort(); } catch {} }
+    }
+    const want = buffer.byteLength ?? buffer.size;
+    if (typeof want === 'number') {
+      const got = (await fh.getFile()).size;
+      if (got !== want) {
+        throw new Error(`A kiírt fájl mérete eltér (${got} ≠ ${want}): ${filename}`);
+      }
+    }
   }
 
+  // A „nincs ilyen mappa” jogos eset (null), a „nincs engedély” vagy „érvénytelen
+  // név” NEM az: azokat dobjuk. Enélkül egy engedélyhiba némán úgy néz ki, mintha
+  // a mappa nem létezne, és a hívó máshova (a gyökérbe) írna.
   async function getSubDir(dirHandle, name, create = false) {
     try {
       return await dirHandle.getDirectoryHandle(name, { create });
-    } catch { return null; }
+    } catch (e) {
+      if (e && e.name === 'NotFoundError') return null;
+      throw e;
+    }
+  }
+
+  // Ahol a régi, hibát elnyelő viselkedés kell (pl. „van-e egyáltalán ilyen”),
+  // ott ez a változat használható – de tudatosan, nem véletlenül.
+  async function getSubDirOrNull(dirHandle, name, create = false) {
+    try { return await getSubDir(dirHandle, name, create); }
+    catch { return null; }
   }
 
   // Fájlnevek listázása a mappában, opcionális szűrővel
@@ -180,14 +259,22 @@ const FsService = (() => {
     return names.sort((a, b) => a.localeCompare(b, 'hu'));
   }
 
+  // „Nincs ilyen fájl” -> false; minden más (engedélyhiba!) dobódik. Enélkül egy
+  // engedélyhiba úgy néz ki, mint a fájl hiánya, és a felülírás-kérdés elmarad.
   async function fileExists(dirHandle, filename) {
     try { await dirHandle.getFileHandle(filename); return true; }
-    catch { return false; }
+    catch (e) {
+      if (e && e.name === 'NotFoundError') return false;
+      throw e;
+    }
   }
 
   async function deleteFromDir(dirHandle, filename) {
     try { await dirHandle.removeEntry(filename); return true; }
-    catch { return false; }
+    catch (e) {
+      if (e && e.name === 'NotFoundError') return false;   // már nincs ott: rendben
+      throw e;
+    }
   }
 
   // Szöveges fájl olvasása/írása – az adatbázis JSON-jaihoz
@@ -198,10 +285,8 @@ const FsService = (() => {
   }
 
   async function writeTextToDir(dirHandle, filename, text) {
-    const fh = await dirHandle.getFileHandle(filename, { create: true });
-    const writable = await fh.createWritable();
-    await writable.write(new Blob([text], { type: 'application/json' }));
-    await writable.close();
+    await writeToDir(dirHandle, filename,
+                     new Blob([text], { type: 'application/json' }));
   }
 
   return {
@@ -214,6 +299,12 @@ const FsService = (() => {
     readFromDir,
     writeToDir,
     getSubDir,
+    getSubDirOrNull,
+    DIR_PREP,
+    DIR_UP,
+    foldName,
+    listSubDirs,
+    matchWorkerDir,
     listFiles,
     fileExists,
     deleteFromDir,

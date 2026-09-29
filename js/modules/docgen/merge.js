@@ -434,9 +434,17 @@ const DocgenMerge = (() => {
     });
   }
 
+  // A letöltésre visszaesés CSAK akkor jogos, ha a böngésző nem tudja a mappaírást.
+  // Ha tudja, de elbukott, az HIBA: a csendes letöltés szétszórja a fájlokat a
+  // Letöltések mappába, ahol a PDF Műhely nem is látja őket.
   async function _savePdfBuffer(buf, filename) {
     if (ctx.state.outputDir) {
-      try { await FsService.writeToDir(ctx.state.outputDir, filename, buf); return; } catch {}
+      await FsService.writeToDir(ctx.state.outputDir, filename, buf);
+      return;
+    }
+    if (FsService.hasFsApi) {
+      throw new Error('Nincs beállított kimeneti mappa — állítsd be, vagy adj rá '
+                      + 'hozzáférést (3. lépés).');
     }
     saveAs(new Blob([buf], { type: 'application/pdf' }), filename);
   }
@@ -543,6 +551,15 @@ const DocgenMerge = (() => {
         const src   = await PDFDocument.load(buf);
         const pages = await doc.copyPages(src, src.getPageIndices());
         pages.forEach(p => doc.addPage(p));
+      }
+      // DocGen-bélyeg: az összefűzött csomag is generált (még nem aláírt) irat.
+      // A PDF Műhely ebből tudja, hogy az előkészítettbe tartozik.
+      try {
+        const v = (window.APP_VERZIO && window.APP_VERZIO.verzio) || '';
+        doc.setProducer('DocGen' + (v ? ' ' + v : ''));
+        doc.setKeywords(['docgen']);
+      } catch (e) {
+        BevLogger.warn('MERGE', 'A DocGen-bélyeg nem került rá', e.message, '');
       }
       return new Uint8Array(await doc.save());
     }

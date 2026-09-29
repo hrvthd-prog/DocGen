@@ -73,12 +73,16 @@ const RegistryModule = (() => {
     EmployeeRepo.useBackend(EmployeeRepo.createFileBackend(dirHandle));
     CaseRepo.useBackend(CaseRepo.createFileBackend(dirHandle));
     TransferRepo.useBackend(TransferRepo.createFileBackend(dirHandle));
+    hookSaveErrors();
     await SchemaStore.load();
     await ExportProfiles.load();
     await CaseTypes.load();
 
     /**
      * Sérült adatfájlnál NEM indulunk el üresen.
+     *
+     * (A mentési hibák felületre hozása a hookSaveErrors()-ban van — közös mappán
+     * dolgozva az ütközés a leggyakoribb mentési hiba, és némán nem maradhat.)
      *
      * Ha üres nyilvántartással indulnánk, a felhasználó azt látná, hogy „nincs
      * adat" – és az első módosítás felülírná a még menthető tartalmat. Ehelyett
@@ -163,6 +167,44 @@ const RegistryModule = (() => {
    * A séma és az export profilok egy közös config fájlban – személyes adat
    * nélkül, így gépek között szabadon vihető.
    */
+  /**
+   * A mentési hibák felületre hozása.
+   *
+   * Az automata mentés hibája eddig csak a naplóba ment, a felhasználó pedig azt
+   * hitte, mentve van. Közös mappán (2-5 fő, gyakran egyszerre) a leggyakoribb
+   * mentési hiba az ÜTKÖZÉS: valaki más közben írt. Ezt nem elég naplózni —
+   * enélkül a frissesség-ellenőrzés csak annyit ér, hogy az adat most már nem
+   * íródik felül, de a felhasználó ugyanúgy elveszíti a munkáját.
+   */
+  let _saveErrorHooked = false;
+
+  function hookSaveErrors() {
+    if (_saveErrorHooked) return;
+    _saveErrorHooked = true;
+    const kezel = (repoNev) => (err) => {
+      if (EmployeeRepo.isStaleWriteError(err)) {
+        BevLogger.warn('REPO_UTKOZES', 'Egyidejű szerkesztés — a mentés elmaradt',
+                       `${repoNev}: ${err.message}`, Settings.currentUser() || '');
+        showDialog({
+          title: '⚠ A mentés elmaradt — valaki más közben írt',
+          body: `<p>${escHtml(err.message)}</p>
+                 <p class="muted">A módosításod még a képernyőn van, de NEM került
+                    a fájlba. Írd fel, amit most változtattál, töltsd újra az
+                    oldalt, és vidd be ismét — így nem írjátok felül egymást.</p>`,
+          footer: `<button type="button" class="btn btn-primary"
+                           onclick="location.reload()">Újratöltés</button>
+                   <button type="button" class="btn" onclick="closeDialog()">
+                     Később</button>`,
+        });
+        return;
+      }
+      toast('A mentés nem sikerült: ' + err.message, 'error');
+    };
+    EmployeeRepo.onSaveError(kezel('nyilvántartás'));
+    CaseRepo.onSaveError?.(kezel('ügyek'));
+    TransferRepo.onSaveError?.(kezel('átutalások'));
+  }
+
   function makeConfigBackend(dirHandle, key) {
     const FILE = 'docgen-config.json';
     return {
