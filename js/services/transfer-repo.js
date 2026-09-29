@@ -60,6 +60,7 @@ const TransferRepo = (() => {
   let cache   = null;
   let dirty   = false;
   let saveTimer = null;
+  const saveErrorListeners = new Set();
   const listeners = new Set();
 
   // ── Segédfüggvények ────────────────────────────────────────────────────────
@@ -164,6 +165,10 @@ const TransferRepo = (() => {
       save().catch(err => {
         if (typeof BevLogger !== 'undefined') {
           BevLogger.error('TRANSFER_SAVE', 'Az átutalások mentése nem sikerült', err.message, '');
+        }
+        // Lásd a case-repo ugyanezen pontját: a néma naplózás nem elég.
+        for (const fn of saveErrorListeners) {
+          try { fn(err); } catch {}
         }
       });
     }, delayMs);
@@ -498,6 +503,7 @@ const TransferRepo = (() => {
   return {
     AMOUNTS, MAX_REF_LEN, STATUS, ID_RE,
     useBackend, hasBackend, onChange, createFileBackend, createIdbBackend, createMemoryBackend,
+    onSaveError: (fn) => { saveErrorListeners.add(fn); return () => saveErrorListeners.delete(fn); },
     load, save, scheduleSave, flush,
     all, get, getRow, isOpen, total, openBatch, createBatch, destroyBatch,
     rowFromCase, addRow, updateRow, removeRow, refreshRow,

@@ -18,6 +18,9 @@ const DocgenModule = (() => {
     templateGroups:   [],
     activeGroups:     new Set(),
     outputDir:        null,
+    // Van-e ÍRÁSI engedély a kimeneti mappára. A handle megléte nem jelenti, hogy
+    // írni is tudunk: a file:// engedély indulásonként elveszik.
+    outputWritable:   false,
     maiNap:           '',
     // A legutóbbi generálás fájljai [{name, clientName, templateName}].
     // Ebből találja meg az összefűzés a lemezre került PDF-eket.
@@ -202,10 +205,12 @@ const DocgenModule = (() => {
       if (h) {
         if (await FsService.queryPermissionOnly(h, true)) {
           state.outputDir = h;
+          state.outputWritable = true;
           rerenderSidebarSettings();
         } else {
           // Handle ismert, de engedély nélkül — megőrizzük state-ben, banner kéri vissza az engedélyt
           state.outputDir = h;
+          state.outputWritable = false;   // a gomb 🔒-t mutat, a 3. lépés nem „kész”
           rerenderSidebarSettings();
           showOutputDirRestoreBanner();
         }
@@ -267,6 +272,7 @@ const DocgenModule = (() => {
     banner.addEventListener('click', async () => {
       try {
         if (state.outputDir && await FsService.verifyPermission(state.outputDir, true)) {
+          state.outputWritable = true;
           banner.remove();
           rerenderSidebarSettings();
           toast(`✓ Kimenet mappa-hozzáférés visszaállítva: ${state.outputDir.name}`, 'success');
@@ -325,7 +331,7 @@ const DocgenModule = (() => {
     const isAdmin  = Settings.isAdmin();
     const step1done = cnt > 0;
     const step2done = !!state.templatesDir;
-    const step3done = !!state.outputDir;
+    const step3done = !!state.outputDir && state.outputWritable;
     const pendingStep = !step1done ? 1 : !step2done ? 2 : !step3done ? 3 : 0;
     return `
       <div class="sidebar-section ${pendingStep === 1 ? 'sidebar-section--pending' : ''}">
@@ -1288,13 +1294,101 @@ const DocgenModule = (() => {
     );
   }
 
+  // ── Dolgozói mappa a PDF Műhely szerkezetében ─────────────────────────────
+  // <kimenet>\<Dolgozó Név>\01_Elokeszitett — a generált irat nyomtatásra vár.
+  // SOSEM hozunk létre magától mappát: ha a név nem oldható fel egyértelműen,
+  // kérdezünk. Enélkül eltérő névformátumból (nagybetűs vezetéknév, EH-szám a
+  // név után, más sorrend) párhuzamos dolgozói mappák keletkeznének, és a
+  // Műhely Áttekintője két fél dolgozót látna.
+  // A válasz munkamenetre megjegyzésre kerül: egy kötegelt generálás ne kérdezzen
+  // ugyanarról a dolgozóról többször.
+  const _workerChoice = new Map();          // clientName -> mappanév | '' (gyökér)
+
+  async function resolveWorkerTarget(clientName) {
+    if (!state.outputDir || !clientName) return null;
+    if (_workerChoice.has(clientName)) {
+      const pick = _workerChoice.get(clientName);
+      return pick ? _prepDirIn(pick) : null;
+    }
+    let dirs = [];
+    try { dirs = await FsService.listSubDirs(state.outputDir); } catch { dirs = []; }
+    dirs = dirs.filter(d => d !== FsService.DIR_PREP && d !== FsService.DIR_UP);
+    const { dir, hits } = FsService.matchWorkerDir(clientName, dirs);
+    const pick = dir || await askWorkerDir(clientName, hits, dirs);
+    _workerChoice.set(clientName, pick || '');
+    return pick ? _prepDirIn(pick) : null;
+  }
+
+  async function _prepDirIn(workerDirName) {
+    const wd = await FsService.getSubDir(state.outputDir, workerDirName, true);
+    return FsService.getSubDir(wd, FsService.DIR_PREP, true);
+  }
+
+  /** Rákérdezés: melyik meglévő mappába, vagy hozzon-e létre újat ezen a néven.
+   *  -> mappanév, vagy '' (a kimeneti mappa gyökerébe) */
+  function askWorkerDir(clientName, hits, allDirs) {
+    return new Promise(resolve => {
+      const opts = (hits.length ? hits : allDirs).slice(0, 12);
+      const list = opts.map((d, i) =>
+        `<button type="button" class="btn dg-wd-opt" data-i="${i}"
+                 style="display:block;width:100%;text-align:left;margin:2px 0">
+           📁 ${escHtml(d)}\\${escHtml(FsService.DIR_PREP)}
+         </button>`).join('');
+      showDialog({
+        title: 'Melyik dolgozói mappába?',
+        body: `<p>Hova kerüljön <b>${escHtml(clientName)}</b> generált irata?</p>` +
+              (opts.length
+                ? `<p class="muted">Meglévő mappák — kattints a helyesre:</p>${list}`
+                : `<p class="muted">A kimeneti mappában nincs hozzá illeszkedő
+                     dolgozói mappa.</p>`),
+        footer: `<button type="button" class="btn btn-primary" id="dg-wd-new">
+                   Új mappa: „${escHtml(clientName)}”</button>
+                 <button type="button" class="btn" id="dg-wd-root">
+                   A kimeneti mappa gyökerébe</button>`,
+      });
+      let closed = false;
+      const done = (val) => {
+        if (closed) return;
+        closed = true;
+        closeDialog();
+        resolve(val);
+      };
+      // A párbeszéd a #dialog-overlay-ben él, NEM a fül containerében — ezért
+      // document-scope, nem a helyi q().
+      document.querySelectorAll('.dg-wd-opt').forEach(b =>
+        b.addEventListener('click', () => done(opts[Number(b.dataset.i)])));
+      document.getElementById('dg-wd-new')
+        .addEventListener('click', () => done(clientName));
+      document.getElementById('dg-wd-root')
+        .addEventListener('click', () => done(''));
+    });
+  }
+
   // ── Kimenet mappa ─────────────────────────────────────────────────────────
   /** A sidebar gombja: ha még nincs mappa, kér egyet; ha van, váltásra kérdez. */
   async function onSetOutput() {
     if (!state.outputDir) return _pickAndSaveOutputDir();
-    // Engedély nélküli handle esetén nincs mit megerősíteni: kell egy mappa
     const hasPerm = await FsService.queryPermissionOnly(state.outputDir, true);
-    return hasPerm ? onSwitchOutputDir() : _pickAndSaveOutputDir();
+    if (hasPerm) return onSwitchOutputDir();
+    // Van tárolt handle, csak engedély nincs: a KATTINTÁS a user gesture, tehát
+    // kérhetjük rá az engedélyt — mappaválasztó nélkül. Eddig a kód eldobta a jó
+    // handle-t, és teljes újraválasztást kért helyette.
+    try {
+      if (await FsService.verifyPermission(state.outputDir, true)) {
+        state.outputWritable = true;
+        q('#dg-output-restore-banner')?.remove();
+        rerenderSidebarSettings();
+        toast('✓ Kimeneti mappa: ' + state.outputDir.name, 'success');
+        BevLogger.info('OUTPUT_DIR_RESTORE', 'Output mappa-engedély visszaállítva',
+                       state.outputDir.name, currentUser);
+        return;
+      }
+    } catch (e) {
+      BevLogger.warn('OUTPUT_DIR_RESTORE', 'Engedély visszakérés sikertelen',
+                     e.message, currentUser);
+    }
+    // Megtagadta (vagy a handle már érvénytelen) — ekkor kell új mappa.
+    return _pickAndSaveOutputDir();
   }
 
   // Közvetlen mappa-picker: nem használja az IndexedDB-ben tárolt handle-t,
@@ -1305,6 +1399,7 @@ const DocgenModule = (() => {
       const h = await window.showDirectoryPicker({ id: 'output_dir', mode: 'readwrite', startIn: 'documents' });
       await FsService.saveHandle('output_dir', h);
       state.outputDir = h;
+      state.outputWritable = true;
       toast('✓ Kimeneti mappa: ' + h.name, 'success');
       BevLogger.info('OUTPUT_DIR_SET', 'Kimenet mappa beállítva', h.name, currentUser);
       // Sidebar teljes újrarajzolás (váltó gomb megjelenítéséhez)
@@ -1361,15 +1456,22 @@ const DocgenModule = (() => {
     }
   }
 
+  // A harmadik állapot a lényeg: van tárolt handle, de NINCS írási engedély. Eddig
+  // ez „kész”-nek látszott (a badge done-t kapott, a gomb „Másik mappa”-t írt),
+  // pedig írni nem tudott — a sablonmappa ugyanekkor 🔒-t mutat. Ez az aszimmetria
+  // volt a napi súrlódás. (TERV-mappaszerkezet.md 1.)
   function rerenderSidebarSettings() {
     const el = q('#dg-output-info');
     if (el) el.innerHTML = _folderSVG + escHtml(state.outputDir ? state.outputDir.name : 'Nincs beállítva');
 
     const setBtn = q('#dg-set-output');
     const badge  = q('#dg-step-3');
-    if (state.outputDir) {
+    if (state.outputDir && state.outputWritable) {
       if (badge)  badge.classList.add('done');
       if (setBtn) setBtn.textContent = '🔄 Másik kimenet mappa választása';
+    } else if (state.outputDir) {
+      if (badge)  badge.classList.remove('done');
+      if (setBtn) setBtn.textContent = '🔒 Kimeneti mappa (hozzáférés szükséges)';
     } else {
       if (badge)  badge.classList.remove('done');
       if (setBtn) setBtn.textContent = 'Kimenet mappa beállítása';
@@ -1835,12 +1937,27 @@ const DocgenModule = (() => {
       // megjelenik a képernyőn, nincs szükség extra yieldre.
       progress.setPhase('DOCX fájlok mentése…');
       { let wi = 0;
-        for (const { buf, name, itemIdx } of generated) {
+        for (const { buf, name, itemIdx, clientName } of generated) {
           if (docx) {
             progress.setSaving(itemIdx);
             if (state.outputDir) {
               setStatus(`Mentés: ${name}`, Math.round(wi / generated.length * 100));
-              try { await FsService.writeToDir(state.outputDir, name, buf); wi++; continue; } catch {}
+              // A dolgozó 01_Elokeszitett mappájába: az irat nyomtatásra vár.
+              // Ha a mappa nem oldható fel, a resolveWorkerTarget kérdez — és ha
+              // a válasz „ne”, akkor a kimeneti mappa gyökerébe írunk.
+              const dir = await resolveWorkerTarget(clientName);
+              try {
+                await FsService.writeToDir(dir || state.outputDir, name, buf);
+                wi++;
+                continue;
+              } catch (e) {
+                // Néma letöltésre esés helyett HIBA: a csendben máshova került
+                // fájlt a PDF Műhely nem látja (TERV-mappaszerkezet.md 2.g).
+                BevLogger.error('DOCX_SAVE', 'Mentés a mappába sikertelen',
+                                `${name}: ${e.message}`, currentUser);
+                errors.push(`${name}: a mentés nem sikerült — ${e.message}`);
+                if (FsService.hasFsApi) { wi++; continue; }
+              }
             }
             saveAs(new Blob([buf], {
               type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
