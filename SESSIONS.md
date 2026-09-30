@@ -68,6 +68,32 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-09-30 (2.) — Fiókok és négy jogosultsági szint: terv (kód nincs)
+
+**Cél:** a felhasználó rákérdezett a felhasználói fiókokra, és a BEVapp-web hasonló megoldására mutatott („onnan át lehet venni"). Elvárás: legalább 4 szint — legfőbb admin, user, HR Business Partner, csak megtekintő (sorvezető/műszakvezető, aki az ügyek állását nézi). Megvizsgáltam a BEVapp-ot, és megírtam a tervet. **Kód nem változott.**
+
+**Változás** (`v10.64`, csak dokumentáció):
+- **új:** `TERV-fiokok.md` — mi vehető át a BEVapp-ból és mi nem, a négy szint mátrixa, a fiókfájl helye, a megtekintő szűkített nézete, NTFS-terv a 2. fázishoz, FF1–FF6 fázisok.
+- `CLAUDE.md` — a tervfájl felvéve, „még nincs megvalósítva" jelzéssel.
+
+**Miért / döntés:**
+- **A BEVapp fiókmegoldása fiókválasztó, nem hitelesítés**, és **két** szintje van, nem négy: `isAdmin() { return currentUser() === 'Horváth Dániel'; }` — bedrótozott név. Ezt a `TERV.md` 249–255 egyszer már **hibaként** megnevezte és kivezette; nem hozzuk vissza.
+- **A legsúlyosabb szerkezeti gond, amit NEM veszünk át:** a BEVapp belépőképernyőjén bárki hozzáadhat, átnevezhet és törölhet fiókot. Egy megtekintő egy kattintással admin fiókot csinál magának — ezzel bármelyik szint üres marad. Nálunk fiókkezelés csak belépett adminnál, a Beállításokban.
+- **A fióklista nem mehet `localStorage`-ba** (a BEVapp ott tartja): az böngészőprofilonként külön, tehát megosztott mappán minden gépen más a lista és más a szint. Új `data/docgen-accounts.json` kell — és NEM a `docgen-config.json`, mert arról a README azt írja, hogy személyes adat nélküli és gépek közt vihető, a fióknevek viszont személyes adatok.
+- **Két szerencsés találat, amitől ez jóval kevesebb munka:**
+  - A HRBP írási köréhez **nem kell új mezőjelölő**: a sémában már van `hr_belso` csoport, címkéje „Csak HR tölti" (bankszámla, bank, költséghely, közvetlen vezető, SG kategória), a mezők hintje `FILLED BY HR — please leave empty`. A szabályozás csoportszinten megy; ha bővül a kör, egy mezőt át kell tenni, és kód nem változik.
+  - A „csak a saját dolgozóit" szűréshez **létezik a mező**: `hr_direct_leader` („Közvetlen vezető"). Nem kell újat felvenni.
+- **Amit ki kell mondani, és a README-be is bekerül:** `file://` + megosztott mappa mellett ez **nem** hozzáférés-védelem. A `sessionStorage` a kliensen van, a `docgen-employees.json` pedig a mappában — aki olvasási joggal eléri, Jegyzettömbbel megnyitja. A felületi szint véletlen ellen véd; a valódi határ az NTFS (4. fejezet) vagy kiszolgáló. A „csak megtekintő" név védelmet sugall, ami az 1. fázisban nincs meg.
+- **A megtekintő adatvédelmi része csak a 2. fázisban valódi:** a nyilvántartás útlevélszámot, TAJ-t, adóazonosítót, anyja nevét tárol. Ha a sorvezető ugyanabból a fájlból olvas, mindent lát. Ezért a 2. fázis egy külön `allapot-kivonat.json`-t ír (öt mező), amire a megtekintő NTFS-szinten is csak olvasást kap.
+
+**Tesztek:** nem futtak — kódváltozás nincs.
+
+**Nyitott / következő:**
+- **Az FF1–FF6 megvalósítása még nem indult el** — jóváhagyásra vár.
+- **Egy nyitott döntés a tervben:** kérünk-e fiókonkénti PIN-t? Javaslat: ne — látszatvédelem, a hash is a kliensen van.
+- Az NTFS-mátrix (4. fejezet) **átadásra vár az IT-nak**; ezt kód nem tudja elvégezni.
+- A korábbi szálak változatlanul nyitva (kézi FS-próba, engedély (a)/(b), kimeneti mappa ellenőrzése).
+
 ## 2026-09-30 — A terv maradékai: force, holt kód, README, frissítő-fixture
 
 **Cél:** a felhasználó rákérdezett, minden megvalósult-e a tervből. Végigellenőriztem a terveket a kóddal szemben, és négy valódi hiányt találtam — mind be lett fejezve.
