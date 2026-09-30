@@ -68,6 +68,27 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-09-30 — A terv maradékai: force, holt kód, README, frissítő-fixture
+
+**Cél:** a felhasználó rákérdezett, minden megvalósult-e a tervből. Végigellenőriztem a terveket a kóddal szemben, és négy valódi hiányt találtam — mind be lett fejezve.
+
+**Változás** (`v10.63`):
+- `js/modules/docgen/pdf-chain.js` — az `onPickScript` útján `copyScript` most `{ force: true }`-val kéri a fájlt. **A paraméter eddig hatástalan volt:** senki nem használta, tehát a „Szkript kiválasztása" gomb továbbra is a régi, még érvényes engedélyű fájlt adta vissza, és a fájlválasztó fel sem jött — pontosan az a hiba, amit az F4.5/7 megnevezett.
+- `js/services/fs-service.js` — `getSubDirOrNull` **törölve**: exportáltam, de egyetlen hívója sem lett. Ahol a toleráns viselkedés kellene (`scanDir`, `findTemplate`), ott a `NotFoundError → null` már elég, az engedélyhibának meg kell látszania.
+- `test/fs-service.test.js` — valódi IndexedDB-utánzat a sandboxba (a handle-tár nélkül a `force` nem mérhető), és két teszt a szkriptváltásra. **Ellenőriztem, hogy tud bukni:** a `force` alapértékét szándékosan elrontva pirosra vált.
+- `README.md` — „Első használat" 3. pontja (a kimeneti mappa = a Műhely munkamappája), a `🔒` engedélyállapot, a sablonmappa-szétválasztás, a `01_Elokeszitett` célmappa, a bélyeg, és új szakasz: „Ha többen dolgoznak ugyanabban a mappában".
+
+**Miért / döntés:**
+- **Az első tesztem hamis volt, és eldobtam.** A `sandbox.FsService.loadHandle` felülírása az *exportált* mezőt cseréli, a `getOrRequestFile` viszont a belső zárványt hívja — a számláló mindig 0 maradt, a teszt nem tudott bukni. Ezért kellett a működő IndexedDB-utánzat: egy ellenőrzés, ami nem tud bukni, semmit nem ér.
+- **A `getSubDir` viselkedésváltását (most dob) végigauditáltam.** Mind a 8 hívó megfelelően védett: a `scanDir` strukturált hibát ad, a `findTemplate` az iratonkénti `catch`-ben van, a `listBackups`/`restoreBackup` `try`-ban toast-tal, az `employee-repo` mentés-mentése warn-nal. Nincs csendes regresszió — ezért nem is kellett a `getSubDirOrNull`.
+
+**Tesztek:** `node test/run-all.js` — mind zöld (fs-service 18 → 19). `node tools/klon-proba.js` zöld. PDF Műhely oldalon a `test/frissit.py` fixture-je megkapta a 01/02 szerkezetet (13/13).
+
+**Nyitott / következő:**
+- **A kézi, éles próba továbbra is hátravan** — a Node-tesztek a File System Access API-t nem fedik. A lista a 2026-09-29 (2.) bejegyzés végén; most egy ponttal több: a „Szkript kiválasztása" gomb feljön-e a fájlválasztóval.
+- **Felajánlva, de nem eldöntve:** a kimeneti mappa ellenőrzése (a Műhelyben a munkamappa-kapu megépült, itt nincs párja). A kár kisebb, mert a `matchWorkerDir` bizonytalanságnál kérdez és mappát sosem hoz létre magától.
+- Az engedély (a)/(b) döntése és a korábbi szálak változatlanul nyitva.
+
 ## 2026-09-29 (2.) — fs-service felújítás, 01_Elokeszitett célmappa, DocGen-bélyeg, ütközésvédelem
 
 **Cél:** az előző bejegyzés tervének megvalósítása (F4.5 → F5 → ütközésvédelem). Ugyanaz a munkamenet, ugyanaz a commit (`v10.62`); az előző bejegyzés a tervezési fázist írja le, ez a megvalósítást.

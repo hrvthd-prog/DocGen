@@ -34,9 +34,46 @@ megszoknánk, és a jelzés semmit nem jelentene.
 
 1. **Nyilvántartás** → *Adatmappa kiválasztása* — ide kerül a `docgen-employees.json`.
 2. **Dokumentumok** → *Sablonmappa* — a `.docx` sablonok helye.
-3. **Dokumentumok** → *Kimeneti mappa* — ide készülnek a kész iratok.
+3. **Dokumentumok** → *Kimeneti mappa* — a **PDF Műhely munkamappája** (a dolgozói
+   mappák szülője).
 
-A választott mappákat a böngésző megjegyzi, nem kell újra kijelölni.
+A választott mappákat a böngésző megjegyzi, de a **hozzáférési engedélyt** a
+`file://` protokollon **minden indításnál újra meg kell adni** — a Chrome tartós
+engedélye telepített webalkalmazáshoz kötött, és `file://`-nak nincs telepíthető
+origin-je. A sidebarban a mappa gombja ilyenkor `🔒 … (hozzáférés szükséges)`
+feliratot kap, és **egy kattintás elég**: a böngésző engedélyt kér, mappát nem
+kell újraválasztani.
+
+> **A sablonmappa ne a kimeneti mappa legyen, és ne is annak almappája.** A
+> sablonkeresés rekurzív; ha egybeesnek, a dolgozói mappák `.docx` fájljai is
+> sablonként jelennének meg. (A keresés kihagyja a ponttal kezdődő mappákat és a
+> `01_Elokeszitett` / `02_Feltoltheto` alkönyvtárakat, de a szétválasztás
+> így is tisztább.)
+
+### Hova készülnek az iratok
+
+A generált irat a **dolgozó előkészített mappájába** kerül, a PDF Műhely
+szerkezete szerint:
+
+```
+<kimeneti mappa>\<Dolgozó Név>\01_Elokeszitett\<irat>.docx
+```
+
+Ez azt jelenti: *nyomtatásra és aláírásra vár*. A szkennelt, aláírt példány a
+Műhely Iktatójától kerül a `02_Feltoltheto` mappába, és onnan megy a portálra.
+
+A dolgozói mappát az app **sosem hozza létre magától**: a nevet ékezet- és
+kisbetű-függetlenül párosítja a meglévő mappákkal, és ha nincs biztos találat,
+**rákérdez** (melyik meglévő mappába, vagy hozzon-e létre újat ezen a néven). Így
+nem keletkezhet két párhuzamos mappa ugyanarra a dolgozóra eltérő névformátumból.
+
+A generált `.docx` egy **DocGen-bélyeget** kap (a `Keywords` tulajdonságba), amit
+a Word átvisz a PDF metaadatába a konverziónál. A Műhely ebből tudja, hogy az
+irat generált — tehát még nem aláírt —, és a bélyeg hiányából, hogy szkennerből
+jött. Erre épül a Műhely *Rendezés…* funkciója.
+
+Ha a mappába írás bármiért nem sikerül, az app **szól** — nem esik csendben
+letöltésre, mert a Letöltések mappában landolt iratot a Műhely nem is látja.
 
 > A mappákat az app **nem tudja megnyitni az Intézőben**: a böngésző csak
 > hozzáférési fogantyút ad, elérési utat nem, és nincs API a fájlkezelő
@@ -278,6 +315,26 @@ adatot, így gépek közt szabadon vihető.
 > Ez GDPR-értelemben érzékeny kör — a tárolás helyét (helyi gép vagy céges
 > meghajtó) érdemes az adatvédelemért felelőssel egyeztetni, mielőtt éles
 > adat kerül bele.
+
+### Ha többen dolgoznak ugyanabban a mappában
+
+A nyilvántartás **egyetlen fájl**, és a mentés a teljes tartalmat írja. Ha ketten
+egyszerre szerkesztenek, a később mentő felülírná a másik munkáját — ezért az app
+**mentés előtt visszaolvas**: ha a fájl közben megváltozott, **nem ír**, hanem
+szól, és megnevezi, ki írt közben.
+
+```
+⚠ A mentés elmaradt — valaki más közben írt
+   A módosításod még a képernyőn van, de NEM került a fájlba.
+```
+
+Ilyenkor jegyezd fel, mit változtattál, töltsd újra az oldalt, és vidd be ismét.
+
+Ez **nem zárolás**: nem előzi meg az ütközést, hanem láthatóvá teszi. A korábbi
+viselkedés az volt, hogy a mentés némán elveszett — a lockfájl viszont elárvul
+(összeomlás, bezárt fül, hálózati szakadás), és több hibalehetőséget hozna, mint
+amennyi hasznot egy 2-5 fős csapatnál. Automatikus összefésülés szándékosan nincs:
+a döntés, hogy melyik változat a helyes, nem gépi kérdés.
 
 ## Azonosítók
 

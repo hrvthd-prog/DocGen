@@ -242,13 +242,6 @@ const FsService = (() => {
     }
   }
 
-  // Ahol a régi, hibát elnyelő viselkedés kell (pl. „van-e egyáltalán ilyen”),
-  // ott ez a változat használható – de tudatosan, nem véletlenül.
-  async function getSubDirOrNull(dirHandle, name, create = false) {
-    try { return await getSubDir(dirHandle, name, create); }
-    catch { return null; }
-  }
-
   // Fájlnevek listázása a mappában, opcionális szűrővel
   async function listFiles(dirHandle, filterFn) {
     const names = [];
@@ -299,7 +292,6 @@ const FsService = (() => {
     readFromDir,
     writeToDir,
     getSubDir,
-    getSubDirOrNull,
     DIR_PREP,
     DIR_UP,
     foldName,
