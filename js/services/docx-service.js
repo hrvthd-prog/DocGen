@@ -274,7 +274,10 @@ const DocxService = (() => {
   function stampDocGen(uint8) {
     const verzio = (typeof window !== 'undefined' && window.APP_VERZIO)
       ? window.APP_VERZIO.verzio : '';
-    const mark = 'docgen' + (verzio ? ';v' + verzio : '');
+    // Próba módban (nincs közös adatmappa) a bélyeg jelzi, hogy ez nem éles
+    // irat — így egy próbafájl nem keveredhet a valódiak közé.
+    const proba = (typeof Auth !== 'undefined' && Auth.isProba && Auth.isProba());
+    const mark = 'docgen' + (verzio ? ';v' + verzio : '') + (proba ? ';proba' : '');
     const zip = new PizZip(uint8);
     const entry = zip.file('docProps/core.xml');
     if (!entry) return uint8;                  // sablon nélküli core.xml: kihagyjuk

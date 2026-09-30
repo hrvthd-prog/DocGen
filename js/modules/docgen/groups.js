@@ -9,7 +9,9 @@
  */
 const DocgenGroups = (() => {
 
-  const currentUser = Settings.currentUser();
+  // A fiókot a bejelentkezés adja meg, a script betöltése UTÁN — ezért nem
+  // fagyasztjuk be: minden hivatkozásnál újraolvassuk (TERV-fiokok.md 3.2).
+  const currentUser = () => Settings.currentUser();
   let ctx = null;
   function init(context) { ctx = context; }
 
@@ -23,7 +25,7 @@ const DocgenGroups = (() => {
     const templates = [...new Set(ctx.state.allTemplates.map(t => t.name))];
 
     showDialog({
-      title: `Sablon-csoportok — ${currentUser}`,
+      title: `Sablon-csoportok — ${currentUser()}`,
       body: `
         <div style="display:flex;flex-direction:column;gap:6px;max-height:520px;overflow-y:auto;padding-right:4px">
           ${groups.map((g, gi) => {

@@ -2,7 +2,9 @@
 
 const DocgenModule = (() => {
 
-  const currentUser = Settings.currentUser();
+  // A fiókot a bejelentkezés adja meg, a script betöltése UTÁN — ezért az
+  // init()-ben vesszük fel, nem a modul törzsében (TERV-fiokok.md 3.2).
+  let currentUser = '';
 
   // ── Hiányzó-adat napló ────────────────────────────────────────────────────
 
@@ -45,6 +47,7 @@ const DocgenModule = (() => {
 
   // ── Init ──────────────────────────────────────────────────────────────────
   function init(el) {
+    currentUser = Settings.currentUser();
     container = el;
     loadSettings();
 

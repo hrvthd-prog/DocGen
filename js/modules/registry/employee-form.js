@@ -103,8 +103,23 @@ const EmployeeForm = (() => {
       input = `<input type="text" class="field-input" id="${id}" data-key="${escHtml(f.key)}" value="${escHtml(val)}">`;
     }
 
+    // Szintkapu MEZŐCSOPORTONKÉNT: a HRBP mindent olvas, de csak a séma
+    // „Csak HR tölti" csoportját írja (TERV-fiokok.md 3.1). A tiltás a
+    // megjelenített vezérlőn történik, nem a mező elrejtésével: a HRBP-nek
+    // LÁTNIA kell az adatot, csak nem szerkesztheti.
+    const irhato = Auth.canWriteGroup(f.group);
+    const zar = irhato ? '' : ' readonly disabled';
+    const zarCim = irhato ? '' :
+      ' title="Ezt a mezőt a mostani szinttel nem szerkesztheted."';
+    if (!irhato) {
+      input = input
+        .replace('<input ', '<input' + zar + zarCim + ' ')
+        .replace('<select ', '<select' + zar + zarCim + ' ')
+        .replace('<textarea ', '<textarea' + zar + zarCim + ' ');
+    }
+
     return `
-      <label class="ef-field" for="${id}">
+      <label class="ef-field${irhato ? '' : ' ef-field--locked'}" for="${id}">
         <span class="ef-label">${escHtml(f.label.hu)}${req}</span>
         ${input}
         <span class="ef-field-error" data-error-for="${escHtml(f.key)}"></span>

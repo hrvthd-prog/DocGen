@@ -29,7 +29,17 @@ const Settings = (() => {
     localStorage.removeItem(PREFIX + key);
   }
 
+  /**
+   * A belépett fiók neve. Az `Auth` munkamenetéből jön, ha van — az a forrás
+   * igazsága (közös fájl + sessionStorage). Fiók nélkül (próba mód, illetve a
+   * bejelentkezés előtti pillanat) a helyi név, hogy a per-fiók kulcsok
+   * sose szakadjanak el. A `localStorage`-os `current_user` már nem használt,
+   * de olvasásra megmarad: régi gépeken az ott tárolt név a tartalék.
+   */
   function currentUser() {
+    if (typeof Auth !== 'undefined' && Auth.currentUser && Auth.currentUser()) {
+      return Auth.currentUser();
+    }
     return get('current_user', LOCAL_USER) || LOCAL_USER;
   }
 
@@ -102,9 +112,14 @@ const Settings = (() => {
     return get('users', []);
   }
 
-  // Egyfelhasználós üzemben nincs korlátozott fiók: minden funkció elérhető.
-  // Többfelhasználós módnál ez lesz a jogosultság-ellenőrzés belépési pontja.
+  // A jogosultság-ellenőrzés egyetlen belépési pontja az `Auth.can()`. Ez a
+  // függvény csak azért maradt, mert több modul hívja (napló, DevModule): a
+  // szintekre az `Auth` felel. Ha nincs Auth (régi gép, próba mód), a korábbi
+  // „mindent szabad" viselkedés marad.
   function isAdmin() {
+    if (typeof Auth !== 'undefined' && Auth.currentRole && Auth.currentRole()) {
+      return Auth.can('log.all');
+    }
     return true;
   }
 

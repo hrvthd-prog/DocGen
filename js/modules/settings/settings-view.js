@@ -15,15 +15,24 @@ const SettingsModule = (() => {
   function init(el) {
     container = el;
     render();
-    SchemaStore.onChange(() => { renderFieldList(); renderDictionary(); });
+    SchemaStore.onChange(() => {
+      if (!Auth.can('settings.schema')) return;
+      renderFieldList();
+      renderDictionary();
+    });
   }
 
   // ── Váz ────────────────────────────────────────────────────────────────────
 
   function render() {
+    // A séma és a szótár rendszerszintű: csak admin. Az EH elérhetőség viszont
+    // napi munkaeszköz, azt az ügyintéző is állítja (TERV-fiokok.md 3.).
+    const sema = Auth.can('settings.schema');
     container.innerHTML = `
       <div class="workspace">
         <div class="workspace-col">
+          ${sema ? fiokKartya() : ''}
+          ${!sema ? '' : `
           <div class="ws-card">
             <div class="ws-card-header">
               <span class="ws-card-title">Adatmezők</span>
@@ -84,23 +93,199 @@ const SettingsModule = (() => {
               </div>
             </div>
           </div>
+          `}
 
-          ${ehKapcsolatKartya()}
+          ${Auth.can('settings.ehcontact') ? ehKapcsolatKartya() : ''}
 
           ${verzioKartya()}
         </div>
       </div>`;
 
-    document.getElementById('sv-add').addEventListener('click', () => openFieldDialog(null));
-    document.getElementById('sv-xlsx').addEventListener('change', onXlsxPicked);
-    document.getElementById('sv-dict-save').addEventListener('click', saveDictionary);
-    document.getElementById('sv-dict-scan').addEventListener('click', showMissingPairs);
-    document.getElementById('sv-eh-save').addEventListener('click', mentEhKapcsolat);
+    // A kártyák szintenként eltűnhetnek — ezért minden kötés előtt ellenőrzünk.
+    const on = (id, ev, fn) => {
+      const e = document.getElementById(id);
+      if (e) e.addEventListener(ev, fn);
+    };
+    on('sv-add', 'click', () => openFieldDialog(null));
+    on('sv-xlsx', 'change', onXlsxPicked);
+    on('sv-dict-save', 'click', saveDictionary);
+    on('sv-dict-scan', 'click', showMissingPairs);
+    on('sv-eh-save', 'click', mentEhKapcsolat);
     // A kurzor helye kattintásra és nyilazásra is változik, nem csak gépelésre
-    ['input', 'click', 'keyup'].forEach(ev =>
-      document.getElementById('sv-dict').addEventListener(ev, renderDictPreview));
-    renderFieldList();
-    renderDictionary();
+    ['input', 'click', 'keyup'].forEach(ev => on('sv-dict', ev, renderDictPreview));
+    if (sema) {
+      renderFieldList();
+      renderDictionary();
+      bindFiokKartya();
+    }
+  }
+
+  // ── Fiókok és szintek (csak admin) ────────────────────────────────────────
+  /**
+   * Fiókkezelés KIZÁRÓLAG itt, belépett adminnál.
+   *
+   * A BEVapp-ban a belépőképernyőn bárki hozzáadhat, átnevezhet és törölhet
+   * fiókot — egy megtekintő egy kattintással admin fiókot csinál magának, és
+   * ezzel bármelyik szint üres marad. Ezt szándékosan nem vettük át.
+   */
+  function fiokKartya() {
+    if (!Auth.can('accounts.manage')) {
+      // Próba módban nincs fiókfájl: ott ez csak a beállítottság látszatát adná.
+      return Auth.isProba() ? `
+        <div class="ws-card">
+          <div class="ws-card-header"><span class="ws-card-title">Fiókok</span></div>
+          <div class="ws-card-body">
+            <p class="sv-intro">Próba módban nincs fiókkezelés: a fiókok a közös
+              adatmappában élnek. Válassz adatmappát a Nyilvántartás fülön.</p>
+          </div>
+        </div>` : '';
+    }
+    const lista = Auth.accounts().slice()
+      .sort((a, b) => a.name.localeCompare(b.name, 'hu'));
+    const opts = (sel) => Auth.ROLES
+      .map(r => `<option value="${r}"${r === sel ? ' selected' : ''}>${escHtml(Auth.roleLabel(r))}</option>`)
+      .join('');
+
+    // Figyelmeztetés: a megtekintő szűrése a „Közvetlen vezető" mező szövegére
+    // illeszkedik. Ha nincs egyetlen találat sem, a fiók egy üres listát látna —
+    // ezt jobb itt megmutatni, mint a műszakvezetővel felderíttetni.
+    let emps = [];
+    try { emps = EmployeeRepo.all(); } catch {}
+    const nincsDolgozo = (a) => a.role === 'megtekinto' && emps.length &&
+      !emps.some(e => Auth.fold((e.fields || {}).hr_direct_leader) === Auth.fold(a.name));
+
+    return `
+      <div class="ws-card">
+        <div class="ws-card-header">
+          <span class="ws-card-title">Fiókok és szintek</span>
+          <span class="rg-count">${lista.length} fiók</span>
+        </div>
+        <div class="ws-card-body">
+          <p class="sv-intro">
+            A fiókok a <b>közös adatmappában</b> élnek (<code>docgen-accounts.json</code>),
+            így minden gépen ugyanaz a lista és ugyanaz a szint.
+            A szintek a <b>felületet</b> szabályozzák: ki mit lát és mit tud
+            elrontani. A fájlok védelme a megosztott meghajtó jogosultságain áll —
+            aki a mappát eléri, a nyilvántartást közvetlenül is megnyithatja.
+          </p>
+          <table class="data-table">
+            <thead><tr><th>Név</th><th>Szint</th><th></th></tr></thead>
+            <tbody>
+              ${lista.map(a => `
+                <tr data-id="${escHtml(a.id)}">
+                  <td>
+                    ${escHtml(a.name)}
+                    ${nincsDolgozo(a) ? '<br><span class="sv-problems">⚠ egyetlen dolgozó '
+                      + '„Közvetlen vezető” mezője sem erre a névre szól — üres listát látna</span>' : ''}
+                  </td>
+                  <td>
+                    <select class="field-input fk-role" data-id="${escHtml(a.id)}">${opts(a.role)}</select>
+                  </td>
+                  <td style="white-space:nowrap">
+                    <button class="btn btn-ghost btn-sm fk-ren"  data-id="${escHtml(a.id)}">Átnevezés</button>
+                    <button class="btn btn-ghost btn-sm fk-pin"  data-id="${escHtml(a.id)}">Új PIN</button>
+                    <button class="btn btn-ghost btn-sm fk-del"  data-id="${escHtml(a.id)}">Törlés</button>
+                  </td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+          <div class="sv-form" style="margin-top:10px">
+            <label class="ef-field">
+              <span class="ef-label">Új fiók neve</span>
+              <input type="text" class="field-input" id="fk-name" maxlength="40">
+            </label>
+            <label class="ef-field">
+              <span class="ef-label">Szint</span>
+              <select class="field-input" id="fk-new-role">${opts('ugyintezo')}</select>
+            </label>
+            <label class="ef-field">
+              <span class="ef-label">PIN (${Auth.PIN_MIN}-${Auth.PIN_MAX} jegy)</span>
+              <input type="password" class="field-input" id="fk-new-pin"
+                     inputmode="numeric" maxlength="${Auth.PIN_MAX}">
+            </label>
+          </div>
+          <div class="sv-toolbar">
+            <button class="btn btn-primary btn-sm" id="fk-add">Fiók felvétele</button>
+            <span id="fk-state" class="sv-problems"></span>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function bindFiokKartya() {
+    if (!Auth.can('accounts.manage')) return;
+    const state = (m, hiba) => {
+      const e = document.getElementById('fk-state');
+      if (e) { e.textContent = m || ''; e.style.color = hiba ? 'var(--c-red)' : ''; }
+    };
+    const ujra = () => { render(); };
+
+    const fut = async (fn) => {
+      try { await fn(); toast('✓ Mentve', 'success'); ujra(); }
+      catch (e) { state(e.message, true); }
+    };
+
+    document.querySelectorAll('.fk-role').forEach(sel => {
+      sel.addEventListener('change', () => fut(() => Auth.setRole(sel.dataset.id, sel.value)));
+    });
+    document.querySelectorAll('.fk-ren').forEach(b => {
+      b.addEventListener('click', () => {
+        const a = Auth.get(b.dataset.id);
+        promptDialog('A fiók új neve:', a ? a.name : '', (v) =>
+          fut(() => Auth.rename(b.dataset.id, v)));
+      });
+    });
+    document.querySelectorAll('.fk-pin').forEach(b => {
+      b.addEventListener('click', () => {
+        promptDialog(`Új PIN (${Auth.PIN_MIN}-${Auth.PIN_MAX} jegy):`, '', (v) =>
+          fut(() => Auth.setPin(b.dataset.id, v)));
+      });
+    });
+    document.querySelectorAll('.fk-del').forEach(b => {
+      b.addEventListener('click', () => {
+        const a = Auth.get(b.dataset.id);
+        if (!a) return;
+        showDialog({
+          title: 'Fiók törlése',
+          body: `<p>Törlöd ezt a fiókot: <b>${escHtml(a.name)}</b>?</p>
+                 <p class="login-note">A fiók naplóbejegyzései megmaradnak.</p>`,
+          footer: `<button class="btn" id="fk-no">Mégse</button>
+                   <button class="btn btn-danger" id="fk-yes">Törlés</button>`,
+        });
+        document.getElementById('fk-no').addEventListener('click', closeDialog);
+        document.getElementById('fk-yes').addEventListener('click', () => {
+          closeDialog();
+          fut(() => Auth.remove(b.dataset.id));
+        });
+      });
+    });
+    const add = document.getElementById('fk-add');
+    if (add) add.addEventListener('click', () => {
+      const name = document.getElementById('fk-name').value.trim();
+      const role = document.getElementById('fk-new-role').value;
+      const pin  = document.getElementById('fk-new-pin').value;
+      fut(() => Auth.create({ name, role, pin }));
+    });
+  }
+
+  /** Egyszerű beviteli párbeszéd — a fiókkezelés átnevezéséhez és PIN-jéhez. */
+  function promptDialog(label, defaultVal, onOk) {
+    showDialog({
+      title: label,
+      body: `<input id="pd-input" class="field-input" style="width:100%"
+                    value="${escHtml(defaultVal || '')}" maxlength="40">`,
+      footer: `<button class="btn" id="pd-cancel">Mégse</button>
+               <button class="btn btn-primary" id="pd-ok">Mentés</button>`,
+    });
+    const inp = document.getElementById('pd-input');
+    inp.focus(); inp.select();
+    const ok = () => { const v = inp.value.trim(); closeDialog(); if (v) onOk(v); };
+    document.getElementById('pd-ok').addEventListener('click', ok);
+    document.getElementById('pd-cancel').addEventListener('click', closeDialog);
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') ok();
+      if (e.key === 'Escape') closeDialog();
+    });
   }
 
   // ── Enter Hungary: okmány átvétele ─────────────────────────────────────────

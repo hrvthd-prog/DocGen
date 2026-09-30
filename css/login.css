@@ -1,0 +1,127 @@
+/* Belépőképernyő — overlay, nem külön lap.
+   Miért overlay: az appnak EGY belépési pontja van (index.html), amire a
+   frissit.vbs, a README és a kiadas.js `?v=` léptetése is épül. Egy második
+   HTML-fájl azt az egészet megbontaná, egy elkerülhető fájlszétvágásért. */
+
+.login-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-bg, #f4f6f8);
+  overflow-y: auto;
+  padding: 24px;
+}
+.login-overlay.hidden { display: none; }
+
+.login-wrap { width: 100%; max-width: 460px; }
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.login-brand-mark {
+  width: 46px; height: 46px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+  background: var(--c-surface, #fff);
+  border: 1px solid var(--c-border, #dde1e6);
+}
+.login-title { font-size: 19px; font-weight: 600; letter-spacing: -.01em; }
+.login-sub   { font-size: 12px; color: var(--c-muted, #6b7280); }
+
+.login-card {
+  background: var(--c-surface, #fff);
+  border: 1px solid var(--c-border, #dde1e6);
+  border-radius: 12px;
+  padding: 18px;
+}
+.login-card-heading {
+  font-size: 13px; font-weight: 600;
+  margin-bottom: 12px;
+}
+.login-note {
+  font-size: 11.5px; line-height: 1.55;
+  color: var(--c-muted, #6b7280);
+  margin: 10px 0 0;
+}
+.login-note b { color: var(--c-text, #1b1f24); }
+
+.login-status { font-size: 12.5px; color: var(--c-muted, #6b7280); }
+.login-error {
+  font-size: 12.5px; color: var(--c-red, #b00020);
+  margin-top: 10px; min-height: 17px;
+}
+
+/* Fiókkártyák */
+.user-list { display: flex; flex-direction: column; gap: 6px; }
+
+.user-card {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--c-border, #dde1e6);
+  border-radius: 9px;
+  background: var(--c-surface, #fff);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font: inherit;
+}
+.user-card:hover  { border-color: var(--c-blue, #1e6fd9); background: #f7fafe; }
+.user-card:focus  { outline: 2px solid var(--c-blue, #1e6fd9); outline-offset: 1px; }
+.user-card.is-active { border-color: var(--c-blue, #1e6fd9); background: #eef5ff; }
+
+.user-avatar {
+  width: 32px; height: 32px; flex: 0 0 32px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600; color: #fff;
+  background: var(--c-blue, #1e6fd9);
+}
+.user-meta { min-width: 0; }
+.user-name {
+  font-size: 13px; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.user-role { font-size: 11px; color: var(--c-muted, #6b7280); }
+
+/* PIN */
+.login-pin-row { display: flex; gap: 8px; margin-top: 12px; }
+.login-pin-row input {
+  flex: 1;
+  letter-spacing: .3em;
+  font-size: 15px;
+  text-align: center;
+}
+.login-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 16px 8px;
+  font-size: 12.5px; color: var(--c-muted, #6b7280);
+  text-align: center;
+}
+
+/* Próba mód sávja — végig látszik, hogy ne keveredjen az éles munkával */
+.proba-bar {
+  background: var(--c-amber, #b26a00);
+  color: #fff;
+  font-size: 12px;
+  padding: 5px 12px;
+  text-align: center;
+}
+.proba-bar b { font-weight: 600; }
+
+/* Szinttel nem szerkeszthető mező (pl. HRBP a nem HR-mezőkön).
+   Látszik az adat — csak nem írható: a HRBP-nek olvasnia KELL. */
+.ef-field--locked .field-input {
+  background: #f3f4f6;
+  color: var(--c-muted, #6b7280);
+  cursor: not-allowed;
+}
+.ef-field--locked .ef-label::after {
+  content: ' 🔒';
+  font-size: 10px;
+}
