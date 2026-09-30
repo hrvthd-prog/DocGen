@@ -52,40 +52,6 @@ const Settings = (() => {
     set('groups_' + safe(account), groups);
   }
 
-  // ── Per-fiók sablon láthatóság ───────────────────────────────────────────
-  // Struktúra: template_accounts = { "SablonNév": ["Fiók1", "Fiók2"] }
-  // Ha egy sablon NEM szerepel (vagy üres lista) → minden fiók látja
-  function getTemplateAccounts() {
-    return get('template_accounts', {});
-  }
-
-  function setTemplateAccounts(map) {
-    set('template_accounts', map);
-  }
-
-  function isTemplateVisible(templateName, account) {
-    const map = getTemplateAccounts();
-    const accounts = map[templateName];
-    if (!accounts || accounts.length === 0) return true; // hozzárendeletlen = mindenki látja
-    return accounts.includes(account);
-  }
-
-  function addTemplateToAccount(templateName, account) {
-    const map = getTemplateAccounts();
-    if (!map[templateName]) {
-      map[templateName] = [account];
-    } else if (!map[templateName].includes(account)) {
-      map[templateName].push(account);
-    }
-    setTemplateAccounts(map);
-  }
-
-  function setTemplateVisibility(templateName, accounts) {
-    const map = getTemplateAccounts();
-    map[templateName] = accounts;
-    setTemplateAccounts(map);
-  }
-
   // ── EH: az okmány átvételéhez megadott elérhetőség ───────────────────────
   // Az EH „Az okmány átvétele" panelján az ÜGYINTÉZŐ elérhetősége megy fel,
   // nem a munkavállalóé — az okmányról szóló értesítést az ügyet vivő kapja.
@@ -108,10 +74,6 @@ const Settings = (() => {
     });
   }
 
-  function getAllUsers() {
-    return get('users', []);
-  }
-
   // A jogosultság-ellenőrzés egyetlen belépési pontja az `Auth.can()`. Ez a
   // függvény csak azért maradt, mert több modul hívja (napló, DevModule): a
   // szintekre az `Auth` felel. Ha nincs Auth (régi gép, próba mód), a korábbi
@@ -128,14 +90,9 @@ const Settings = (() => {
     currentUser,
     getAccountGroups,
     setAccountGroups,
-    isTemplateVisible,
-    addTemplateToAccount,
-    setTemplateVisibility,
-    getTemplateAccounts,
     ehContact,
     setEhContact,
     EH_CONTACT_DEFAULT,
-    getAllUsers,
     isAdmin,
   };
 })();

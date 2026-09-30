@@ -133,5 +133,70 @@ const AllapotModule = (() => {
       </table>`;
   }
 
-  return { init, render };
+  // ── Állapot-kivonat kiírása (TERV-fiokok.md 3.4, 2. fázis) ────────────────
+  /**
+   * A valódi adatminimalizálás: a megtekintő ne a teljes nyilvántartást olvassa.
+   *
+   * **Vezetőnként EGY fájl**, nem egy közös: csak így lehet később NTFS-szinten
+   * szűkíteni (vagy egyszerűen elküldeni azt az egy fájlt). Egy közös fájlban
+   * minden műszakvezető látná a többiek dolgozóit is — az nem minimalizálás.
+   *
+   * A kivonatban CSAK az az öt adat van, amit a megtekintő láthat. Amit nem írunk
+   * bele, az nem is szivároghat: okmányszám, adóazonosító, bér, bankszámla, anyja
+   * neve egyáltalán nem kerül a fájlba.
+   */
+  const KIVONAT_DIR = 'allapot';
+
+  function kivonatSorok() {
+    let emps = [];
+    try { emps = EmployeeRepo.all(); } catch { return new Map(); }
+    const perVezeto = new Map();
+    for (const emp of emps) {
+      const vez = String((emp.fields || {}).hr_direct_leader || '').trim();
+      if (!vez) continue;                       // vezető nélkül nincs kinek kiírni
+      const ugyek = ugyekOf(emp.id);
+      const sorok = ugyek.length ? ugyek.map(u => ({
+        nev:       nev(emp),
+        ugy:       safe(() => CaseTypes.label(u.type)) || u.type || '',
+        allapot:   safe(() => CaseTypes.statusLabel(u.type, u.status)) || u.status || '',
+        hatarido:  safe(() => CaseRepo.deadlineText(u)) || '',
+        kovetkezo: u.dueAt ? '' : safe(() => CaseTypes.triggerLabel(u.type)) || '',
+      })) : [{ nev: nev(emp), ugy: '', allapot: 'nincs folyamatban lévő ügy',
+               hatarido: '', kovetkezo: '' }];
+      if (!perVezeto.has(vez)) perVezeto.set(vez, []);
+      perVezeto.get(vez).push(...sorok);
+    }
+    return perVezeto;
+  }
+
+  /** Fájlnévbe illő alak — a vezető nevéből. */
+  function fajlNev(vez) {
+    const t = String(vez).replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim();
+    return `${t || 'ismeretlen'}.json`;
+  }
+
+  async function kivonatKiir(dirHandle) {
+    if (!dirHandle) throw new Error('Nincs beállított adatmappa.');
+    const perVezeto = kivonatSorok();
+    if (!perVezeto.size) {
+      throw new Error('Egyetlen dolgozónál sincs kitöltve a „Közvetlen vezető" mező — '
+                    + 'nincs kinek kivonatot írni.');
+    }
+    const dir = await FsService.getSubDir(dirHandle, KIVONAT_DIR, true);
+    let db = 0;
+    for (const [vez, sorok] of perVezeto) {
+      await FsService.writeTextToDir(dir, fajlNev(vez), JSON.stringify({
+        vezeto: vez,
+        keszult: new Date().toISOString(),
+        keszitette: Settings.currentUser(),
+        // Szándékosan CSAK ez az öt mező. Bővítés előtt gondold át: amit
+        // beírunk, azt a műszakvezető látja.
+        sorok,
+      }, null, 2));
+      db++;
+    }
+    return { fajlok: db, sorok: [...perVezeto.values()].reduce((a, b) => a + b.length, 0) };
+  }
+
+  return { init, render, kivonatKiir, KIVONAT_DIR };
 })();

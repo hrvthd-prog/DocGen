@@ -279,3 +279,59 @@ A felhasználó döntése: **fájlba, visszakereshetően.** Minden szint- és fi
 
 - **A napló `action` mezőjét felülírta a művelet kulcsa.** A `_log('JOG_ADAS', { role, action })` payloadjában az `action` ütközött az esemény típusával, így a naplóból **eltűnt volna, hogy adás vagy vétel történt**. A payload kulcsa `muvelet` lett.
 - **A betöltési sorrend minden fiókot lefokozott volna.** Az `Auth.migrate()` a szinteket kérdezi (`isKnownRole`); ha a `Roles` még nincs betöltve, **minden fiók a legszűkebb szintre esik**, és a következő mentés ezt ki is írja. A `Roles` most a fiókok **előtt** töltődik, a napló pedig pufferel, hogy a sorrend egy naplósort se dönthessen el. Mindkettőre regressziós teszt van.
+
+## 9. Az implementáció lezárása (2026-09-30)
+
+### 9.1 A sablon-láthatóság KIKERÜLT
+
+A `Settings.isTemplateVisible()` élesben szűrte, ki melyik sablont látja — vagyis
+egy **ötödik jogosultsági dimenzió** volt, a szintrendszeren és a naplón kívül.
+Két baja volt:
+
+- a beállítása (`template_accounts`) **`localStorage`-ban** élt, tehát
+  böngészőprofilonként: megosztott mappán minden gépen más lett volna;
+- a hozzárendelő párbeszéd a `Settings.getAllUsers()`-t hívta, ami a
+  `docgen_users` kulcsot olvasta — **amit soha, senki nem írt.** A párbeszéd
+  mindig üres fióklistát mutatott: **a funkció nem tudott működni.**
+
+A felhasználó döntése: **vegyük ki egészen.** A szűrést a szintek végzik
+(`docgen.generate`). Ami kiesett: `isTemplateVisible`, `getTemplateAccounts`,
+`setTemplateVisibility`, `addTemplateToAccount`, `getAllUsers`, a
+`openVisibilityDialog` és a „Sablon-hozzárendelés" gomb. A sablon-**csoportok**
+(a mappaszerkezet tükre) maradtak: az szűrési kényelem, nem jogosultság.
+
+### 9.2 Állapot-kivonat: megépült, nem vártuk meg az NTFS-t
+
+`AllapotModule.kivonatKiir()` — a Nyilvántartás oldalsávján egy gomb
+(`registry.write` joggal), és **vezetőnként EGY fájl** az `allapot\` mappába.
+
+**Miért vezetőnként, és nem egy közösbe:** csak így lehet később NTFS-szinten
+szűkíteni, vagy egyszerűen elküldeni azt az egy fájlt. Egy közös fájlban minden
+műszakvezető látná a többiek dolgozóit is — az nem minimalizálás.
+
+A fájlban **csak** az öt megengedett adat van (név, ügy, állás, határidő,
+következő lépés) + a készítés ideje és készítője. Okmányszám, adóazonosító, bér,
+bankszámla, anyja neve **nem kerül bele** — amit nem írunk be, az nem is
+szivároghat.
+
+### 9.3 Kimenet-kapu a DocGen-ben
+
+`FsService.looksLikeWorkFolder()` — a Műhely `is_worker_folder`-ének párja, de
+**csak jelzésre**: a kimeneti mappa beállításakor szól, ha egyetlen almappában
+sincs 01/02 vagy felismert irat. Nem tilt, mert az első beállításnál a mappa üres
+is lehet; de a téves mappában az „Új mappa" válasz oda generálna.
+
+Egy részlet, amit teszt fog be: ha valaki egy **dolgozó mappáját** adja meg
+kimenetnek, a gyökérben lévő 01/02 nem számít almappának — a mappa üresnek
+látszik, tehát nem zavarunk feleslegesen.
+
+### 9.4 Ami az implementációból NEM maradt hátra
+
+Az FF1–FF6 és a fenti három tétel után a **kódban nincs nyitott elem.**
+Ami hátra van, az nem kód:
+
+- **A felület kézi végigpróbálása mind a négy szinttel** — a Node-tesztek a
+  DOM-ot és a File System Access API-t nem fedik. Ez a legfontosabb lépés.
+- **Az NTFS-mátrix átadása az IT-nak** (4. fejezet).
+- **Kódba égetett adatkönyvtár** — a felhasználó jelezte, hogy később jön; azzal
+  a próba mód nagyrészt feleslegessé válik.

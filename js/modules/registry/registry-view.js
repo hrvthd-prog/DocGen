@@ -339,6 +339,16 @@ const RegistryModule = (() => {
         <div class="sidebar-section-title">Adatok helye</div>
         ${tarolo}
       </div>
+      ${Auth.can('registry.write') && state.backendKind === 'file' ? `
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Állapot-kivonat</div>
+        <p class="rg-note">
+          Vezetőnként egy szűkített fájl a <code>${escHtml(AllapotModule.KIVONAT_DIR)}\</code>
+          mappába: név, ügy, állás, határidő, következő lépés — személyes adat nélkül.
+          Ezt kaphatja meg a műszakvezető.
+        </p>
+        <button class="sidebar-btn" id="rg-kivonat">Kivonat kiírása</button>
+      </div>` : ''}
       <div class="sidebar-section">
         <div class="sidebar-section-title">Állapot</div>
         <div class="rg-stat"><span>Aktív</span><b id="rg-stat-active">–</b></div>
@@ -346,6 +356,17 @@ const RegistryModule = (() => {
         <div class="rg-stat"><span>Séma verzió</span><b id="rg-stat-schema">–</b></div>
       </div>`;
 
+    document.getElementById('rg-kivonat')?.addEventListener('click', async () => {
+      try {
+        const r = await AllapotModule.kivonatKiir(state.dirHandle);
+        toast(`✓ ${r.fajlok} kivonat (${r.sorok} sor) a ${AllapotModule.KIVONAT_DIR}\ mappában`,
+              'success');
+        BevLogger.info('KIVONAT', 'Állapot-kivonat kiírva',
+                       `${r.fajlok} fájl, ${r.sorok} sor`, Settings.currentUser());
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    });
     document.getElementById('rg-pick-dir')?.addEventListener('click', pickDataDir);
     document.getElementById('rg-grant')?.addEventListener('click', grantAccess);
     document.getElementById('rg-restore')?.addEventListener('click', openRestoreDialog);

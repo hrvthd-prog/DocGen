@@ -1,11 +1,17 @@
 'use strict';
 
 /**
- * Sablon-csoportok és láthatóság kezelése.
+ * Sablon-csoportok kezelése.
  *
  * A csoportok a sablonmappa alkönyvtár-szerkezetét tükrözik, és szűrésre
- * szolgálnak a sablonlistában. A láthatóság-kezelő több felhasználós üzemre
- * készült: fiókonként korlátozható, ki melyik sablont látja.
+ * szolgálnak a sablonlistában.
+ *
+ * A fiókonkénti sablon-láthatóság KIKERÜLT (2026-09-30). Két okból: a
+ * beállítása `localStorage`-ban élt, tehát böngészőprofilonként — megosztott
+ * mappán minden gépen más lett volna, ki melyik sablont látja; a fióklistát
+ * pedig egy soha nem írt kulcsból olvasta, tehát a hozzárendelő párbeszéd
+ * mindig üres listát mutatott: a funkció nem tudott működni. A szűrést a
+ * jogosultsági szintek végzik (`docgen.generate`).
  */
 const DocgenGroups = (() => {
 
@@ -158,67 +164,5 @@ const DocgenGroups = (() => {
     });
   }
 
-  // ── Sablon-láthatóság dialog ───────────────────────────────────────────────
-  function openVisibilityDialog() {
-    const allUsers = Settings.getAllUsers();
-    const map      = Settings.getTemplateAccounts();
-    const templates = [...new Set(ctx.state.allTemplates.map(t => t.name))];
-
-    if (!templates.length) { toast('Töltsd be a sablonmappát először.', 'warn'); return; }
-
-    showDialog({
-      title: 'Sablon-hozzárendelés fiókokhoz',
-      body: `
-        <div style="font-size:12px;color:var(--c-muted);margin-bottom:12px">
-          Ha egy sablon mellett <b>egy sem</b> van bejelölve, minden fiók látja.
-          Ha legalább egy be van jelölve, csak a megjelölt fiók(ok) látják.
-        </div>
-        <div class="data-table-wrap" style="max-height:400px">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th style="min-width:160px">Sablon</th>
-                ${allUsers.map(u => `<th style="white-space:normal;min-width:90px;font-size:10px">
-                  ${escHtml(u)}</th>`).join('')}
-              </tr>
-            </thead>
-            <tbody>
-              ${templates.map(t => {
-                const accts = map[t] || [];
-                return `<tr>
-                  <td title="${escHtml(t)}">${escHtml(t)}</td>
-                  ${allUsers.map(u => `
-                    <td style="text-align:center">
-                      <input type="checkbox" data-tpl="${escHtml(t)}" data-user="${escHtml(u)}"
-                        ${accts.includes(u) ? 'checked' : ''}>
-                    </td>
-                  `).join('')}
-                </tr>`;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
-      `,
-      footer: `
-        <button class="btn btn-ghost" onclick="closeDialog()">Mégse</button>
-        <button class="btn btn-primary" id="dlg-save-vis">Mentés</button>
-      `,
-    });
-
-    document.getElementById('dlg-save-vis').addEventListener('click', () => {
-      const newMap = {};
-      const dlgEl = document.getElementById('dialog-overlay');
-      dlgEl.querySelectorAll('input[type="checkbox"][data-tpl][data-user]').forEach(cb => {
-        const t = cb.dataset.tpl, u = cb.dataset.user;
-        if (!newMap[t]) newMap[t] = [];
-        if (cb.checked) newMap[t].push(u);
-      });
-      Settings.setTemplateAccounts(newMap);
-      toast('✓ Láthatóság mentve', 'success');
-      closeDialog();
-      ctx.refreshTemplates();
-    });
-  }
-
-  return { init, openGroupsDialog, openVisibilityDialog };
+  return { init, openGroupsDialog };
 })();
