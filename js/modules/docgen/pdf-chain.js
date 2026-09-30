@@ -130,8 +130,12 @@ const DocgenPdfChain = (() => {
     try {
       let fh = null;
       if (kerdezhet) {
+        // force: a felhasználó KIFEJEZETTEN szkriptet választani jött. Enélkül a
+        // még érvényes engedélyű RÉGI fájllal térnénk vissza, a fájlválasztó fel
+        // sem jönne, és a váltás látszólag nem csinálna semmit — ugyanaz a hiba,
+        // amit a mappánál 2026-08-19-én javítottunk.
         fh = await FsService.getOrRequestFile(SCRIPT_KEY, 'PDF-készítő szkript',
-          { 'text/plain': ['.vbs'] });
+          { 'text/plain': ['.vbs'] }, { force: true });
       } else {
         fh = await FsService.loadHandle(SCRIPT_KEY);
         if (fh && !(await FsService.queryPermissionOnly(fh))) fh = null;

@@ -37,12 +37,46 @@ function assertEq(a, b, m) {
 }
 function section(n) { console.log(`\n[${n}]`); }
 
-// ── a modul betöltése vm-sandboxban (window/indexedDB mockolva) ─────────────
+// ── IndexedDB-utánzat ───────────────────────────────────────────────────────
+// Kell, mert a handle-tár nélkül a force opció nem mérhető: a nem-force ágnak
+// VAN mit visszaadnia, a force-osnak nincs — pont ez a különbség a tesztelendő.
+// A valódi API visszahívásos, ezért a kezelőket a következő ciklusban hívjuk.
+const _store = new Map();
+function fakeIndexedDB() {
+  const later = (fn) => setTimeout(fn, 0);
+  return {
+    open() {
+      const req = {};
+      later(() => {
+        const db = {
+          transaction() {
+            const tx = {};
+            later(() => tx.oncomplete && tx.oncomplete());
+            tx.objectStore = () => ({
+              put(v, k) { _store.set(k, v); },
+              get(k) {
+                const r = {};
+                later(() => r.onsuccess && r.onsuccess({ target: { result: _store.get(k) } }));
+                return r;
+              },
+            });
+            return tx;
+          },
+        };
+        if (req.onsuccess) req.onsuccess({ target: { result: db } });
+      });
+      return req;
+    },
+  };
+}
+
+// ── a modul betöltése vm-sandboxban (window mockolva) ───────────────────────
 const sandbox = {
   console, Date, Math, JSON, Set, Map, Object, Array, String, Number, Boolean,
   Error, RegExp, Promise, isNaN, parseInt, parseFloat, Blob: class {},
+  setTimeout, clearTimeout,
   window: {},                       // showDirectoryPicker NINCS -> hasFsApi false
-  indexedDB: { open() { throw new Error('nincs IndexedDB a tesztben'); } },
+  indexedDB: fakeIndexedDB(),
 };
 sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
@@ -149,8 +183,23 @@ async function main() {
     assertEq(caught, 'NotAllowedError',
              'ha ez null-t adna, a DocGen csendben a gyökérbe írna');
   });
-  await test('getSubDirOrNull: a tudatos elnyelő változat', async () => {
-    assertEq(await FS.getSubDirOrNull(fakeDir({ denyDir: true }), 'x', true), null);
+  section('getOrRequestFile force: a szkriptváltás');
+  // A tárolt fájlt eltesszük „megadott engedéllyel". force NÉLKÜL ezt kapjuk
+  // vissza (a fájlválasztó fel sem jön) — force-szal át kell ugornia. Enélkül a
+  // „Szkript kiválasztása" gomb látszólag nem csinál semmit: ez a mért hiba.
+  await test('force nélkül a tárolt fájlt adja vissza', async () => {
+    const regi = {
+      name: 'regi.vbs',
+      async queryPermission() { return 'granted'; },
+      async requestPermission() { return 'granted'; },
+    };
+    await FS.saveHandle('script', regi);
+    const got = await FS.getOrRequestFile('script', 'szkript', null);
+    assertEq(got && got.name, 'regi.vbs');
+  });
+  await test('force: átugorja, és mivel nincs FS API, null-t ad', async () => {
+    const got = await FS.getOrRequestFile('script', 'szkript', null, { force: true });
+    assertEq(got, null, 'force esetén a tárolt fájllal tért vissza — a váltás nem működne');
   });
 
   section('fileExists / deleteFromDir: engedélyhiba ≠ nincs fájl');
