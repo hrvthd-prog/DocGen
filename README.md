@@ -17,14 +17,15 @@ A `file://` protokollról a mappaválasztás és a helyi tárolás is működik 
 ez le van mérve, nem feltételezés. Firefox és Safari **nem alkalmas**: nem
 ismerik a mappaválasztó API-t, ami a sablonok beolvasásához kell.
 
-## A négy fül
+## A fülek
 
 | Fül | Mire való |
 |---|---|
 | **Dokumentumok** | Sablon kiválasztása, személyek kijelölése, generálás |
 | **Nyilvántartás** | Személyek felvitele, keresés, xlsx be- és kivitel |
 | **Ügyek** | Kérelmek és bejelentések követése, határidők, idővonal; díjátutalások |
-| **Beállítások** | Séma szerkesztése, szótár, export profilok, napló |
+| **Beállítások** | Séma, szótár, EH elérhetőség, fiókok és szintek |
+| **Ügyállás** | csak a „megtekintő" szintnek: a hozzá tartozó dolgozók ügyei |
 
 Az **Ügyek** fül címkéjén piros pötty jelzi, hány ügy határideje járt le.
 Csak a lejártak kapnak jelzést — ha minden szám ott lenne, pár nap alatt
@@ -335,6 +336,57 @@ viselkedés az volt, hogy a mentés némán elveszett — a lockfájl viszont el
 (összeomlás, bezárt fül, hálózati szakadás), és több hibalehetőséget hozna, mint
 amennyi hasznot egy 2-5 fős csapatnál. Automatikus összefésülés szándékosan nincs:
 a döntés, hogy melyik változat a helyes, nem gépi kérdés.
+
+## Fiókok és jogosultsági szintek
+
+Az app indulásakor **fiókot kell választani és PIN-t megadni**. A fiókok a
+**közös adatmappában** élnek (`data/docgen-accounts.json`), így minden gépen
+ugyanaz a lista és ugyanaz a szint.
+
+| Szint | Mit tehet |
+|---|---|
+| **Legfőbb admin** | mindent, és ő kezeli a fiókokat és a szinteket |
+| **Ügyintéző** | nyilvántartás, dokumentumok, ügyek, átutalások |
+| **HR Business Partner** | mindent **olvas**, de csak a „Csak HR tölti" mezőket írja |
+| **Csak megtekintő** | egyetlen „Ügyállás" fül: a hozzá tartozó dolgozók ügyállása |
+
+A megtekintőhöz a dolgozókat a nyilvántartás **„Közvetlen vezető"** mezője
+rendeli: a fiók nevére illeszkedő dolgozók látszanak (ékezet- és
+kisbetű-függetlenül). Ha egy megtekintő fiók egyetlen dolgozóra sem illeszkedik,
+az admin figyelmeztetést lát a Beállításokban.
+
+Fiókot **csak belépett admin** vehet fel, nevezhet át és törölhet, a
+Beállítások fülön. Kivétel az első indulás: ha az adatmappában még nincs fiók, a
+belépőképernyő létrehozza az első admint — enélkül a rendszer kizárná magát.
+
+### Amit ez véd, és amit NEM
+
+> **Ez munkafolyamat-korlát, nem hozzáférés-védelem.**
+>
+> Az app `file://` protokollról fut, kiszolgáló nélkül. A munkamenet a saját
+> gépeden van, és a `docgen-employees.json` ott van az adatmappában — **aki a
+> mappához olvasási joggal hozzáfér, Jegyzettömbbel megnyithatja**, akármit rejt
+> el a felület.
+>
+> A szintek arra jók, hogy **ki mit lát és mit tud elrontani**: rendezik a napi
+> munkát, és megakadályozzák a véletlen elírást. A tényleges hozzáférést a
+> **megosztott meghajtó jogosultságai** (NTFS) szabályozzák — azt az IT állítja
+> be. A mátrix a `TERV-fiokok.md` 4. fejezetében van.
+>
+> Ugyanez a PIN-re: azt akadályozza meg, hogy más fiókjával dolgozzanak — így a
+> naplóbejegyzések ahhoz tartoznak, aki tényleg dolgozott. **Nem titkosít.**
+>
+> Ebből következik, hogy a **„Csak megtekintő" szint egyelőre nem adatvédelmi
+> korlát**: ugyanabból a fájlból olvas, mint a többi. A valódi adatminimalizálás
+> a következő lépés (külön állapot-kivonat fájl, amire a megtekintő NTFS-szinten
+> is csak olvasást kap).
+
+### Próba mód
+
+Ha nincs beállított adatmappa, az app **próba módban** indul: böngészőtárral
+dolgozik, nincs közös adat és nincs szint sem. Ilyenkor a fejléc alatt végig
+sáv jelzi, és a generált iratok bélyege **`proba`** jelzést kap, hogy egy
+próbafájl ne keveredjen az élessel.
 
 ## Azonosítók
 

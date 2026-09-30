@@ -68,6 +68,38 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-09-30 (3.) — FF1–FF6: a fiókkeretrendszer megvalósítva
+
+**Cél:** a `TERV-fiokok.md` FF1–FF6 fázisainak megépítése. A felhasználó a terv-ellenőrzésen négy dolgot eldöntött: **PIN kell**, adatmappa nélkül **próba mód**, a megtekintő **egyetlen új kicsi „Ügyállás" fület** kap, és a Beállításokban a **Séma+Szótár adminnak, az EH elérhetőség az ügyintézőnek is**. Az IT külön lekorlátozza majd a közös meghajtót, de a keretrendszert ettől függetlenül meg kell építeni.
+
+**Változás** (`v10.66`):
+- **új:** `js/services/auth-service.js` (FF1, külön commitban: `v10.65`), `js/modules/login.js`, `js/modules/allapot.js`, `css/login.css`, `test/auth.test.js`.
+- `index.html` — belépő-overlay, próba sáv, Kilépés gomb, „Ügyállás" fül és tartalma, az új scriptek.
+- `js/app.js` — a boot **async** lett: a belépőképernyő azonnal felmegy, a Nyilvántartás betölti a mappát és a fiókokat, és a többi modul csak a belépés UTÁN indul. Új `visibleTabs()` és `applyRole()`.
+- `js/modules/registry/registry-view.js` — `Auth` háttér a közös mappára; adatmappa nélkül `Auth.setProba(true)`.
+- `js/modules/settings/settings-view.js` — kártyánkénti kapu + **fiókkezelő kártya** (felvétel, szint, átnevezés, új PIN, törlés).
+- `js/modules/registry/employee-form.js` — mezőcsoport-kapu: a HRBP-nél a nem HR-mező `readonly disabled` és 🔒 jelet kap.
+- `js/services/settings-service.js` — `currentUser()` és `isAdmin()` az `Auth`-ra épül.
+- `js/services/docx-service.js` — próba módban a bélyeg `;proba` jelzést kap.
+- `js/modules/docgen{.js,/merge.js,/naming.js,/groups.js,/missing-log.js}` — a fiók befagyasztása megszűnt (lásd lent).
+- `README.md`, `TERV-fiokok.md` 7. fejezet.
+
+**Miért / döntés:**
+- **A terv nem vette észre, hogy a kapu kijátszható volt.** Adatmappa nélkül az app böngészőtárból indul — ott nincs fiókfájl, tehát egy „Mégsem" kattintással bármelyik szint kikerülhető lett volna. Most ez próba mód: végig sáv jelzi, és a `can()` mindent engedélyez **kivéve** a fiókkezelést (fiókfájl nélkül az csak a beállítottság látszatát adná).
+- **A modulok fiókja a script betöltésekor fagyott be.** Hat helyen `const currentUser = Settings.currentUser();` állt a modul törzsében, ami a bejelentkezés ELŐTT fut. **Ez az igazi ok, amiért a BEVapp két HTML-fájlt használ** (`index.html` = belépés, `app.html` = app). Nekünk egy belépési pontunk van, amire a `frissit.vbs`, a README és a `kiadas.js` `?v=` léptetése is épül — ezért a belépés overlay, és a fiók `init()`-ben dől el: `let` + értékadás, 10 sor, a 44 használati hely érintetlen.
+- **„Mi hiányzik" helyett „Következő lépés".** A terv öt mezőt ígért az Ügyállás nézetbe, de a „mi hiányzik" adatnak **nincs forrása a DocGen-ben** (azt a PDF Műhely Áttekintője számolja az iratokból). Nem találtunk ki egyet: a `CaseTypes.triggerLabel` valódi, meglévő jel.
+- **A HRBP-nél a nem írható mező LÁTSZIK**, csak zárolt: a HRBP-nek olvasnia kell, az elrejtés rossz irány lenne.
+- **Az admin figyelmeztetést kap**, ha egy `megtekinto` fiók nevére egyetlen dolgozó „Közvetlen vezető" mezője sem illeszkedik — az a fiók üres listát látna. Jobb itt kiderülnie, mint a műszakvezetővel felderíttetni.
+- **Fiókkezelés KIZÁRÓLAG belépett adminnál, a Beállításokban.** Kivétel az első admin a belépőképernyőn: valahonnan létre kell hozni, különben a rendszer kizárja magát. Aki a mappához hozzáfér, amúgy is írhatja az adatot — ez nem újabb kaput nyit.
+
+**Tesztek:** `node test/run-all.js` — 24 készlet, mind zöld; `test/auth.test.js` **99 teszt** (mátrix mind a 4 szintre × 13 művelet, PIN, fiókkezelés, munkamenet, HRBP-csoportkapu, megtekintő-szűrés, próba mód, fájlkör). A mátrix-tesztet szándékos hibával ellenőriztem: a HRBP-nek adott teljes írási jog három ponton pirosra vált. `node tools/klon-proba.js` zöld.
+
+**Nyitott / következő:**
+- **A felületet kézzel végig kell próbálni mind a négy szinttel** — a Node-tesztek a DOM-ot és a File System Access API-t nem fedik. Ez a legfontosabb hátralévő lépés.
+- **A 2. fázis:** az NTFS-mátrix átadása az IT-nak, és az `allapot-kivonat.json` — amíg nincs, az Ügyállás fül felületi szűkítés, nem adatvédelem.
+- **Kódba égetett adatkönyvtár** (a felhasználó jelezte, hogy később jön): ezzel a próba mód nagyrészt feleslegessé válik.
+- A korábbi szálak változatlanul nyitva.
+
 ## 2026-09-30 (2.) — Fiókok és négy jogosultsági szint: terv (kód nincs)
 
 **Cél:** a felhasználó rákérdezett a felhasználói fiókokra, és a BEVapp-web hasonló megoldására mutatott („onnan át lehet venni"). Elvárás: legalább 4 szint — legfőbb admin, user, HR Business Partner, csak megtekintő (sorvezető/műszakvezető, aki az ügyek állását nézi). Megvizsgáltam a BEVapp-ot, és megírtam a tervet. **Kód nem változott.**

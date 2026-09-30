@@ -113,10 +113,13 @@ munkafolyamat-korlát, nem védelem. A belépőképernyőn viszont a BEVapp-pal
 ellentétben **fiókot létrehozni, átnevezni, törölni NEM lehet**: azt csak belépett
 admin teheti a Beállításokban. Enélkül minden szint üres.
 
-> **Nyitott, döntést kér:** kérünk-e fiókonkénti PIN-t (localStorage-ban hash-elve)?
-> Megállítja a véletlen és a laikus fiókcserét, de **nem** biztonsági határ: a hash
-> és az ellenőrző kód is a kliensen van. Ha a 2. fázis NTFS-e megvan, a PIN-nek
-> nincs sok haszna. **Javaslat: hagyjuk ki**, és ne sugalljunk védelmet.
+> **~~Nyitott: kérünk-e PIN-t? Javaslat: hagyjuk ki.~~**
+> **2026-09-30: a felhasználó döntése szerint KELL.** Megvalósítva:
+> PBKDF2-SHA-256, 100 000 iteráció, fiókonkénti véletlen sóval, a közös
+> fiókfájlban (nem localStorage-ban). Amit ad: nem lehet más fiókjával
+> dolgozni, tehát a naplóbejegyzés ahhoz tartozik, aki tényleg dolgozott.
+> Amit nem: 4-6 jegyű PIN keresési tere kicsi, és a só, a hash és az
+> ellenőrző kód is a kliensen van — a titok védelme az NTFS dolga.
 
 ### 3.4 A megtekintő: csak a saját dolgozói, státuszszinten
 
@@ -190,3 +193,35 @@ korlát. A kikényszerítés a 4. fejezet NTFS-e, illetve hosszabb távon kiszol
 - **Nincs szerepkör-hierarchia öröklés** (`admin ⊃ ügyintéző ⊃ …`): a négy szint
   külön mátrixsor, mert a HRBP nem „kevesebb ügyintéző", hanem **más** — többet
   olvas, kevesebbet ír.
+
+## 7. Megvalósítva (2026-09-30) — és amit a munka megtanított
+
+**FF1–FF6 kész**, `v10.66`. Az `Auth` 99 tesztje zöld, a teljes készlet (24) is.
+
+### 7.1 Amit a felhasználó a terv ELLENŐRZÉSEKOR döntött el
+
+| Kérdés | Döntés |
+|---|---|
+| PIN | **kell** — a terv 3.3 „javaslat: hagyjuk ki" pontja megfordult |
+| adatmappa nélküli üzem | **próba mód**: elindul, de végig sáv jelzi, és a bélyeg `proba` jelzést kap. Később kódba égetett adatkönyvtár jöhet |
+| megtekintő nézete | **egyetlen új, kicsi „Ügyállás" fül** |
+| HRBP és dokumentumgenerálás | nem generálhat (a terv szerint) |
+| Beállítások fül | Séma+Szótár adminnak, **EH elérhetőség az ügyintézőnek is** → új `settings.ehcontact` művelet |
+
+### 7.2 A terv nem vette észre: a kapu kijátszható volt
+
+Az eredeti terv nem számolt azzal, hogy adatmappa **nélkül** az app böngészőtárból indul — ott nincs fiókfájl, tehát **egy „Mégsem" kattintással bármelyik szint kikerülhető lett volna.** Ez most próba mód: `Auth.setProba(true)`, a felületen végig sáv, és a `can()` mindent engedélyez **kivéve** a fiókkezelést (fiókfájl nélkül az csak a beállítottság látszatát adná).
+
+### 7.3 Amit a kód másképp oldott meg, mint a terv
+
+- **A belépés overlay, nem külön lap.** A BEVapp két HTML-fájlt használ (`index.html` = belépés, `app.html` = app) — mi nem: az appnak egy belépési pontja van, amire a `frissit.vbs`, a README és a `kiadas.js` `?v=` léptetése is épül.
+- **A modulok fiókja `init()`-ben dől el, nem a script betöltésekor.** Hat helyen `const currentUser = Settings.currentUser();` állt a modul törzsében, ami a bejelentkezés ELŐTT fut le. Ez volt az igazi ok, amiért a BEVapp két lapot használ. `let` + `init()`-beli értékadás: 10 sor, a 44 használati hely érintetlen.
+- **„Mi hiányzik" helyett „Következő lépés".** A terv 3.4 öt mezőt ígért, de a „mi hiányzik" adatnak **nincs forrása a DocGen-ben** (azt a PDF Műhely Áttekintője számolja az iratokból). Nem találtunk ki egyet: a `CaseTypes.triggerLabel` valódi, meglévő jel — a határidő kezdő napja, ha még nincs határidő.
+- **Az admin figyelmeztetést kap**, ha egy `megtekinto` fiók nevére egyetlen dolgozó „Közvetlen vezető" mezője sem illeszkedik: az a fiók üres listát látna. Jobb itt kiderülnie, mint a műszakvezetővel felderíttetni.
+- **A HRBP-nél a nem írható mező LÁTSZIK**, csak `readonly`+`disabled` és 🔒 jelet kap. A HRBP-nek olvasnia kell — az elrejtés rossz irány lenne.
+
+### 7.4 Ami a 2. fázisra maradt
+
+- **Az NTFS-mátrix (4. fejezet) átadása az IT-nak.** Ezt kód nem tudja elvégezni.
+- **Az `allapot-kivonat.json`** (3.4): amíg nincs, az Ügyállás fül felületi szűkítés, nem adatvédelem — a `megtekinto` ugyanabból a fájlból olvas.
+- **Kézi végigpróbálás mind a négy szinttel** éles gépen: a Node-tesztek a felületet és a File System Access API-t nem fedik.

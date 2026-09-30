@@ -12,12 +12,17 @@
  */
 const DocgenMerge = (() => {
 
-  const currentUser = Settings.currentUser();
+  // A fiókot a bejelentkezés adja meg, a script betöltése UTÁN — ezért az
+  // init()-ben vesszük fel, nem a modul törzsében (TERV-fiokok.md 3.2).
+  let currentUser = '';
   const MERGE_NAMING_KEY = 'docgen_merge_naming_global';
   const MERGE_KEY = () => 'docgen_merge_u_' + (currentUser || '').replace(/[^a-zA-Z0-9]/g, '_');
 
   let ctx = null;
-  function init(context) { ctx = context; }
+  function init(context) {
+    ctx = context;
+    currentUser = Settings.currentUser();
+  }
 
   // ── PDF összefűzés helpers ────────────────────────────────────────────────
 

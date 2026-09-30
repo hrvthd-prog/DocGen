@@ -80,25 +80,29 @@ const MATRIX = {
     'registry.read': true,  'registry.read.own': true,  'registry.write': true,
     'registry.write.hr': true, 'docgen.generate': true, 'cases.read': true,
     'cases.read.own': true, 'cases.write': true, 'transfers.use': true,
-    'settings.schema': true, 'accounts.manage': true, 'log.all': true,
+    'settings.schema': true, 'settings.ehcontact': true,
+    'accounts.manage': true, 'log.all': true,
   },
   ugyintezo: {
     'registry.read': true,  'registry.read.own': false, 'registry.write': true,
     'registry.write.hr': false, 'docgen.generate': true, 'cases.read': true,
     'cases.read.own': false, 'cases.write': true, 'transfers.use': true,
-    'settings.schema': false, 'accounts.manage': false, 'log.all': false,
+    'settings.schema': false, 'settings.ehcontact': true,
+    'accounts.manage': false, 'log.all': false,
   },
   hrbp: {
     'registry.read': true,  'registry.read.own': false, 'registry.write': false,
     'registry.write.hr': true, 'docgen.generate': false, 'cases.read': true,
     'cases.read.own': false, 'cases.write': false, 'transfers.use': false,
-    'settings.schema': false, 'accounts.manage': false, 'log.all': false,
+    'settings.schema': false, 'settings.ehcontact': false,
+    'accounts.manage': false, 'log.all': false,
   },
   megtekinto: {
     'registry.read': false, 'registry.read.own': true,  'registry.write': false,
     'registry.write.hr': false, 'docgen.generate': false, 'cases.read': false,
     'cases.read.own': true, 'cases.write': false, 'transfers.use': false,
-    'settings.schema': false, 'accounts.manage': false, 'log.all': false,
+    'settings.schema': false, 'settings.ehcontact': false,
+    'accounts.manage': false, 'log.all': false,
   },
 };
 
@@ -143,6 +147,29 @@ async function main() {
       });
     }
     assert(fajlok['docgen-accounts.json'], 'a fiókfájl nem íródott ki');
+  }
+
+  section('Próba mód (adatmappa nélkül)');
+  {
+    const { A } = ujAuth();
+    A.setProba(true);
+    await test('próba módban nincs bejelentkezett fiók', async () => {
+      assertEq(A.currentRole(), null);
+      assertEq(A.isProba(), true);
+    });
+    await test('próba módban a munka megy (nincs mit védeni)', async () => {
+      for (const act of A.ACTIONS.filter(a => a !== 'accounts.manage')) {
+        assertEq(A.can(act), true, act);
+      }
+    });
+    await test('próba módban fiókot kezelni MÉGSEM lehet', async () => {
+      assertEq(A.can('accounts.manage'), false,
+               'fiókfájl nélkül ez csak a beállítottság látszatát adná');
+    });
+    await test('a próba mód kikapcsolható, és utána újra minden tilos', async () => {
+      A.setProba(false);
+      for (const act of A.ACTIONS) assertEq(A.can(act), false, act);
+    });
   }
 
   section('Bejelentkezés nélkül minden tilos');

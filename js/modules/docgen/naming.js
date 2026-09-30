@@ -12,14 +12,16 @@
  */
 const DocgenNaming = (() => {
 
-  const currentUser = Settings.currentUser();
+  // A fiókot a bejelentkezés adja meg, a script betöltése UTÁN — ezért nem
+  // fagyasztjuk be: minden hivatkozásnál újraolvassuk (TERV-fiokok.md 3.2).
+  const currentUser = () => Settings.currentUser();
   let ctx = null;
 
   function init(context) { ctx = context; }
 
   // ── P5: Generált név-minta tárolás ─────────────────────────────────────────
   // Hierarchia: fiók > globális > default
-  const NAME_TPL_USER_KEY   = () => 'docgen_nameTemplates_u_' + (currentUser || '').replace(/[^a-zA-Z0-9]/g, '_');
+  const NAME_TPL_USER_KEY   = () => 'docgen_nameTemplates_u_' + (currentUser() || '').replace(/[^a-zA-Z0-9]/g, '_');
   const NAME_TPL_GLOBAL_KEY = 'docgen_nameTemplates_global';
 
   function getNamePattern(templateName) {
@@ -42,7 +44,7 @@ const DocgenNaming = (() => {
     BevLogger.info('NAME_TPL_SAVE',
       `Név-minta mentve [${scope}]: ${templateName}`,
       `pattern=${pattern || '(default)'}`,
-      `user=${currentUser}`);
+      `user=${currentUser()}`);
   }
 
   // ── P5: Név-minta szerkesztő dialóg ───────────────────────────────────────

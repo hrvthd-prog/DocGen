@@ -1,12 +1,33 @@
 'use strict';
 
-const currentUser = Settings.currentUser();
-
-BevLogger.init(currentUser);
+// A fiók a bejelentkezésből jön, ami a boot() közepén dől el — ezért itt még
+// nincs név, és a naplót utólag inicializáljuk újra (TERV-fiokok.md 3.2).
+BevLogger.init('');
 BevLogger.initGlobalHandlers();
 
 // ── Fülek ─────────────────────────────────────────────────────────────────
-const TABS = ['docgen', 'registry', 'cases', 'settings'];
+const TABS = ['docgen', 'registry', 'cases', 'settings', 'allapot'];
+
+// Melyik fülhöz milyen jog kell. Ami nincs itt, azt mindenki látja.
+const TAB_NEEDS = {
+  docgen:   'docgen.generate',
+  registry: 'registry.read',
+  cases:    'cases.read',
+  settings: null,            // a fülön belül kártyánként megy a kapu
+  allapot:  'cases.read.own',
+};
+
+/** A látható fülek a mostani szinttel. A Beállítások csak akkor, ha van benne
+ *  valami: séma (admin) vagy EH elérhetőség (ügyintéző). */
+function visibleTabs() {
+  return TABS.filter(id => {
+    if (id === 'settings') {
+      return Auth.can('settings.schema') || Auth.can('settings.ehcontact');
+    }
+    const need = TAB_NEEDS[id];
+    return !need || Auth.can(need);
+  });
+}
 
 const tabBtns     = document.querySelectorAll('.tab-btn');
 const tabContents = document.querySelectorAll('.tab-content');
@@ -14,7 +35,10 @@ const tabContents = document.querySelectorAll('.tab-content');
 function switchTab(id) {
   // Ismeretlen fülnév (pl. korábbi verzióból megmaradt beállítás) üres
   // képernyőt okozna – ezért mindig a listához igazítjuk.
-  if (!TABS.includes(id)) id = TABS[0];
+  // Ismeretlen vagy a szinttel nem elérhető fül üres képernyőt adna — ezért
+  // mindig a látható listához igazítjuk.
+  const vis = visibleTabs();
+  if (!vis.includes(id)) id = vis[0] || TABS[0];
   tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === id));
   tabContents.forEach(c => c.classList.toggle('active', c.id === 'tab-' + id));
   Settings.set('last_tab', id);
@@ -132,10 +156,55 @@ window.updateHeaderBreadcrumb = function({ sourceName, clientCount, onSourceClic
   el.title = `Verzió ${v.verzio} — kiadva ${v.datum}`;
 })();
 
-// ── Indítás ───────────────────────────────────────────────────────────────
-switchTab(Settings.get('last_tab', 'docgen'));
+// ── A szint érvényesítése a felületen ─────────────────────────────────────
+function applyRole() {
+  const vis = visibleTabs();
+  tabBtns.forEach(b => { b.hidden = !vis.includes(b.dataset.tab); });
 
-DocgenModule.init(document.getElementById('tab-docgen'));
-RegistryModule.init(document.getElementById('tab-registry'));
-CasesModule.init(document.getElementById('tab-cases'));
-SettingsModule.init(document.getElementById('tab-settings'));
+  const nev  = Auth.isProba() ? 'próba mód' : Settings.currentUser();
+  const szint = Auth.isProba() ? '' : (Auth.currentRole() ? Auth.roleLabel(Auth.currentRole()) : '');
+  const un = document.getElementById('header-username');
+  if (un) {
+    un.textContent = szint ? `${nev} · ${szint}` : nev;
+    un.title = szint ? `Belépve: ${nev} (${szint})` : '';
+  }
+
+  const bar = document.getElementById('proba-bar');
+  if (bar) {
+    bar.hidden = !Auth.isProba();
+    bar.innerHTML = '<b>Próba mód</b> — nincs beállított adatmappa: a munka nem a '
+      + 'közös adatra megy, és nincs jogosultsági szint. A generált iratok '
+      + '„proba" jelzést kapnak.';
+  }
+
+  // Kilépés gomb: csak belépett fióknál van értelme
+  const lo = document.getElementById('logout-btn');
+  if (lo) {
+    lo.hidden = !Auth.currentRole();
+    lo.onclick = () => LoginModule.logout();
+  }
+}
+
+// ── Indítás ───────────────────────────────────────────────────────────────
+// A sorrend kötött: a belépőképernyő AZONNAL felmegy (ne villanjon az adat), a
+// Nyilvántartás állítja be az adatmappát és tölti be a fiókokat, és a többi
+// modul csak a belépés UTÁN indul — így mindegyik a helyes fiókot látja.
+(async function boot() {
+  LoginModule.show('Adatmappa és fiókok betöltése…');
+  try {
+    await RegistryModule.init(document.getElementById('tab-registry'));
+  } catch (e) {
+    BevLogger.error('BOOT', 'A Nyilvántartás indítása megszakadt', e.message, '');
+  }
+
+  await LoginModule.gate();
+
+  BevLogger.init(Settings.currentUser());
+  DocgenModule.init(document.getElementById('tab-docgen'));
+  CasesModule.init(document.getElementById('tab-cases'));
+  SettingsModule.init(document.getElementById('tab-settings'));
+  AllapotModule.init(document.getElementById('tab-allapot'));
+
+  applyRole();
+  switchTab(Settings.get('last_tab', 'docgen'));
+})();

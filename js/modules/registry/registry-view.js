@@ -61,6 +61,9 @@ const RegistryModule = (() => {
       renderSidebar();
       return;
     }
+    // Adatmappa nélkül nincs fiókfájl, tehát nincs szint sem: próba mód. A
+    // felület végig sávot mutat róla (TERV-fiokok.md 2.).
+    Auth.setProba(true);
     await useIdbBackend();
   }
 
@@ -73,6 +76,14 @@ const RegistryModule = (() => {
     EmployeeRepo.useBackend(EmployeeRepo.createFileBackend(dirHandle));
     CaseRepo.useBackend(CaseRepo.createFileBackend(dirHandle));
     TransferRepo.useBackend(TransferRepo.createFileBackend(dirHandle));
+    // A fiókok és a szintek a KÖZÖS mappában élnek, külön fájlban — nem
+    // localStorage-ban, mert az böngészőprofilonként külön (TERV-fiokok.md 3.2).
+    Auth.useBackend(Auth.createFileBackend(dirHandle));
+    try {
+      await Auth.load();
+    } catch (e) {
+      BevLogger.error('AUTH', 'A fiókfájl nem olvasható', e.message, '');
+    }
     hookSaveErrors();
     await SchemaStore.load();
     await ExportProfiles.load();

@@ -12,7 +12,9 @@
 const DocgenMissingLog = (() => {
 
   const MISSING_LOG_KEY = 'docgen_missing_log';
-  const currentUser = Settings.currentUser();
+  // A fiókot a bejelentkezés adja meg, a script betöltése UTÁN — ezért nem
+  // fagyasztjuk be: minden hivatkozásnál újraolvassuk (TERV-fiokok.md 3.2).
+  const currentUser = () => Settings.currentUser();
 
   function appendMissingLog(entries) {
     if (!entries || !entries.length) return;
@@ -24,7 +26,7 @@ const DocgenMissingLog = (() => {
     const isAdmin  = Settings.isAdmin();
     const allLogs  = Settings.get(MISSING_LOG_KEY, []);
     // Admin látja az összes bejegyzést, többi felhasználó csak a sajátját
-    const logs = isAdmin ? allLogs : allLogs.filter(e => e.user === currentUser);
+    const logs = isAdmin ? allLogs : allLogs.filter(e => e.user === currentUser());
 
     const colFiok = isAdmin ? `<th style="min-width:100px">Fiók</th>` : '';
     const rows = logs.length
@@ -57,7 +59,7 @@ const DocgenMissingLog = (() => {
          </td></tr>`;
 
     showDialog({
-      title: isAdmin ? 'Hiányzó adatok naplója — összes fiók' : `Hiányzó adatok naplója — ${currentUser}`,
+      title: isAdmin ? 'Hiányzó adatok naplója — összes fiók' : `Hiányzó adatok naplója — ${currentUser()}`,
       body: `
         <div style="font-size:11px;color:var(--c-muted);margin-bottom:10px">
           <b>Hiányzó mezők:</b> amikre a generáláskor nem volt adat.<br>

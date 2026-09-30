@@ -64,6 +64,7 @@ const Auth = (() => {
     'cases.write',
     'transfers.use',
     'settings.schema',      // séma, export profilok, ügytípusok
+    'settings.ehcontact',   // a kérelemre felmenő e-mail és telefon
     'accounts.manage',
     'log.all',              // a hiányzó-adatok napló minden fiókra
   ];
@@ -72,7 +73,7 @@ const Auth = (() => {
     admin: new Set(ACTIONS),
     ugyintezo: new Set([
       'registry.read', 'registry.write', 'docgen.generate',
-      'cases.read', 'cases.write', 'transfers.use',
+      'cases.read', 'cases.write', 'transfers.use', 'settings.ehcontact',
     ]),
     hrbp: new Set([
       'registry.read', 'registry.write.hr', 'cases.read',
@@ -89,6 +90,7 @@ const Auth = (() => {
   let backend = null;
   let cache   = null;      // { version, accounts: [] }
   let session = null;      // { name, role }
+  let proba   = false;     // adatmappa nélküli üzem: nincs közös adat, nincs szint
 
   function roleLabel(role) { return ROLE_LABEL[role] || role; }
   function roleHint(role)  { return ROLE_HINT[role] || ''; }
@@ -331,11 +333,20 @@ const Auth = (() => {
    * hamis — így egy elfelejtett kapu nem nyit meg semmit.
    */
   function can(action) {
+    // Próba mód: nincs adatmappa, tehát nincs fiókfájl és nincs közös adat sem —
+    // nincs mit védeni. Mindent szabad, KIVÉVE a fiókkezelést: fiókfájl nélkül
+    // az csak azt a látszatot adná, hogy beállítottunk valamit.
+    if (proba) return action !== 'accounts.manage';
     const r = currentRole();
     if (!r) return false;
     const set = CAN[r];
     return !!set && set.has(action);
   }
+
+  /** Adatmappa nélküli üzem. A felület végig sávot mutat, és a generált irat
+   *  bélyege „proba" jelzést kap — hogy egy próbafájl ne keveredjen az élessel. */
+  function setProba(v) { proba = !!v; if (proba) session = null; }
+  function isProba()   { return proba; }
 
   /** Írható-e ez a sémamezőcsoport a mostani szinttel. */
   function canWriteGroup(groupKey) {
@@ -360,7 +371,7 @@ const Auth = (() => {
     useBackend, createFileBackend, load, loaded, accounts, isEmpty, save,
     create, get, byName, setRole, rename, setPin, remove, adminCount,
     login, logout, restoreSession, currentUser, currentRole,
-    can, canWriteGroup, ownsEmployee,
+    can, canWriteGroup, ownsEmployee, setProba, isProba,
     validatePin, hashPin, newSalt, fold,
     // teszthez
     _CAN: CAN,
