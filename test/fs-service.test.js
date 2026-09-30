@@ -233,6 +233,46 @@ async function main() {
     assert(/mérete eltér/.test(msg), `várt méret-hiba, kapott: ${msg || '(semmi)'}`);
   });
 
+  section('Munkamappa-felismerés (kimenet-kapu)');
+  await test('üres mappa rendben (első beállítás)', async () => {
+    const r = await FS.looksLikeWorkFolder(fakeDir());
+    assertEq(r.ok, true);
+  });
+  await test('01/02-t tartalmazó almappa -> munkamappa', async () => {
+    const root = fakeDir({ dirs: {
+      'Kiss Anna': fakeDir({ dirs: { '02_Feltoltheto': fakeDir() } }),
+    } });
+    const r = await FS.looksLikeWorkFolder(root);
+    assertEq(r.ok, true);
+    assertEq(r.dolgozok, 1);
+  });
+  await test('iratot tartalmazó almappa -> munkamappa', async () => {
+    const root = fakeDir({ dirs: {
+      'Nagy Bela': fakeDir({ files: { 'Nagy Bela Útlevél.pdf': {} } }),
+    } });
+    assertEq((await FS.looksLikeWorkFolder(root)).ok, true);
+  });
+  await test('csak idegen almappák -> NEM munkamappa', async () => {
+    const root = fakeDir({ dirs: {
+      'nyaralas': fakeDir({ files: { 'IMG_1.jpg': {} } }),
+      'projekt':  fakeDir({ files: { 'jegyzet.txt': {} } }),
+    } });
+    const r = await FS.looksLikeWorkFolder(root);
+    assertEq(r.ok, false);
+    assertEq(r.ossz, 2);
+    assertEq(r.dolgozok, 0);
+  });
+  await test('a 01/02 a GYÖKÉRBEN nem számít dolgozói mappának', async () => {
+    // Ha valaki egy dolgozó MAPPÁJÁT adja meg kimenetnek, az nem munkamappa.
+    const root = fakeDir({ dirs: {
+      '01_Elokeszitett': fakeDir({ files: { 'x.docx': {} } }),
+      '02_Feltoltheto':  fakeDir(),
+    } });
+    const r = await FS.looksLikeWorkFolder(root);
+    assertEq(r.ossz, 0, 'a két alkönyvtárat almappának számolta');
+    assertEq(r.ok, true, 'üresnek látszik — nem zavarunk, de nincs is mit jelezni');
+  });
+
   section('Mélyszkennelés: korlát és pont-szűrés');
   await test('a ponttal kezdődő és a 01/02 mappát kihagyja', async () => {
     const root = fakeDir({

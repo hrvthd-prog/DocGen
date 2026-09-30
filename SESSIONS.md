@@ -68,6 +68,29 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-09-30 (5.) — Az implementáció lezárása: sablon-láthatóság ki, állapot-kivonat, kimenet-kapu
+
+**Cél:** a felhasználó megkérdezte, mi maradt hátra. Végigellenőriztem a kódot, három tételt találtam — mind megvan.
+
+**Változás** (`v10.68`):
+- **Sablon-láthatóság KIVEZETVE** (a felhasználó döntése): `isTemplateVisible`, `getTemplateAccounts`, `setTemplateVisibility`, `addTemplateToAccount`, `getAllUsers`, az `openVisibilityDialog` és a „Sablon-hozzárendelés" gomb törölve. A sablon-**csoportok** maradtak.
+- `js/modules/allapot.js` — `kivonatKiir()`: **vezetőnként egy** szűkített JSON az `allapot\` mappába. Gomb a Nyilvántartás oldalsávján (`registry.write` joggal).
+- `js/services/fs-service.js` — `looksLikeWorkFolder()`: a Műhely `is_worker_folder`-ének párja, jelzésre. `js/modules/docgen.js` — a kimeneti mappa beállításakor szól, ha nem munkamappának tűnik.
+- `test/fs-service.test.js` +5 teszt. `TERV-fiokok.md` 9. fejezet, `README.md`.
+
+**Miért / döntés:**
+- **A sablon-láthatóság két okból volt rossz, és a második döntött:** (1) a beállítása `localStorage`-ban élt, tehát böngészőprofilonként — megosztott mappán minden gépen más lett volna, ki melyik sablont látja; ez ugyanaz a hibaosztály, mint amit a fióklistán már javítottunk. (2) **A funkció nem tudott működni:** a hozzárendelő párbeszéd a `Settings.getAllUsers()`-t hívta, ami a `docgen_users` kulcsot olvasta — amit **soha, senki nem írt**, tehát a lista mindig üres volt. Egy nem működő, gépenként eltérő, a naplón kívüli ötödik jogosultsági dimenzió: a kivezetés a helyes válasz, nem a megjavítás.
+- **A kivonat vezetőnként külön fájl, nem egy közös.** Csak így lehet később NTFS-szinten szűkíteni, vagy elküldeni azt az egy fájlt — egy közösben minden műszakvezető látná a többiek dolgozóit is, ami nem minimalizálás. A fájlba **csak** az öt megengedett adat kerül: amit nem írunk be, az nem is szivároghat.
+- **A kimenet-kapu jelez, nem tilt.** Az első beállításnál a mappa üres is lehet. Egy részletet teszt fog be: ha valaki egy DOLGOZÓ mappáját adja meg kimenetnek, a gyökérben lévő 01/02 nem számít almappának — a mappa üresnek látszik, tehát nem zavarunk feleslegesen.
+
+**Tesztek:** `node test/run-all.js` — 25 készlet zöld (`fs-service.test.js` 19 → 24). `node tools/klon-proba.js` zöld.
+
+**Nyitott / következő — a KÓDBAN nincs több nyitott elem:**
+- **A felület kézi végigpróbálása mind a négy szinttel** — a Node-tesztek a DOM-ot és a File System Access API-t nem fedik. Ez a legfontosabb hátralévő lépés, és csak éles gépen végezhető.
+- **Az NTFS-mátrix átadása az IT-nak** (`TERV-fiokok.md` 4.).
+- **Kódba égetett adatkönyvtár** — a felhasználó jelezte, hogy később jön.
+- A régi szálak: `docgenpdf://` éles gépen nem próbált, `merge.js:139` clientRows, PDF 566 kB, engedély (a)/(b) mérése.
+
 ## 2026-09-30 (4.) — A jogosultsági mátrix ADATTÁ tétele (a felhasználó kritikájából)
 
 **Cél:** a felhasználó megkérdezte, miért nincs központi admin felület a jogosultság adására/vételére: *„Hardcode-olni ilyen jellegű dolgot soha nem tanácsos."* Igaza volt — és a projekt SAJÁT elvét sértettem meg.

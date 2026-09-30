@@ -156,6 +156,40 @@ const FsService = (() => {
     return { dir: part.length === 1 ? part[0] : null, hits: part };
   }
 
+  /**
+   * Úgy néz-e ki a mappa, mint a PDF Műhely munkamappája? -> { ok, dolgozok, ossz }
+   *
+   * A Műhely `is_worker_folder`-ének párja, de csak JELZÉSRE: nem tiltunk, mert a
+   * kimeneti mappa első beállításakor még üres is lehet. A kár nálunk kisebb, mint
+   * a Műhelyben (a `matchWorkerDir` bizonytalanságnál kérdez, és mappát sosem hoz
+   * létre magától) — de ha valaki az „Új mappa" választ adja egy idegen mappában,
+   * oda generál. Ezért szólunk.
+   *
+   * Dolgozói mappa jele: van benne 01/02 alkönyvtár, vagy van benne .docx/.pdf.
+   */
+  async function looksLikeWorkFolder(dirHandle) {
+    let ossz = 0, dolgozok = 0;
+    try {
+      for await (const [name, entry] of dirHandle.entries()) {
+        if (entry.kind !== 'directory' || name.startsWith('.')) continue;
+        if (name === DIR_PREP || name === DIR_UP) continue;
+        ossz++;
+        let jel = false;
+        try {
+          for await (const [n2, e2] of entry.entries()) {
+            if (e2.kind === 'directory' && (n2 === DIR_PREP || n2 === DIR_UP)) { jel = true; break; }
+            if (e2.kind === 'file' && /\.(docx|pdf)$/i.test(n2)) { jel = true; break; }
+          }
+        } catch { /* olvashatatlan almappa: nem jel */ }
+        if (jel) dolgozok++;
+      }
+    } catch {
+      return { ok: true, dolgozok: 0, ossz: 0 };   // nem tudjuk megítélni: ne zavarjunk
+    }
+    // Üres mappa rendben van: első beállításnál ez a normális.
+    return { ok: ossz === 0 || dolgozok > 0, dolgozok, ossz };
+  }
+
   async function listDocxFiles(dirHandle) {
     const files = [];
     for await (const [name, entry] of dirHandle.entries()) {
@@ -297,6 +331,7 @@ const FsService = (() => {
     foldName,
     listSubDirs,
     matchWorkerDir,
+    looksLikeWorkFolder,
     listFiles,
     fileExists,
     deleteFromDir,

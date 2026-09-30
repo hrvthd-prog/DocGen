@@ -355,7 +355,6 @@ const DocgenModule = (() => {
         </button>
         <div class="info-row" id="dg-dir-info" title="${escHtml(dirName)}">${_folderSVG}${escHtml(dirName)}</div>
         <button class="sidebar-btn" id="dg-manage-groups">Csoportok kezelése</button>
-        ${isAdmin ? `<button class="sidebar-btn" id="dg-manage-visibility">Sablon-hozzárendelés</button>` : ''}
       </div>
 
       <div class="sidebar-section ${pendingStep === 3 ? 'sidebar-section--pending' : ''}">
@@ -627,8 +626,6 @@ const DocgenModule = (() => {
     q('#dg-choose-clients').addEventListener('click', openClientDialog);
     q('#dg-set-dir').addEventListener('click', onTemplatesDirBtn);
     q('#dg-manage-groups').addEventListener('click', DocgenGroups.openGroupsDialog);
-    const visBtn = q('#dg-manage-visibility');
-    if (visBtn) visBtn.addEventListener('click', DocgenGroups.openVisibilityDialog);
     q('#dg-set-output').addEventListener('click', onSetOutput);
 
     // ── Sidebar magasság-resize ───────────────────────────────────────────────
@@ -1160,7 +1157,6 @@ const DocgenModule = (() => {
 
   function addTemplate(filename, subdir) {
     const tplName = filename.replace(/\.docx$/i, '');
-    if (!Settings.isTemplateVisible(tplName, currentUser)) return;
     if (!state.allTemplates.find(t => t.name === tplName))
       state.allTemplates.push({ name: tplName, subdir });
   }
@@ -1404,6 +1400,29 @@ const DocgenModule = (() => {
       state.outputDir = h;
       state.outputWritable = true;
       toast('✓ Kimeneti mappa: ' + h.name, 'success');
+      // Jelzés, ha a mappa nem úgy néz ki, mint a PDF Műhely munkamappája.
+      // Nem tiltjuk: első beállításnál üres is lehet — de a téves mappa a
+      // „Új mappa" válasszal oda generálna.
+      try {
+        const v = await FsService.looksLikeWorkFolder(h);
+        if (!v.ok) {
+          BevLogger.warn('OUTPUT_DIR_SET', 'A kimeneti mappa nem munkamappának tűnik',
+                         `${v.ossz} almappa, 0 dolgozói`, currentUser);
+          showDialog({
+            title: '⚠ Ez nem úgy néz ki, mint a munkamappa',
+            body: `<p>A(z) <b>${escHtml(h.name)}</b> mappa
+                     ${v.ossz} almappát tartalmaz, de egyikben sincs
+                     <code>${escHtml(FsService.DIR_PREP)}</code> /
+                     <code>${escHtml(FsService.DIR_UP)}</code> mappa és felismert irat sem.</p>
+                   <p class="muted">A generált iratok a
+                     <b>dolgozó · ${escHtml(FsService.DIR_PREP)}</b> mappájába kerülnek. Ha ez
+                     nem a PDF Műhely munkamappája, a program új dolgozói mappákat
+                     ajánlana fel itt — ellenőrizd, mielőtt generálsz.</p>`,
+            footer: `<button type="button" class="btn btn-primary"
+                             onclick="closeDialog()">Értem</button>`,
+          });
+        }
+      } catch { /* a jelzés sosem állítja meg a beállítást */ }
       BevLogger.info('OUTPUT_DIR_SET', 'Kimenet mappa beállítva', h.name, currentUser);
       // Sidebar teljes újrarajzolás (váltó gomb megjelenítéséhez)
       const sidebar = q('#dg-sidebar');

@@ -379,6 +379,17 @@ nem törölhető, és sérült beállításnál a kiadás szerinti alap jön —
 jár; a saját szintek nem kapják meg automatikusan. A tudatosan elvett jog nem
 éled újra.
 
+### Állapot-kivonat a műszakvezetőknek
+
+A **Nyilvántartás** oldalsávján a *Kivonat kiírása* gomb **vezetőnként egy
+szűkített fájlt** ír az `allapot\` mappába: név, ügy, állás, határidő, következő
+lépés — és **semmi más**. Okmányszám, adóazonosító, bér, bankszámla, anyja neve
+nem kerül bele.
+
+Vezetőnként külön fájl, hogy elküldhető legyen, és hogy az IT később
+fájl-szinten is szűkíthesse: egy közös fájlban minden műszakvezető látná a
+többiek dolgozóit is.
+
 ### Jogosultsági napló
 
 Minden szint- és fiókváltozás sort kap a közös fiókfájlban: **mikor, ki, mit
