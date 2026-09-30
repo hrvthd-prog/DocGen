@@ -31,7 +31,9 @@ const SettingsModule = (() => {
     container.innerHTML = `
       <div class="workspace">
         <div class="workspace-col">
+          ${sema ? szintKartya() : ''}
           ${sema ? fiokKartya() : ''}
+          ${sema ? naploKartya() : ''}
           ${!sema ? '' : `
           <div class="ws-card">
             <div class="ws-card-header">
@@ -116,8 +118,162 @@ const SettingsModule = (() => {
     if (sema) {
       renderFieldList();
       renderDictionary();
+      bindSzintKartya();
       bindFiokKartya();
     }
+  }
+
+  // ── Szintek és jogosultságok (csak admin) ─────────────────────────────────
+  /**
+   * A jogosultsági mátrix szerkesztője.
+   *
+   * A szintek ADATOK, nem kód — ugyanaz az elv, mint a mezősémánál és az
+   * ügytípusoknál: „ha a munkamegosztás megváltozik, szintet szerkesztünk, nem
+   * kódot írunk". A műveletek listája viszont kódban van: mindegyik egy
+   * ellenőrzési pont, amit a kód hív, tehát felületről nem lehet újat kitalálni.
+   */
+  function szintKartya() {
+    if (!Auth.can('accounts.manage') || !Roles.loaded()) return '';
+    const szintek = Roles.all();
+    const muveletek = Roles.actions();
+    const sajat = Auth.currentRole();
+
+    // Ki használja melyik szintet — a törléshez és a figyelmeztetéshez
+    let fiokok = [];
+    try { fiokok = Auth.accounts(); } catch {}
+    const hasznal = (k) => fiokok.filter(a => a.role === k).map(a => a.name);
+
+    const fej = szintek.map(r => `
+      <th style="text-align:center;min-width:92px">
+        ${escHtml(r.label)}
+        ${r.builtin ? '' : '<br><span class="rg-count">saját</span>'}
+        <br><span class="rg-count">${hasznal(r.key).length} fiók</span>
+      </th>`).join('');
+
+    const sorok = muveletek.map(m => `
+      <tr>
+        <td title="${escHtml(m.hint)}">
+          ${escHtml(m.label)}
+          ${m.key === Roles.KEY_ACTION
+            ? '<br><span class="sv-problems">kulcsjog — legalább egy szintnél maradnia kell</span>'
+            : `<br><span class="rg-count">${escHtml(m.hint)}</span>`}
+        </td>
+        ${szintek.map(r => `
+          <td style="text-align:center">
+            <input type="checkbox" class="jog-cb"
+                   data-role="${escHtml(r.key)}" data-act="${escHtml(m.key)}"
+                   ${r.can.includes(m.key) ? 'checked' : ''}>
+          </td>`).join('')}
+      </tr>`).join('');
+
+    const muvOpts = muveletek.map(m =>
+      `<label class="template-radio-item" style="font-size:12px">
+         <input type="checkbox" class="uj-jog" value="${escHtml(m.key)}">
+         ${escHtml(m.label)}
+       </label>`).join('');
+
+    return `
+      <div class="ws-card">
+        <div class="ws-card-header">
+          <span class="ws-card-title">Szintek és jogosultságok</span>
+          <span class="rg-count">${szintek.length} szint · ${muveletek.length} művelet</span>
+        </div>
+        <div class="ws-card-body">
+          <p class="sv-intro">
+            A szintek és a jogaik <b>adatok</b>, nem kód: itt szerkeszthetők, és a
+            közös <code>docgen-config.json</code>-ban élnek — így minden gépen
+            ugyanazok. A <b>műveletek</b> listája viszont a kódból jön: mindegyik
+            egy ellenőrzési pont, amit a program hív, tehát újat innen nem lehet
+            kitalálni (ahogy a sémánál sem lehet új mező<i>típust</i>).
+            Minden változás <b>naplósort</b> kap: mikor, ki, mit adott vagy vett el.
+          </p>
+          <div style="overflow-x:auto">
+            <table class="data-table">
+              <thead><tr><th style="min-width:220px">Művelet</th>${fej}</tr></thead>
+              <tbody>${sorok}</tbody>
+            </table>
+          </div>
+          <div class="sv-toolbar" style="margin-top:8px">
+            <span id="jog-state" class="sv-problems"></span>
+          </div>
+
+          <details style="margin-top:10px">
+            <summary style="cursor:pointer;font-size:12px">Szint felvétele, átnevezése, törlése</summary>
+            <div class="sv-form" style="margin-top:8px">
+              <label class="ef-field">
+                <span class="ef-label">Új szint neve</span>
+                <input type="text" class="field-input" id="szint-nev" maxlength="40"
+                       placeholder="pl. Bérszámfejtő">
+              </label>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin:6px 0">${muvOpts}</div>
+            <div class="sv-toolbar">
+              <button class="btn btn-primary btn-sm" id="szint-add">Szint felvétele</button>
+            </div>
+            <table class="data-table" style="margin-top:8px">
+              <thead><tr><th>Szint</th><th>Használja</th><th></th></tr></thead>
+              <tbody>
+                ${szintek.map(r => `
+                  <tr>
+                    <td>${escHtml(r.label)}${r.key === sajat ? ' <b>(a te szinted)</b>' : ''}</td>
+                    <td>${hasznal(r.key).length
+                          ? escHtml(hasznal(r.key).slice(0, 3).join(', '))
+                            + (hasznal(r.key).length > 3 ? '…' : '')
+                          : '<span class="rg-count">senki</span>'}</td>
+                    <td style="white-space:nowrap">
+                      <button class="btn btn-ghost btn-sm szint-ren" data-key="${escHtml(r.key)}">Átnevezés</button>
+                      ${r.builtin ? `<button class="btn btn-ghost btn-sm szint-seed"
+                          data-key="${escHtml(r.key)}"
+                          title="Vissza a kiadás szerinti jogokra">Alapra</button>` : ''}
+                      <button class="btn btn-ghost btn-sm szint-del" data-key="${escHtml(r.key)}">Törlés</button>
+                    </td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </details>
+        </div>
+      </div>`;
+  }
+
+  function bindSzintKartya() {
+    if (!Auth.can('accounts.manage') || !Roles.loaded()) return;
+    const sajat = Auth.currentRole();
+    const state = (m, hiba) => {
+      const e = document.getElementById('jog-state');
+      if (e) { e.textContent = m || ''; e.style.color = hiba ? 'var(--c-red)' : 'var(--c-green)'; }
+    };
+    const fut = async (fn, ok) => {
+      try { await fn(); state(ok || '✓ Mentve'); render(); }
+      catch (e) { state(e.message, true); render(); state(e.message, true); }
+    };
+
+    document.querySelectorAll('.jog-cb').forEach(cb => {
+      cb.addEventListener('change', () => fut(
+        () => Roles.setAction(cb.dataset.role, cb.dataset.act, cb.checked, { sajatRole: sajat }),
+        cb.checked ? '✓ Jog megadva' : '✓ Jog elvéve'));
+    });
+    document.querySelectorAll('.szint-ren').forEach(b => {
+      b.addEventListener('click', () => promptDialog('A szint új neve:',
+        Roles.label(b.dataset.key), (v) => fut(() => Roles.rename(b.dataset.key, v))));
+    });
+    document.querySelectorAll('.szint-seed').forEach(b => {
+      b.addEventListener('click', () => fut(() => Roles.resetToSeed(b.dataset.key),
+        '✓ Visszaállítva a kiadás szerinti jogokra'));
+    });
+    document.querySelectorAll('.szint-del').forEach(b => {
+      b.addEventListener('click', () => {
+        let usedBy = [];
+        try { usedBy = Auth.accounts().filter(a => a.role === b.dataset.key).map(a => a.name); }
+        catch {}
+        fut(() => Roles.remove(b.dataset.key, { usedBy, sajatRole: sajat }));
+      });
+    });
+    const add = document.getElementById('szint-add');
+    if (add) add.addEventListener('click', () => {
+      const label = document.getElementById('szint-nev').value.trim();
+      const can = [...document.querySelectorAll('.uj-jog:checked')].map(x => x.value);
+      fut(() => Roles.create({ label, can }));
+    });
   }
 
   // ── Fiókok és szintek (csak admin) ────────────────────────────────────────
@@ -142,8 +298,11 @@ const SettingsModule = (() => {
     }
     const lista = Auth.accounts().slice()
       .sort((a, b) => a.name.localeCompare(b.name, 'hu'));
-    const opts = (sel) => Auth.ROLES
-      .map(r => `<option value="${r}"${r === sel ? ' selected' : ''}>${escHtml(Auth.roleLabel(r))}</option>`)
+    // A szintlista a Roles-ból jön: a saját, felületen felvett szintek is
+    // választhatók, kódváltozás nélkül.
+    const opts = (sel) => Roles.all()
+      .map(r => `<option value="${escHtml(r.key)}"${r.key === sel ? ' selected' : ''}>`
+              + `${escHtml(r.label)}</option>`)
       .join('');
 
     // Figyelmeztetés: a megtekintő szűrése a „Közvetlen vezető" mező szövegére
@@ -286,6 +445,76 @@ const SettingsModule = (() => {
       if (e.key === 'Enter') ok();
       if (e.key === 'Escape') closeDialog();
     });
+  }
+
+  // ── Jogosultsági napló (csak admin) ───────────────────────────────────────
+  /**
+   * A jogosultság adásának és vételének tartós nyoma.
+   *
+   * A `BevLogger` csak memóriában él, az ablak bezárásával elvész — egy
+   * jogosultság-változásnál ez kevés: a „ki adta ezt a jogot és mikor?" kérdésre
+   * nem lenne válasz. Ezért a fiókfájl `audit` tömbjébe írunk, csak hozzáfűzve.
+   */
+  const AUDIT_LABEL = {
+    JOG_ADAS:         'jog megadva',
+    JOG_VETEL:        'jog elvéve',
+    JOG_UJ_MUVELET:   'új művelet a kiadásból',
+    SZINT_UJ:         'szint felvéve',
+    SZINT_ATNEVEZES:  'szint átnevezve',
+    SZINT_TORLES:     'szint törölve',
+    SZINT_ALAPRA:     'szint visszaállítva alapra',
+    FIOK_UJ:          'fiók felvéve',
+    FIOK_SZINT:       'fiók szintje módosult',
+    FIOK_ATNEVEZES:   'fiók átnevezve',
+    FIOK_PIN:         'PIN csere',
+    FIOK_TORLES:      'fiók törölve',
+  };
+
+  function naploKartya() {
+    if (!Auth.can('accounts.manage')) return '';
+    let sorok = [];
+    try { sorok = Auth.auditLog({ limit: 100 }); } catch {}
+    if (!sorok.length) {
+      return `
+        <div class="ws-card">
+          <div class="ws-card-header"><span class="ws-card-title">Jogosultsági napló</span></div>
+          <div class="ws-card-body">
+            <p class="sv-intro">Még nincs bejegyzés. Minden szint- és
+              fiókváltozás ide kerül, a közös fiókfájlba.</p>
+          </div>
+        </div>`;
+    }
+    const cel = (r) => [r.target, r.role && Roles.label(r.role), r.muvelet, r.muveletek,
+                        r.from && `← ${r.from}`, r.to && `→ ${r.to}`]
+      .filter(Boolean).join(' · ');
+    return `
+      <div class="ws-card">
+        <div class="ws-card-header">
+          <span class="ws-card-title">Jogosultsági napló</span>
+          <span class="rg-count">${sorok.length} bejegyzés (legfrissebb elöl)</span>
+        </div>
+        <div class="ws-card-body">
+          <p class="sv-intro">
+            Minden jogosultság-változás nyomot hagy a közös fiókfájlban.
+            <b>Ez nem kriptográfiai bizonyíték</b>: aki a fájlhoz hozzáfér,
+            átírhatja — jóhiszemű használat melletti visszakövetésre szolgál.
+          </p>
+          <div style="max-height:260px;overflow-y:auto">
+            <table class="data-table">
+              <thead><tr><th>Mikor</th><th>Ki</th><th>Mi történt</th><th>Mire</th></tr></thead>
+              <tbody>
+                ${sorok.map(r => `
+                  <tr>
+                    <td style="white-space:nowrap">${escHtml(String(r.at || '').replace('T', ' ').slice(0, 19))}</td>
+                    <td>${escHtml(r.user || '')}</td>
+                    <td>${escHtml(AUDIT_LABEL[r.action] || r.action || '')}</td>
+                    <td>${escHtml(cel(r))}</td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
   }
 
   // ── Enter Hungary: okmány átvétele ─────────────────────────────────────────

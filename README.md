@@ -359,6 +359,33 @@ Fiókot **csak belépett admin** vehet fel, nevezhet át és törölhet, a
 Beállítások fülön. Kivétel az első indulás: ha az adatmappában még nincs fiók, a
 belépőképernyő létrehozza az első admint — enélkül a rendszer kizárná magát.
 
+### A szintek szerkeszthetők — nincsenek beégetve
+
+A **Beállítások → Szintek és jogosultságok** rácson minden jog átállítható, és
+**új szint is felvehető** (pl. „Bérszámfejtő"). A szintek a közös
+`docgen-config.json`-ban élnek, ugyanúgy, mint a séma és az ügytípusok: *ha a
+munkamegosztás megváltozik, szintet szerkesztünk, nem kódot írunk.*
+
+A **műveletek** listája viszont a kódból jön: mindegyik egy ellenőrzési pont,
+amit a program hív — újat a felületről nem lehet kitalálni, mert nem lenne hol
+érvényesülnie. (Ahogy a sémánál sem lehet új mező*típust* felvenni.)
+
+**Védőkorlátok**, hogy az admin ne zárhassa ki magát: a saját szintjéből nem
+vehető el a fiókkezelés joga, az utolsó birtokostól sem, használatban lévő szint
+nem törölhető, és sérült beállításnál a kiadás szerinti alap jön — nem
+„nincs korlátozás".
+
+**Frissítéskor** egy új művelet a beépített szinteknek a kiadás szándéka szerint
+jár; a saját szintek nem kapják meg automatikusan. A tudatosan elvett jog nem
+éled újra.
+
+### Jogosultsági napló
+
+Minden szint- és fiókváltozás sort kap a közös fiókfájlban: **mikor, ki, mit
+adott vagy vett el.** A Beállítások fülön visszakereshető. Ez nem kriptográfiai
+bizonyíték — aki a fájlhoz hozzáfér, átírhatja —, hanem jóhiszemű használat
+melletti visszakövetés.
+
 ### Amit ez véd, és amit NEM
 
 > **Ez munkafolyamat-korlát, nem hozzáférés-védelem.**
