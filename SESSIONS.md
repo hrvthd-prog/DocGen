@@ -68,6 +68,36 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-09-30 (4.) — A jogosultsági mátrix ADATTÁ tétele (a felhasználó kritikájából)
+
+**Cél:** a felhasználó megkérdezte, miért nincs központi admin felület a jogosultság adására/vételére: *„Hardcode-olni ilyen jellegű dolgot soha nem tanácsos."* Igaza volt — és a projekt SAJÁT elvét sértettem meg.
+
+**Változás** (`v10.67`):
+- **új:** `js/schema/roles.js` — a szintek adatként, a `case-types.js` mintájára: `SEED_ROLES` a kódban, élő definíció a `docgen-config.json` `roles` kulcsában, szerkesztés a felületről. Teljes szintkezelés: felvétel, átnevezés, törlés, „Alapra".
+- **új:** `test/roles.test.js` — 31 teszt, felvéve a `run-all.js`-be.
+- `js/services/auth-service.js` — a bedrótozott `CAN` mátrix és a fix `ROLES` lista **kikerült**; `can()` már csak `Roles.can()`-t hív. Új: tartós `audit()` napló + `auditLog()`.
+- `js/modules/settings/settings-view.js` — „Szintek és jogosultságok" rács (szint × művelet jelölőkkel), szintkezelés, és „Jogosultsági napló" kártya.
+- `js/modules/registry/registry-view.js` — `Roles` háttér a közös configban; a **szintek a fiókok ELŐTT** töltődnek.
+- `test/auth.test.js` — a mátrix-ellenőrzés a `Roles`-on megy; +5 regressziós teszt.
+- `TERV-fiokok.md` 8. fejezet, `README.md`.
+
+**Miért / döntés:**
+- **A projekt elve:** a `case-types.js` fejkommentje szó szerint azt írja, hogy *„ha egy eljárás megváltozik, típust szerkesztünk, nem kódot írunk"*. A séma, az ügytípusok, az export profilok és a szótár mind seed→config→felület. A jogosultsági mátrix nem volt az. Most már az.
+- **Ami NEM lehet adat, és miért:** a MŰVELETEK listája. Minden művelet egy ellenőrzési pont, amit a kód hív; egy felületről kitalált új műveletnek nincs hívási helye, tehát nem tenne semmit — csak a beállítottság látszatát adná. Pontosan úgy, mint a sémánál: a mezőlista adat, de egy új mező TÍPUSA kódot igényel. A művelet címkéje és magyarázata viszont adat, hogy a rács olvasható legyen.
+- **A szerkeszthetőség behozta a kizárás kockázatát**, ezért négy védőkorlát: a saját szintből nem vehető el a kulcsjog; az utolsó birtokostól sem; használatban lévő (és a saját) szint nem törölhető; sérült confignál a SEED a tartalék — **nem** „nincs korlátozás".
+- **Az `adminCount()` már nem az „admin" nevű szintet számolja**, hanem azt, kinek VAN `accounts.manage` joga: a jogosultság adat, tehát a szint neve nem jelenthet semmit.
+- **Frissítéskori összefésülés** a felhasználó döntése szerint: a beépített szintek a seed szerint kapják az új műveletet, a saját szintek nem. Ehhez a config tárolja a `knownActions` listát — enélkül nem lehetne megkülönböztetni az „új műveletet" a **tudatosan elvett jogtól**, és egy frissítés visszaadná, amit az admin szándékosan elvett.
+
+**Két hibát a tesztek fogtak el, és mindkettő súlyos lett volna:**
+1. **A napló `action` mezőjét felülírta a művelet kulcsa** (`_log('JOG_ADAS', { role, action })`), így a naplóból eltűnt volna, hogy adás vagy vétel történt. A payload kulcsa `muvelet` lett.
+2. **A betöltési sorrend minden fiókot lefokozott volna.** Az `Auth.migrate()` a szinteket kérdezi (`isKnownRole`); betöltetlen `Roles` mellett minden fiók a legszűkebb szintre esik, és a következő mentés kiírja. A `Roles` most a fiókok előtt töltődik, a napló pedig pufferel, hogy a sorrend egy naplósort se dönthessen el.
+
+**Tesztek:** `node test/run-all.js` — 25 készlet, mind zöld: `roles.test.js` 31, `auth.test.js` 104 (99 → +5 regresszió). `node tools/klon-proba.js` zöld.
+
+**Nyitott / következő:**
+- **A felület kézi végigpróbálása mind a négy szinttel** — változatlanul ez a legfontosabb hátralévő lépés; most már a szint-szerkesztő ráccsal és a naplóval együtt.
+- A 2. fázis (NTFS-mátrix, `allapot-kivonat.json`) és a korábbi szálak változatlanul nyitva.
+
 ## 2026-09-30 (3.) — FF1–FF6: a fiókkeretrendszer megvalósítva
 
 **Cél:** a `TERV-fiokok.md` FF1–FF6 fázisainak megépítése. A felhasználó a terv-ellenőrzésen négy dolgot eldöntött: **PIN kell**, adatmappa nélkül **próba mód**, a megtekintő **egyetlen új kicsi „Ügyállás" fület** kap, és a Beállításokban a **Séma+Szótár adminnak, az EH elérhetőség az ügyintézőnek is**. Az IT külön lekorlátozza majd a közös meghajtót, de a keretrendszert ettől függetlenül meg kell építeni.

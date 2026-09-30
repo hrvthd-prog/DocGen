@@ -29,61 +29,22 @@ const Auth = (() => {
   const FILENAME = 'docgen-accounts.json';
   const SESSION_KEY = 'docgen_session';
 
-  // ── A négy szint ──────────────────────────────────────────────────────────
-  const ROLES = ['admin', 'ugyintezo', 'hrbp', 'megtekinto'];
-
-  const ROLE_LABEL = {
-    admin:      'Legfőbb admin',
-    ugyintezo:  'Ügyintéző',
-    hrbp:       'HR Business Partner',
-    megtekinto: 'Csak megtekintő',
-  };
-
-  const ROLE_HINT = {
-    admin:      'Mindent lát és állít, ő kezeli a fiókokat.',
-    ugyintezo:  'Nyilvántartás, dokumentumok, ügyek, átutalások.',
-    hrbp:       'Mindent olvas, de csak a „Csak HR tölti” mezőket írja.',
-    megtekinto: 'Csak a hozzá tartozó dolgozók ügyállását látja.',
-  };
+  // ── A szintek: ADAT, nem kód ───────────────────────────────────────────────
+  // A szintek és a jogaik a `Roles` modulban élnek (js/schema/roles.js): seed a
+  // kódban, élő definíció a docgen-config.json-ban, szerkesztés a Beállítások
+  // fülön. Ugyanaz az elv, mint a mezősémánál és az ügytípusoknál — a korábbi,
+  // ide beégetett mátrix ezt sértette.
+  function ROLES()            { return Roles.keys(); }
+  function roleLabel(role)    { return Roles.label(role); }
+  function roleHint(role)     { return Roles.hint(role); }
+  function isKnownRole(role)  { return !!Roles.get(role); }
 
   /**
-   * A jogosultsági mátrix ADAT, nem kód — egy halmaz szintenként. Új művelet
-   * felvételéhez itt kell egy sor, nem szétszórt if-ek a felületen.
-   *
-   * Szándékosan NINCS öröklés (`admin ⊃ ugyintezo ⊃ …`): a HRBP nem „kevesebb
-   * ügyintéző", hanem MÁS — többet olvas, kevesebbet ír.
+   * A `registry.write.hr` joghoz tartozó mezőcsoport. A séma `hr_belso` csoportja
+   * ez, címkéje „Csak HR tölti" — és a csoport TARTALMA adat: a Beállítások →
+   * Adatmezők lapon bármelyik mező átteheto ide, kódváltozás nélkül. Csak maga a
+   * csoportkulcs áll a kódban, mert a `canWriteGroup()` ehhez hasonlít.
    */
-  const ACTIONS = [
-    'registry.read',        // teljes nyilvántartás olvasása
-    'registry.read.own',    // csak a hozzá tartozó dolgozók, státuszszinten
-    'registry.write',       // teljes írás
-    'registry.write.hr',    // csak a séma `hr_belso` csoportja
-    'docgen.generate',
-    'cases.read',
-    'cases.read.own',
-    'cases.write',
-    'transfers.use',
-    'settings.schema',      // séma, export profilok, ügytípusok
-    'settings.ehcontact',   // a kérelemre felmenő e-mail és telefon
-    'accounts.manage',
-    'log.all',              // a hiányzó-adatok napló minden fiókra
-  ];
-
-  const CAN = {
-    admin: new Set(ACTIONS),
-    ugyintezo: new Set([
-      'registry.read', 'registry.write', 'docgen.generate',
-      'cases.read', 'cases.write', 'transfers.use', 'settings.ehcontact',
-    ]),
-    hrbp: new Set([
-      'registry.read', 'registry.write.hr', 'cases.read',
-    ]),
-    megtekinto: new Set([
-      'registry.read.own', 'cases.read.own',
-    ]),
-  };
-
-  /** A HRBP által írható mezőcsoport. A sémában már létezik: „Csak HR tölti”. */
   const HR_GROUP = 'hr_belso';
 
   // ── Állapot ───────────────────────────────────────────────────────────────
@@ -91,9 +52,6 @@ const Auth = (() => {
   let cache   = null;      // { version, accounts: [] }
   let session = null;      // { name, role }
   let proba   = false;     // adatmappa nélküli üzem: nincs közös adat, nincs szint
-
-  function roleLabel(role) { return ROLE_LABEL[role] || role; }
-  function roleHint(role)  { return ROLE_HINT[role] || ''; }
 
   function nowIso() { return new Date().toISOString(); }
 
@@ -158,7 +116,37 @@ const Auth = (() => {
   }
 
   // ── Fiókfájl ──────────────────────────────────────────────────────────────
-  function emptyDb() { return { version: 1, savedAt: null, accounts: [] }; }
+  function emptyDb() { return { version: 1, savedAt: null, accounts: [], audit: [] }; }
+
+  // ── Tartós napló a jogosultság adásáról és vételéről ──────────────────────
+  // A BevLogger csak memóriában él, az ablak bezárásával elvész — egy
+  // jogosultság-változásnál ez kevés: a „ki adta ezt a jogot és mikor?" kérdésre
+  // nem lenne válasz. Ezért a fiókfájl `audit` tömbjébe írunk, csak hozzáfűzve.
+  // Ugyanaz a minta, mint a TransferRepo naplója az átutalásoknál.
+  //
+  // ponytail: ez egy JSON a közös mappában — aki a fájlhoz fér, átírhatja. Nem
+  // kriptográfiai bizonyíték, hanem „ki mit csinált" visszakövetés jóhiszemű
+  // használat mellett. Ha bizonyító erő kell, a továbblépés hash-lánc.
+  let pendingAudit = [];
+
+  function audit(action, adat = {}) {
+    const rec = Object.assign({
+      at: nowIso(),
+      user: (session && session.name) || (proba ? '(próba mód)' : '(nincs belépve)'),
+      action,
+    }, adat);
+    // A Roles betöltése a fiókfájl betöltése ELŐTT is naplózhat (frissítéskori
+    // összefésülés). Pufferelünk, hogy a sorrend ne dönthessen el egy naplósort.
+    if (!cache) { pendingAudit.push(rec); return; }
+    if (!Array.isArray(cache.audit)) cache.audit = [];
+    cache.audit.push(rec);
+  }
+
+  /** A napló, legfrissebb elöl. */
+  function auditLog({ limit = 200 } = {}) {
+    const l = (cache && Array.isArray(cache.audit)) ? cache.audit : [];
+    return l.slice().reverse().slice(0, limit);
+  }
 
   /**
    * A fiókok a KÖZÖS adatmappában élnek, külön fájlban.
@@ -171,7 +159,19 @@ const Auth = (() => {
    * tartalmaz személyes adatot és gépek közt szabadon vihető; a fióknevek
    * viszont személyes adatok.
    */
-  function useBackend(b) { backend = b; cache = null; }
+  function useBackend(b) {
+    backend = b;
+    cache = null;
+    // A szint-változások naplója is ide fut: egy helyen legyen a jogosultság
+    // adásának és vételének teljes nyoma. A useBackend-ben kötjük be, nem a
+    // load()-ban, hogy a betöltési sorrend ne befolyásolja.
+    if (typeof Roles !== 'undefined' && Roles.setAuditSink) {
+      Roles.setAuditSink((action, adat) => {
+        audit(action, adat);
+        if (cache) save().catch(() => {});
+      });
+    }
+  }
 
   function createFileBackend(dirHandle) {
     return EmployeeRepo.createFileBackend(dirHandle, { filename: FILENAME });
@@ -182,6 +182,12 @@ const Auth = (() => {
     const raw = await backend.load();
     cache = raw && Array.isArray(raw.accounts) ? raw : emptyDb();
     cache.accounts = cache.accounts.map(migrate);
+    if (!Array.isArray(cache.audit)) cache.audit = [];
+    if (pendingAudit.length) {
+      cache.audit.push(...pendingAudit);
+      pendingAudit = [];
+      save().catch(() => {});
+    }
     return cache.accounts.length;
   }
 
@@ -189,7 +195,9 @@ const Auth = (() => {
     const o = Object.assign({}, a);
     o.id        = o.id || newId();
     o.name      = String(o.name || '').trim();
-    o.role      = ROLES.includes(o.role) ? o.role : 'megtekinto';
+    // Ismeretlen szint (pl. a szintet törölték a config-ból): a legszűkebb jön,
+    // és a felület jelzi. Csendben teljes jogot adni sosem szabad.
+    o.role      = isKnownRole(o.role) ? o.role : 'megtekinto';
     o.pinSalt   = o.pinSalt || '';
     o.pinHash   = o.pinHash || '';
     o.createdAt = o.createdAt || nowIso();
@@ -219,7 +227,7 @@ const Auth = (() => {
     const n = String(name || '').trim();
     if (!n) throw new Error('A fiók neve nem lehet üres.');
     if (byName(n)) throw new Error(`Ez a név már szerepel: ${n}`);
-    if (!ROLES.includes(role)) throw new Error(`Ismeretlen szint: ${role}`);
+    if (!isKnownRole(role)) throw new Error(`Ismeretlen szint: ${role}`);
     const bad = validatePin(pin);
     if (bad) throw new Error(bad);
     const salt = newSalt();
@@ -228,6 +236,7 @@ const Auth = (() => {
       pinSalt: salt, pinHash: await hashPin(pin, salt),
       createdAt: nowIso(), createdBy: (session && session.name) || '',
     });
+    audit('FIOK_UJ', { target: n, role });
     await save();
     return byName(n);
   }
@@ -245,12 +254,14 @@ const Auth = (() => {
   async function setRole(id, role) {
     const a = get(id);
     if (!a) throw new Error('Nincs ilyen fiók.');
-    if (!ROLES.includes(role)) throw new Error(`Ismeretlen szint: ${role}`);
+    if (!isKnownRole(role)) throw new Error(`Ismeretlen szint: ${role}`);
     // Enélkül a rendszer kizárhatná magát: admin nélkül fiókot sem lehet kezelni.
     if (a.role === 'admin' && role !== 'admin' && adminCount(id) === 0) {
       throw new Error('Ez az utolsó admin — előbb vegyél fel másikat.');
     }
+    const elozo = a.role;
     a.role = role;
+    audit('FIOK_SZINT', { target: a.name, from: elozo, to: role });
     await save();
     return a;
   }
@@ -264,6 +275,7 @@ const Auth = (() => {
     if (other && other.id !== id) throw new Error(`Ez a név már szerepel: ${n}`);
     const old = a.name;
     a.name = n;
+    audit('FIOK_ATNEVEZES', { target: n, from: old });
     await save();
     return { old, name: n };
   }
@@ -275,6 +287,7 @@ const Auth = (() => {
     if (bad) throw new Error(bad);
     a.pinSalt = newSalt();
     a.pinHash = await hashPin(pin, a.pinSalt);
+    audit('FIOK_PIN', { target: a.name });
     await save();
     return true;
   }
@@ -286,6 +299,7 @@ const Auth = (() => {
       throw new Error('Ez az utolsó admin — nem törölhető.');
     }
     cache.accounts = cache.accounts.filter(x => x.id !== id);
+    audit('FIOK_TORLES', { target: a.name, role: a.role });
     await save();
     return true;
   }
@@ -315,7 +329,7 @@ const Auth = (() => {
     try {
       if (typeof sessionStorage === 'undefined') return null;
       const s = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
-      if (!s || !s.name || !ROLES.includes(s.role)) return null;
+      if (!s || !s.name || !isKnownRole(s.role)) return null;
       // A szint a FÁJLBÓL jön, ha van: admin közben átállíthatta.
       const a = byName(s.name);
       session = a ? { name: a.name, role: a.role } : s;
@@ -336,11 +350,10 @@ const Auth = (() => {
     // Próba mód: nincs adatmappa, tehát nincs fiókfájl és nincs közös adat sem —
     // nincs mit védeni. Mindent szabad, KIVÉVE a fiókkezelést: fiókfájl nélkül
     // az csak azt a látszatot adná, hogy beállítottunk valamit.
-    if (proba) return action !== 'accounts.manage';
+    if (proba) return action !== Roles.KEY_ACTION;
     const r = currentRole();
     if (!r) return false;
-    const set = CAN[r];
-    return !!set && set.has(action);
+    return Roles.can(r, action);
   }
 
   /** Adatmappa nélküli üzem. A felület végig sávot mutat, és a generált irat
@@ -366,15 +379,14 @@ const Auth = (() => {
   }
 
   return {
-    ROLES, ROLE_LABEL, ACTIONS, HR_GROUP, PIN_MIN, PIN_MAX,
+    ROLES, isKnownRole, HR_GROUP, PIN_MIN, PIN_MAX,
     roleLabel, roleHint,
     useBackend, createFileBackend, load, loaded, accounts, isEmpty, save,
     create, get, byName, setRole, rename, setPin, remove, adminCount,
     login, logout, restoreSession, currentUser, currentRole,
     can, canWriteGroup, ownsEmployee, setProba, isProba,
+    audit, auditLog,
     validatePin, hashPin, newSalt, fold,
-    // teszthez
-    _CAN: CAN,
   };
 })();
 

@@ -66,10 +66,13 @@ function ujAuth(fajlok = {}) {
     fs.readFileSync(path.join(__dirname, rel), 'utf8') + `\nglobalThis.${name}=${name};`,
     sandbox, { filename: rel });
   load('../js/services/employee-repo.js', 'EmployeeRepo');
+  load('../js/schema/roles.js', 'Roles');
   load('../js/services/auth-service.js', 'Auth');
   const A = sandbox.Auth;
+  const R = sandbox.Roles;
+  R.loadFrom(null);                       // seed: a négy kiinduló szint
   A.useBackend(A.createFileBackend({ name: 'proba' }));
-  return { A, fajlok };
+  return { A, R, fajlok };
 }
 
 // A terv 3. fejezetének mátrixa, MÁSODSZOR leírva — szándékosan. Ha a kódban
@@ -109,25 +112,24 @@ const MATRIX = {
 async function main() {
   section('A jogosultsági mátrix — minden szint, minden művelet');
   {
-    const { A } = ujAuth();
-    for (const role of A.ROLES) {
-      // A munkamenetet közvetlenül állítjuk be, PIN nélkül: itt a mátrixot mérjük.
-      A._CAN[role];                                  // létezik-e egyáltalán a sor
-      await test(`a(z) ${role} szintnek van mátrixsora`, async () => {
-        assert(A._CAN[role] instanceof Set, `nincs sor: ${role}`);
+    const { A, R } = ujAuth();
+    const AKTOK = R.ACTIONS.map(a => a.key);
+    for (const role of A.ROLES()) {
+      await test(`a(z) ${role} szintnek van definíciója`, async () => {
+        assert(R.get(role), `nincs szint: ${role}`);
       });
     }
-    await test('a mátrix nem hivatkozik ismeretlen műveletre', async () => {
-      for (const role of A.ROLES) {
-        for (const act of A._CAN[role]) {
-          assert(A.ACTIONS.includes(act), `${role}: ismeretlen művelet „${act}”`);
+    await test('a szintek nem hivatkoznak ismeretlen műveletre', async () => {
+      for (const r of R.all()) {
+        for (const act of r.can) {
+          assert(AKTOK.includes(act), `${r.key}: ismeretlen művelet „${act}”`);
         }
       }
     });
     await test('minden művelet szerepel legalább egy szinten', async () => {
       const all = new Set();
-      for (const role of A.ROLES) for (const a of A._CAN[role]) all.add(a);
-      for (const act of A.ACTIONS) assert(all.has(act), `holt művelet: ${act}`);
+      for (const r of R.all()) for (const a of r.can) all.add(a);
+      for (const act of AKTOK) assert(all.has(act), `holt művelet: ${act}`);
     });
   }
 
@@ -151,14 +153,14 @@ async function main() {
 
   section('Próba mód (adatmappa nélkül)');
   {
-    const { A } = ujAuth();
+    const { A, R } = ujAuth();
     A.setProba(true);
     await test('próba módban nincs bejelentkezett fiók', async () => {
       assertEq(A.currentRole(), null);
       assertEq(A.isProba(), true);
     });
     await test('próba módban a munka megy (nincs mit védeni)', async () => {
-      for (const act of A.ACTIONS.filter(a => a !== 'accounts.manage')) {
+      for (const act of R.ACTIONS.map(x => x.key).filter(a => a !== 'accounts.manage')) {
         assertEq(A.can(act), true, act);
       }
     });
@@ -168,17 +170,17 @@ async function main() {
     });
     await test('a próba mód kikapcsolható, és utána újra minden tilos', async () => {
       A.setProba(false);
-      for (const act of A.ACTIONS) assertEq(A.can(act), false, act);
+      for (const act of R.ACTIONS.map(x => x.key)) assertEq(A.can(act), false, act);
     });
   }
 
   section('Bejelentkezés nélkül minden tilos');
   {
-    const { A } = ujAuth();
+    const { A, R } = ujAuth();
     await A.load();
     await test('nincs munkamenet -> can() mindenre hamis', async () => {
       assertEq(A.currentRole(), null);
-      for (const act of A.ACTIONS) assertEq(A.can(act), false, act);
+      for (const act of R.ACTIONS.map(x => x.key)) assertEq(A.can(act), false, act);
     });
     await test('nincs munkamenet -> csoportírás sem', async () => {
       assertEq(A.canWriteGroup(A.HR_GROUP), false);
@@ -338,6 +340,63 @@ async function main() {
     await test('ügyintéző mindenkit lát, a vezető mezőtől függetlenül', async () => {
       assertEq(A.ownsEmployee(masnak), true);
       assertEq(A.ownsEmployee(senkie), true);
+    });
+  }
+
+  section('Betöltési sorrend és a napló');
+  {
+    // A migrate() a szinteket kérdezi (isKnownRole). Ha a Roles még nincs
+    // betöltve, MINDEN fiók a legszűkebb szintre esne — és a következő mentés ezt
+    // ki is írná. Ezt a hibát egyszer elkövettem; itt maradjon befogva.
+    const fajlok = {};
+    const elso = ujAuth(fajlok);
+    await elso.A.load();
+    await elso.A.create({ name: 'Admin A', role: 'admin', pin: '1111' });
+    await elso.A.create({ name: 'Ugy Ugo', role: 'ugyintezo', pin: '2222' });
+
+    await test('betöltött szintek mellett a fiók szintje megmarad', async () => {
+      const b = ujAuth(fajlok);           // ujAuth már betölti a Roles seedet
+      await b.A.load();
+      assertEq(b.A.byName('Ugy Ugo').role, 'ugyintezo');
+    });
+
+    await test('a jogosultsági napló pufferel a fiókfájl betöltése ELŐTT is', async () => {
+      const b = ujAuth(fajlok);
+      // A háttér be van kötve, de a load() még nem futott: a Roles naplósora
+      // ilyenkor pufferbe megy, és a load() vezeti be.
+      await b.R.setAction('megtekinto', 'docgen.generate', true);
+      await b.A.load();
+      const l = b.A.auditLog();
+      assert(l.some(x => x.action === 'JOG_ADAS'),
+             'a betöltés előtti naplósor elveszett: ' + l.map(x => x.action).join(','));
+    });
+
+    await test('a napló megnevezi, KI adta a jogot', async () => {
+      const b = ujAuth(fajlok);
+      await b.A.load();
+      await b.A.login('Admin A', '1111');
+      await b.R.setAction('megtekinto', 'transfers.use', true);
+      const sor = b.A.auditLog().find(x => x.action === 'JOG_ADAS'
+                                        && x.muvelet === 'transfers.use');
+      assert(sor && sor.user === 'Admin A', JSON.stringify(sor));
+    });
+
+    await test('a fiókműveletek is naplósort kapnak', async () => {
+      const b = ujAuth(fajlok);
+      await b.A.load();
+      await b.A.login('Admin A', '1111');
+      await b.A.create({ name: 'Uj Ubul', role: 'hrbp', pin: '3333' });
+      const sor = b.A.auditLog().find(x => x.action === 'FIOK_UJ' && x.target === 'Uj Ubul');
+      assert(sor && sor.user === 'Admin A' && sor.role === 'hrbp', JSON.stringify(sor));
+    });
+
+    await test('a fiókkezelési jog a SZINTBŐL jön, nem az „admin" névből', async () => {
+      const b = ujAuth(fajlok);
+      await b.A.load();
+      // A HRBP szint megkapja a kulcsjogot -> az ő fiókja is kezelhet fiókot.
+      await b.R.setAction('hrbp', 'accounts.manage', true);
+      await b.A.login('Uj Ubul', '3333');
+      assertEq(b.A.can('accounts.manage'), true);
     });
   }
 

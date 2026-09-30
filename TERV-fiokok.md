@@ -225,3 +225,57 @@ Az eredeti terv nem számolt azzal, hogy adatmappa **nélkül** az app böngész
 - **Az NTFS-mátrix (4. fejezet) átadása az IT-nak.** Ezt kód nem tudja elvégezni.
 - **Az `allapot-kivonat.json`** (3.4): amíg nincs, az Ügyállás fül felületi szűkítés, nem adatvédelem — a `megtekinto` ugyanabból a fájlból olvas.
 - **Kézi végigpróbálás mind a négy szinttel** éles gépen: a Node-tesztek a felületet és a File System Access API-t nem fedik.
+
+## 8. A szintek ADATTÁ tétele (2026-09-30, a felhasználó kritikájából)
+
+> *„A jogosultság adás/vételre nem lehet kitalálni valamilyen központi admin felületet, beállítást? Hardcode-olni ilyen jellegű dolgot soha nem tanácsos."*
+
+**A kritika megalapozott volt, és a projekt saját elvét sértettem meg.** A `case-types.js` fejkommentje szó szerint ezt mondja: *„Ügytípusok – adatként, nem kódban. Ugyanaz az elv, mint a mezősémánál… Ha egy eljárás megváltozik, típust szerkesztünk, nem kódot írunk."* A séma, az ügytípusok, az export profilok és a szótár mind **seed a kódban → élő definíció a `docgen-config.json`-ban → szerkesztés a felületről**. A jogosultsági mátrixot viszont beégettem az `auth-service.js`-be.
+
+### 8.1 Amit átalakítottunk
+
+**Új: `js/schema/roles.js`** — ugyanabban a rétegben, mint a `case-types.js`:
+
+```
+SEED_ROLES (kód, kezdőállapot)
+   → docgen-config.json  "roles" kulcs (élő)
+   → Beállítások → „Szintek és jogosultságok" rács (szint × művelet)
+```
+
+A szint innentől adat: `{ key, label, hint, can: [...], builtin }`. Az `Auth.can()` már csak `Roles.can(currentRole(), action)`-t hív; az `Auth`-ból kikerült a mátrix és a fix szintlista.
+
+**Teljes szintkezelés** (a felhasználó döntése): új szint felvétele, átnevezés, törlés, és a beépítetteknél „Alapra" (visszaállítás a kiadás szerinti jogokra).
+
+### 8.2 A határ: mi NEM lehet adat
+
+**A műveletek listája (`ROLE_ACTIONS`) kódban van.** Minden művelet egy ellenőrzési pont, amit a kód hív (`Auth.can('registry.write')`); egy felületről kitalált új műveletnek **nincs hívási helye**, tehát nem tenne semmit — csak azt a látszatot adná, hogy beállítottunk valamit.
+
+Pontosan úgy, mint a sémánál: a **mezőlista** adat, de egy új mező**típus** kódot igényel. Amit a művelethez adatként adunk, az a **címke és a magyarázat**, hogy a rács olvasható legyen.
+
+### 8.3 Amit a szerkeszthetőség behozott — és a védelem ellene
+
+Egy szerkeszthető mátrixszal az admin **kizárhatja magát**: ha senkinek nincs `accounts.manage` joga, a fiókokhoz és a szintekhez többé senki nem ér hozzá, csak a JSON kézi szerkesztésével. Négy védőkorlát:
+
+1. **a saját szintjéből** nem vehető el a kulcsjog,
+2. az **utolsó birtokostól** sem,
+3. **használatban lévő szint** nem törölhető (előbb át kell rendelni a fiókokat), és a saját szint sem,
+4. hiányzó vagy sérült `roles` config esetén a **seed** a tartalék — **nem** „nincs korlátozás". A hiba iránya inkább zárjon, mint nyisson.
+
+Az `adminCount()` innentől **nem az „admin" nevű szintet** számolja, hanem azt, kinek **van** `accounts.manage` joga — akármi is a szint neve.
+
+### 8.4 Frissítés: mit kap egy új művelet
+
+A felhasználó döntése: **a beépített szintek a seed szerint, a saját szintek nem kapják meg automatikusan.** Ugyanaz az elv, mint a séma `addMissingSeedFields()`-énél.
+
+Ehhez a config tárolja a **`knownActions`** listát: mit ismert mentéskor. Enélkül nem lehetne megkülönböztetni az „új műveletet" a **„tudatosan elvett jogtól"** — és egy frissítés visszaadná, amit az admin szándékosan elvett. Erre külön teszt van.
+
+### 8.5 Tartós napló a jogosultság adásáról és vételéről
+
+A felhasználó döntése: **fájlba, visszakereshetően.** Minden szint- és fiókváltozás sort kap a fiókfájl `audit` tömbjében (mikor, ki, mit, miről mire), és a Beállításokban látszik. A `BevLogger` csak memóriában él — egy jogosultság-változásnál az kevés.
+
+> **Ez nem kriptográfiai bizonyíték:** aki a fájlhoz hozzáfér, átírhatja. Jóhiszemű használat melletti visszakövetésre szolgál, ahogy a `TransferRepo` naplója az átutalásoknál.
+
+### 8.6 Két hibát a tesztek fogtak el
+
+- **A napló `action` mezőjét felülírta a művelet kulcsa.** A `_log('JOG_ADAS', { role, action })` payloadjában az `action` ütközött az esemény típusával, így a naplóból **eltűnt volna, hogy adás vagy vétel történt**. A payload kulcsa `muvelet` lett.
+- **A betöltési sorrend minden fiókot lefokozott volna.** Az `Auth.migrate()` a szinteket kérdezi (`isKnownRole`); ha a `Roles` még nincs betöltve, **minden fiók a legszűkebb szintre esik**, és a következő mentés ezt ki is írja. A `Roles` most a fiókok **előtt** töltődik, a napló pedig pufferel, hogy a sorrend egy naplósort se dönthessen el. Mindkettőre regressziós teszt van.

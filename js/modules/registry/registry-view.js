@@ -73,12 +73,28 @@ const RegistryModule = (() => {
     SchemaStore.useBackend(makeConfigBackend(dirHandle, 'schema'));
     ExportProfiles.useBackend(makeConfigBackend(dirHandle, 'profiles'));
     CaseTypes.useBackend(makeConfigBackend(dirHandle, 'caseTypes'));
+    // A jogosultsági szintek is ADATOK: a közös configban élnek, mint a séma és
+    // az ügytípusok — nem beégetve a kódba (TERV-fiokok.md 3.5).
+    Roles.useBackend(makeConfigBackend(dirHandle, 'roles'));
     EmployeeRepo.useBackend(EmployeeRepo.createFileBackend(dirHandle));
     CaseRepo.useBackend(CaseRepo.createFileBackend(dirHandle));
     TransferRepo.useBackend(TransferRepo.createFileBackend(dirHandle));
     // A fiókok és a szintek a KÖZÖS mappában élnek, külön fájlban — nem
     // localStorage-ban, mert az böngészőprofilonként külön (TERV-fiokok.md 3.2).
     Auth.useBackend(Auth.createFileBackend(dirHandle));
+    // A SZINTEK a fiókok ELŐTT töltődnek: az Auth.migrate() a szinteket kérdezi
+    // meg (`isKnownRole`), és üres Roles mellett minden fiók a legszűkebb szintre
+    // esett volna vissza. A napló pufferelt, tehát a sorrend a naplót nem érinti.
+    try {
+      const ujJogok = await Roles.load();
+      if (ujJogok) {
+        BevLogger.info('JOG', `${ujJogok} szint kapott új műveletet a kiadásból`, '', '');
+      }
+    } catch (e) {
+      BevLogger.error('JOG', 'A szintek nem olvashatók — a kiadás szerinti alap jön',
+                      e.message, '');
+      Roles.loadFrom(null);
+    }
     try {
       await Auth.load();
     } catch (e) {
@@ -127,12 +143,14 @@ const RegistryModule = (() => {
     SchemaStore.useBackend(makeIdbConfigBackend('schema'));
     ExportProfiles.useBackend(makeIdbConfigBackend('profiles'));
     CaseTypes.useBackend(makeIdbConfigBackend('caseTypes'));
+    Roles.useBackend(makeIdbConfigBackend('roles'));
     EmployeeRepo.useBackend(EmployeeRepo.createIdbBackend());
     CaseRepo.useBackend(CaseRepo.createIdbBackend());
     TransferRepo.useBackend(TransferRepo.createIdbBackend());
     await SchemaStore.load();
     await ExportProfiles.load();
     await CaseTypes.load();
+    try { await Roles.load(); } catch { Roles.loadFrom(null); }
     await EmployeeRepo.load();
     await CaseRepo.load();
     await TransferRepo.load();
