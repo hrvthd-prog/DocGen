@@ -68,6 +68,63 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-02 (2.) — Minden indulás próba módban + ügyállapot a dolgozó-listában
+
+**Cél:** (1) a DocGen minden indulásnál próba módba esett, pedig az adatmappa
+be volt állítva; (2) az Ügyek bal sávjában a „nyitott ügy" semmit nem mondott —
+látszódjon az ügy állapota (Beadva, Hiánypótlás, Elbírálás alatt…).
+
+**Változás (`v10.71`):**
+- `js/modules/login.js` — új **engedélykérő kártya** a kapuban (`renderGrant`),
+  és a kapu-döntés külön (`renderGate`), hogy az engedély megadása után
+  magától a fiókválasztásra lépjen. Az engedélykérés MEGELŐZI a
+  `restoreSession()`-t.
+- `js/modules/registry/registry-view.js` — új `pendingDir()` / `probaMode()`,
+  a `grantAccess()` mostantól igaz/hamisat ad; a `restore()` engedélyre váró
+  ága `backendKind`-ot is nullára állít.
+- `js/modules/cases/cases-view.js` — `javaslatMeta()`: nyitott ügynél az ügy
+  ÁLLAPOTA áll a sor jobb szélén, nem a „nyitott ügy" (új `ugyAllapot()`,
+  ugyanaz a `CaseTypes.statusLabel`, amit az ügy sora és az idővonal használ).
+- **Új teszt:** `test/indulas.test.js` (6 eset), felvéve a `run-all.js`-be.
+
+**Miért / döntés:**
+- **A gyökér: a Chromium a mappa-handle-t megtartja, a HOZZÁFÉRÉST nem.**
+  Minden lapbetöltésnél újra kell kérni, és kérni csak felhasználói kattintásra
+  lehet. A `restore()` ezt helyesen kezelte (nem kér engedélyt indulásnál,
+  csak jelez), és a Nyilvántartás oldalsávján ott is volt a „Hozzáférés
+  megadása" gomb — **csak épp a belépő-overlay takarta**. A kapu ilyenkor a
+  „Nincs beállított adatmappa" kártyát adta, amin egyetlen gomb volt:
+  „Folytatás próba módban". Tehát nem logikai hiba volt, hanem egy elérhetetlen
+  gomb — és pont ez vitte a böngészőtárba a munkát (lásd az előző bejegyzést).
+- **Az engedélykérés a `restoreSession()` ELŐTT.** A munkamenet a
+  sessionStorage-ból él, az adatmappa viszont ilyenkor nincs betöltve: a kapun
+  átengedve az app háttér nélkül, néma próba módként indult volna.
+- **Mellékesen javult egy néma hiba:** a „Folytatás próba módban" gomb eddig
+  csak `Auth.setProba(true)`-t hívott. Ha volt mentett (engedélyre váró) mappa,
+  a `restore()` nem állított be hátteret — a próba módba lépő app minden
+  repónál „nincs betöltve" hibát kapott. Ezért van a `probaMode()`. Betöltött
+  fájl-hátteret viszont NEM cserél böngészőtárra: a már látható adatot nem
+  rejtjük el egy üres tár mögé (az lenne a következő adatvesztés).
+- **Az ügylista sora nem változott** — ott már eddig is a státusz és az
+  azonosítók álltak. Csak a dolgozó-lista (`cv-suggest`) mondta a semmitmondó
+  „nyitott ügy"-et.
+
+**Tesztek:** `node test/run-all.js` — minden készlet zöld (az új `indulas`
+6/6). A natív engedélykérő ablakot és az overlay-t automata teszt nem fedi:
+azt a `pendingDir()` / `grantAccess()` / `probaMode()` szinten mérjük.
+
+**Nyitott / következő:**
+- **Böngészőben ellenőrizni:** indulás → „Az adatmappa hozzáférésre vár" kártya
+  → egy kattintás → fiókválasztás. Ha a kártya helyett „Nincs beállított
+  adatmappa" jön, akkor a handle tényleg nincs mentve (pl. a `<fiók>_data_dir`
+  kulcson ragadt) — akkor egyszer újra ki kell választani a mappát.
+- A dolgozó-lista állapota csak a nyitott **meghosszabbítási** ügyet mutatja
+  (`nyitottHosszabbitas`), mert ehhez van kötve a sor kattintása is (a meglévő
+  ügy nyílik meg, nem új). Ha más típusú nyitott ügynél is kell az állapot, az
+  a kattintás jelentését is érinti — egyeztetésre vár.
+- „Iktatva" nem önálló státusz: az iktatószám mező. Az ügy SORÁBAN látszik
+  (`ikt. …`), a dolgozó-listában nem — ha oda is kell jelzés, az külön lépés.
+
 ## 2026-10-02 — Adatvesztés: a mappaválasztás csak a dolgozókat vitte át
 
 **Cél:** a felhasználónak (másik gépen) elveszett egy csomó ügye. Ok:

@@ -473,10 +473,24 @@ const CasesModule = (() => {
       </div>`;
   }
 
-  /** A soron jobbra álló szöveg: a hátralévő napok, vagy ami helyettük áll. */
+  /**
+   * A soron jobbra álló szöveg: a hátralévő napok, vagy ami helyettük áll.
+   *
+   * Nyitott ügynél az ÁLLAPOT áll itt („Beadva", „Hiánypótlás", „Elbírálás
+   * alatt”), nem a semmitmondó „nyitott ügy": ebben a listában épp az a kérdés,
+   * hol tart az ügy. A címke az ügytípus sajátja (ugyanaz, amit az ügy sora és
+   * az idővonal mutat), státusz nélküli régi ügynél a típus első állapota.
+   */
   function javaslatMeta(j) {
-    if (j.daysLeft == null) return j.nyitottUgy ? 'nyitott ügy' : 'nincs lejárat';
+    if (j.nyitottUgy) return ugyAllapot(j.nyitottUgy);
+    if (j.daysLeft == null) return 'nincs lejárat';
     return j.daysLeft < 0 ? `${-j.daysLeft} napja lejárt` : `${j.daysLeft} nap`;
+  }
+
+  function ugyAllapot(c) {
+    try {
+      return CaseTypes.statusLabel(c.type, c.status || CaseTypes.firstStatus(c.type));
+    } catch { return 'nyitott ügy'; }
   }
 
   // ── Törlés ─────────────────────────────────────────────────────────────────

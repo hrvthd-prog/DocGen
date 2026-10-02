@@ -28,6 +28,8 @@ const RegistryModule = (() => {
     selectedIds:     [],        // tömeges műveletekhez kijelölt rekordok
     // Sérült adatfájl esetén ide kerül a hiba – ilyenkor NEM indulunk üresen
     corruptError:    null,
+    // Van mentett adatmappa, de a hozzáférés engedélyre vár (lásd restore())
+    engedelyKell:    false,
   };
 
   // ── Indítás ────────────────────────────────────────────────────────────────
@@ -56,8 +58,12 @@ const RegistryModule = (() => {
       return;
     }
     if (handle) {
-      // Van mentett mappa, de engedélyre vár – egy kattintással feloldható
-      state.dirHandle = handle;
+      // Van mentett mappa, de engedélyre vár – egy kattintással feloldható.
+      // A gombot a BELÉPŐKÉPERNYŐ is kiteszi (login.js): ez a sáv az overlay
+      // alatt van, oda indulásnál nem lehet eljutni.
+      state.dirHandle    = handle;
+      state.backendKind  = null;   // hozzáférés nélkül nincs háttér sem
+      state.engedelyKell = true;
       renderSidebar();
       return;
     }
@@ -68,8 +74,9 @@ const RegistryModule = (() => {
   }
 
   async function useFileBackend(dirHandle) {
-    state.dirHandle   = dirHandle;
-    state.backendKind = 'file';
+    state.dirHandle    = dirHandle;
+    state.backendKind  = 'file';
+    state.engedelyKell = false;
     const h = hatterek(dirHandle);
     SchemaStore.useBackend(h.schema);
     ExportProfiles.useBackend(h.profiles);
@@ -921,12 +928,37 @@ const RegistryModule = (() => {
     });
   }
 
+  /** Igaz, ha a hozzáférés megvan (és az adatmappa be is töltött). A
+   *  belépőképernyő ebből tudja, hogy újrarajzolhatja a kaput. */
   async function grantAccess() {
-    if (!state.dirHandle) return;
+    if (!state.dirHandle) return false;
     const ok = await FsService.verifyPermission(state.dirHandle, true);
     if (ok) await useFileBackend(state.dirHandle);
     else toast('A hozzáférés nem lett megadva.', 'error');
+    return ok;
   }
 
-  return { init, _hatterek: hatterek, _atkoltoztet: atkoltoztet };
+  /**
+   * Próba mód a belépőképernyőről: a böngészőtárral indulunk.
+   *
+   * A tárolók háttere eddig ezen az úton BEÁLLÍTATLAN maradt (a `restore()`
+   * csak akkor hívott `useIdbBackend`-et, ha mentett mappa sem volt) — a próba
+   * módba lépő app minden repónál „nincs betöltve" hibát kapott.
+   *
+   * Ha már fájl-hátteren vagyunk (pl. csak a fiókfájl nem olvasható), azt NEM
+   * cseréljük el: a betöltött adatot nem rejtjük egy üres böngészőtár mögé.
+   */
+  async function probaMode() {
+    Auth.setProba(true);
+    if (state.backendKind !== 'file') await useIdbBackend();
+  }
+
+  return {
+    init,
+    /** A mentett adatmappa, ami engedélyre vár – egyébként null. */
+    pendingDir: () => (state.engedelyKell ? state.dirHandle : null),
+    grantAccess,
+    probaMode,
+    _hatterek: hatterek, _atkoltoztet: atkoltoztet,
+  };
 })();

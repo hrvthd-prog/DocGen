@@ -71,14 +71,84 @@ const LoginModule = (() => {
     // Próba mód: nincs adatmappa, tehát nincs fiókfájl — nincs mit kérdezni.
     if (Auth.isProba()) { hide(); return Promise.resolve('proba'); }
 
-    // Lapújratöltés ugyanabban a munkamenetben: nem kérdezünk újra.
-    if (Auth.restoreSession()) { hide(); return Promise.resolve('session'); }
+    // Az engedélykérés MEGELŐZI a munkamenetet: a mentett session a
+    // sessionStorage-ból él, az adatmappa viszont ilyenkor nincs betöltve —
+    // átengedve az app adat nélkül, néma próba módként indulna.
+    if (!pendingDir() && Auth.restoreSession()) {
+      // Lapújratöltés ugyanabban a munkamenetben: nem kérdezünk újra.
+      hide();
+      return Promise.resolve('session');
+    }
 
     return new Promise(resolve => {
       resolveGate = resolve;
-      if (!Auth.loaded()) { renderNoFolder(); return; }
-      if (Auth.isEmpty()) { renderFirstRun(); return; }
-      renderAccounts();
+      renderGate();
+    });
+  }
+
+  /** Melyik kártya jön. Az engedélykérés után újra lefut: akkor már a
+   *  fiókválasztásnál tartunk. */
+  function renderGate() {
+    const varakozo = pendingDir();
+    if (varakozo) { renderGrant(varakozo); return; }
+    if (!Auth.loaded()) { renderNoFolder(); return; }
+    if (Auth.isEmpty()) { renderFirstRun(); return; }
+    renderAccounts();
+  }
+
+  function pendingDir() {
+    try { return RegistryModule.pendingDir(); } catch { return null; }
+  }
+
+  // ── Mentett adatmappa, ami engedélyre vár ─────────────────────────────────
+  /**
+   * A Chromium a mappa-handle-t megtartja, a HOZZÁFÉRÉST viszont nem: minden
+   * indulásnál újra kell kérni, és kérni csak felhasználói kattintásra lehet.
+   * A Nyilvántartás oldalsávján volt ilyen gomb, csak épp ez az overlay takarja
+   * — így az app minden indulásnál próba módba esett, pedig a mappa meg volt
+   * adva. A gomb tehát ide kell, a kapuba.
+   */
+  function renderGrant(dir) {
+    el.innerHTML = shell(`
+      <div class="login-card-heading">Az adatmappa hozzáférésre vár</div>
+      <p class="login-note">
+        Beállított adatmappa: <b>${escHtml(dir.name)}</b>. A böngésző a
+        hozzáférést minden indulásnál újra kéri — egy kattintás, és a közös
+        adattal dolgozol tovább.
+      </p>
+      <div class="login-pin-row">
+        <button class="btn btn-primary" id="lg-grant" style="flex:1">
+          Hozzáférés megadása
+        </button>
+      </div>
+      <div class="login-error" id="lg-err"></div>
+      <p class="login-note">
+        Próba módban is folytathatod, de akkor a munka <b>nem a közös adatra</b>
+        megy, és nincs jogosultsági szint.
+      </p>
+      <div class="login-pin-row">
+        <button class="btn btn-ghost" id="lg-proba" style="flex:1">
+          Folytatás próba módban
+        </button>
+      </div>`);
+
+    q('#lg-grant').addEventListener('click', async () => {
+      const gomb = q('#lg-grant');
+      gomb.disabled = true;
+      let ok = false;
+      try { ok = await RegistryModule.grantAccess(); }
+      catch (e) { BevLogger.error('AUTH', 'Az engedélykérés megszakadt', e.message, ''); }
+      gomb.disabled = false;
+      if (!ok) {
+        q('#lg-err').textContent = 'A hozzáférés nem lett megadva.';
+        return;
+      }
+      renderGate();
+    });
+    q('#lg-proba').addEventListener('click', async () => {
+      await RegistryModule.probaMode();
+      BevLogger.warn('AUTH', 'Próba mód: az adatmappa engedélye nélkül', dir.name, '');
+      done('proba');
     });
   }
 
@@ -107,8 +177,8 @@ const LoginModule = (() => {
           Folytatás próba módban
         </button>
       </div>`);
-    q('#lg-proba').addEventListener('click', () => {
-      Auth.setProba(true);
+    q('#lg-proba').addEventListener('click', async () => {
+      await RegistryModule.probaMode();
       BevLogger.warn('AUTH', 'Próba mód: adatmappa nélküli indulás', '', '');
       done('proba');
     });
