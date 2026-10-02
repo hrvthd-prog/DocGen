@@ -163,7 +163,14 @@ const CasesModule = (() => {
   function szurtLista() {
     let lista = state.kereses ? CaseRepo.search(state.kereses) : CaseRepo.all();
 
-    if (state.szuro !== 'mind') {
+    // A `st:<kulcs>` alakú szűrő az áttekintő állapot-csempéiről jön: nyitott
+    // ügyek egyetlen szakaszban. Ugyanaz az egy szűrő-állapot vezérli, mint a
+    // sürgősségi gombokat — két párhuzamos szűrődimenzió csak zavarna.
+    if (state.szuro.startsWith('st:')) {
+      const kulcs = state.szuro.slice(3);
+      lista = lista.filter(c => CaseRepo.urgency(c) !== 'lezart' &&
+                                (c.status || 'elokeszites') === kulcs);
+    } else if (state.szuro !== 'mind') {
       lista = lista.filter(c => {
         const s = CaseRepo.urgency(c);
         if (state.szuro === 'nyitott') return s !== 'lezart';
@@ -189,6 +196,40 @@ const CasesModule = (() => {
     });
   }
 
+  /**
+   * Az ügy azonosítói a sorban: EH szám és iktatószám.
+   *
+   * „Nyitott" önmagában nem mond semmit — az számít, hogy beadtuk-e már, és
+   * ha igen, megjött-e hozzá a hatósági azonosító. Előkészítés alatt (és
+   * lezárt ügynél) a hiány nem hiány, ott nem jelzünk.
+   */
+  function azonositoHtml(c) {
+    const reszek = [];
+    if (c.ehNumber)   reszek.push(`EH ${escHtml(c.ehNumber)}`);
+    if (c.fileNumber) reszek.push(`ikt. ${escHtml(c.fileNumber)}`);
+    if (reszek.length) return `<span class="cv-row__ids">${reszek.join(' · ')}</span>`;
+
+    const beadva = !c.closedAt && (c.status || 'elokeszites') !== 'elokeszites';
+    return beadva ? '<span class="cv-row__ids is-missing">azonosító nélkül</span>' : '';
+  }
+
+  /**
+   * Állapot-szűrők: csak azok a szakaszok, amikben tényleg van nyitott ügy.
+   * A bontás a dashboardból jön, hogy a csempe és a chip ugyanazt számolja.
+   */
+  function allapotSzurokHtml() {
+    let bontas = [];
+    try { bontas = CasesDashboard.allapotBontas(); } catch { return ''; }
+    if (bontas.length < 2) return '';
+    return `
+      <div class="cv-filters cv-filters--allapot">
+        ${bontas.map(a => `
+          <button class="cv-filter ${state.szuro === 'st:' + a.key ? 'is-active' : ''}"
+                  data-filter="st:${escHtml(a.key)}"
+                  title="${escHtml(a.label)} — ${a.db} nyitott ügy">${escHtml(a.label)} ${a.db}</button>`).join('')}
+      </div>`;
+  }
+
   function sorHtml(c) {
     const s = CaseRepo.urgency(c);
     const kivalasztva = state.kivalasztott === c.id;
@@ -201,9 +242,42 @@ const CasesModule = (() => {
         </span>
         <span class="cv-row__meta">
           <span class="cv-row__status">${escHtml(CaseTypes.statusLabel(c.type, c.status))}</span>
+          ${azonositoHtml(c)}
           <span class="cv-row__due">${escHtml(CaseRepo.deadlineText(c))}</span>
         </span>
       </button>`;
+  }
+
+  /**
+   * Ügy- és dolgozói kimutatás xlsx-be. A gomb a kiírás idejére letilt: a
+   * munkafüzet felépítése pár száz ügynél is érezhető, és a dupla kattintás
+   * két letöltést indítana.
+   */
+  async function exportXlsx(gomb) {
+    const eredeti = gomb.textContent;
+    gomb.disabled = true;
+    gomb.textContent = 'Mentés…';
+    try {
+      const { buffer, ugyekSzama, dolgozokSzama } = await CaseXlsx.toBuffer();
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      if (typeof saveAs === 'function') saveAs(blob, CaseXlsx.suggestFilename());
+      else {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = CaseXlsx.suggestFilename();
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      }
+      toast(`${ugyekSzama} ügy és ${dolgozokSzama} dolgozó mentve`, 'success');
+    } catch (e) {
+      BevLogger.error('CASE_XLSX', 'Ügykimutatás mentése sikertelen', e.message, '');
+      toast('A mentés nem sikerült: ' + e.message, 'error');
+    } finally {
+      gomb.disabled = false;
+      gomb.textContent = eredeti;
+    }
   }
 
   // ── Megjelenítés ───────────────────────────────────────────────────────────
@@ -225,8 +299,13 @@ const CasesModule = (() => {
                 data-nezet="ugyek" type="button">Ügylista</button>
         <button class="cv-viewbtn ${state.nezet === 'atutalasok' ? 'is-active' : ''}"
                 data-nezet="atutalasok" type="button">Átutalások${atutalasJelzo()}</button>
+        <button class="cv-export" id="cv-export" type="button"
+                title="Ügyszámok, iktatószámok és a dolgozói adatok mentése xlsx-be">Mentés xlsx-be</button>
       </div>
       <div class="cv-view" id="cv-view"></div>`;
+
+    const exportGomb = container.querySelector('#cv-export');
+    if (exportGomb) exportGomb.addEventListener('click', () => exportXlsx(exportGomb));
 
     container.querySelectorAll('.cv-viewbtn').forEach(gomb => {
       gomb.addEventListener('click', () => {
@@ -254,6 +333,7 @@ const CasesModule = (() => {
                 <button class="cv-filter ${state.szuro === f.key ? 'is-active' : ''}"
                         data-filter="${f.key}">${f.label}</button>`).join('')}
             </div>
+            ${allapotSzurokHtml()}
           </div>
           ${felvetes}
           <div class="cv-list">

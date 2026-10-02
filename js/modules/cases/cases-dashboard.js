@@ -38,6 +38,59 @@ const CasesDashboard = (() => {
    */
   const SURGETO_FAZIS = ['siess', 'lekesve'];
 
+  /**
+   * A nyitott ügyek állapot szerinti bontásának címkéi.
+   *
+   * Miért saját címke, és nem `CaseTypes.statusLabel`? Ugyanaz a státuszkulcs
+   * ügytípusonként más szót kap („Beadva" kérelemnél, „Benyújtva"
+   * bejelentésnél), a bontás viszont típusokon ÁT csoportosít. Egy csoportnak
+   * egy neve lehet — ezért a közös szó. Ismeretlen kulcsnál marad a típus
+   * saját címkéje.
+   */
+  const ALLAPOT_CIMKE = {
+    elokeszites: 'Előkészítés',
+    beadva:      'Beadva',
+    hianypotlas: 'Hiánypótlás',
+    elbiralas:   'Elbírálás alatt',
+  };
+  const ALLAPOT_SORREND = Object.keys(ALLAPOT_CIMKE);
+
+  /**
+   * Nyitott ügyek állapot szerint, és azon belül: hol hiányzik még az
+   * azonosító.
+   *
+   * „Nyitott" önmagában semmit nem mond arról, hogy hol tart az ügy. Ez a
+   * bontás az, ami megmondja: még nálunk van, vagy már a hatóságnál — és ha
+   * már beadtuk, megjött-e az iktatószám. Előkészítés alatt az azonosító
+   * hiánya nem hiány, ott még nem is lehetne meg; ezért ott nem számoljuk.
+   */
+  function allapotBontas(ugyek = null) {
+    const lista = ugyek || CaseRepo.openCases();
+    const map = new Map();
+    for (const c of lista) {
+      const kulcs = c.status || 'elokeszites';
+      if (!map.has(kulcs)) {
+        map.set(kulcs, {
+          key: kulcs,
+          label: ALLAPOT_CIMKE[kulcs] || CaseTypes.statusLabel(c.type, kulcs) || kulcs,
+          db: 0, iktatoNelkul: 0, ehNelkul: 0,
+        });
+      }
+      const a = map.get(kulcs);
+      a.db++;
+      if (kulcs !== 'elokeszites') {
+        if (!c.fileNumber) a.iktatoNelkul++;
+        if (!c.ehNumber)   a.ehNelkul++;
+      }
+    }
+    const rang = k => {
+      const i = ALLAPOT_SORREND.indexOf(k);
+      return i === -1 ? ALLAPOT_SORREND.length : i;
+    };
+    return [...map.values()].sort((a, b) =>
+      rang(a.key) - rang(b.key) || a.label.localeCompare(b.label, 'hu'));
+  }
+
   let ctx = null;
   function init(context) { ctx = context; }
 
@@ -86,6 +139,7 @@ const CasesDashboard = (() => {
 
     return {
       szamok,
+      allapotok: allapotBontas(ugyek),
       hianyzo,
       ablak,
       surgetoAblak: SURGETO_FAZIS.flatMap(f => ablak[f]),
@@ -120,6 +174,7 @@ const CasesDashboard = (() => {
     return `
       <div class="dash">
         ${szamlalokHtml(d)}
+        ${allapotHtml(d)}
         ${d.vanTeendo ? '' : rendbenHtml(d)}
         ${hianyzoHtml(d)}
         ${ablakHtml(d)}
@@ -156,6 +211,31 @@ const CasesDashboard = (() => {
         ${csempe('surgos',  'sürgős (14 nap)', d.szamok.surgos,  'amber')}
         ${csempe('nyitott', 'nyitott ügy',     d.szamok.nyitott, 'neutral')}
       </div>`;
+  }
+
+  /**
+   * Nyitott ügyek állapot szerint. A csempe a listát szűri (`st:<kulcs>`),
+   * az alatta álló sor pedig azt mondja meg, mi hiányzik még ahhoz, hogy az
+   * ügy azonosítható legyen a hatóságnál.
+   */
+  function allapotHtml(d) {
+    if (!d.allapotok.length) return '';
+
+    const csempe = a => `
+      <button class="dash-stat dash-stat--slim" data-filter="st:${escHtml(a.key)}" type="button"
+              title="Szűrés a listán: ${escHtml(a.label)}">
+        <span class="dash-stat__num">${a.db}</span>
+        <span class="dash-stat__label">${escHtml(a.label)}</span>
+        ${a.iktatoNelkul || a.ehNelkul ? `<span class="dash-stat__hint">${
+          [a.ehNelkul ? `${a.ehNelkul} EH szám nélkül` : '',
+           a.iktatoNelkul ? `${a.iktatoNelkul} iktatószám nélkül` : ''
+          ].filter(Boolean).join(' · ')}</span>` : ''}
+      </button>`;
+
+    return blokk(
+      'Nyitott ügyek állapota',
+      'Hol tart az ügy, és megjött-e már hozzá az azonosító.',
+      `<div class="dash-stats dash-stats--sub">${d.allapotok.map(csempe).join('')}</div>`);
   }
 
   function blokk(cim, leiras, tartalom, stilus = '') {
@@ -235,5 +315,5 @@ const CasesDashboard = (() => {
       </div>`);
   }
 
-  return { init, render, adatok, HORIZONT };
+  return { init, render, adatok, allapotBontas, HORIZONT };
 })();

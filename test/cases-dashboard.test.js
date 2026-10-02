@@ -174,6 +174,67 @@ function d(extra = {}) { return CasesDashboard.adatok(Object.assign({ ma: MA }, 
     assertEq(a.hataridoNelkul.length, 0, 'lezárt ügy is teendőként jelent meg');
   });
 
+  section('Nyitott ügyek állapot szerint');
+
+  await test('Az állapot-bontás ügytípusokon ÁT csoportosít, közös címkével', async () => {
+    await tisztaAllapot();
+    const e = ujDolgozo();
+    // Kérelem és bejelentés: a 'beadva' kulcs címkéje típusonként más
+    // („Beadva" / „Benyújtva"), a bontásnak mégis EGY sorba kell tennie.
+    const a1 = CaseRepo.create({ employeeId: e.id, type: 'rp_hosszabbitas' });
+    const a2 = CaseRepo.create({ employeeId: e.id, type: 'szallashely_valtozas' });
+    CaseRepo.setStatus(a1.id, 'beadva');
+    CaseRepo.setStatus(a2.id, 'beadva');
+    const b = d().allapotok;
+    assertEq(b.length, 1, JSON.stringify(b.map(x => [x.key, x.db])));
+    assertEq(b[0].key, 'beadva');
+    assertEq(b[0].label, 'Beadva');
+    assertEq(b[0].db, 2);
+  });
+
+  await test('Előkészítés alatt az azonosító hiánya nem hiány', async () => {
+    await tisztaAllapot();
+    const e = ujDolgozo();
+    CaseRepo.create({ employeeId: e.id, type: 'rp_hosszabbitas' });
+    const b = d().allapotok;
+    assertEq(b[0].key, 'elokeszites');
+    assertEq(b[0].iktatoNelkul, 0, 'előkészítés alatt is hiányt jelzett');
+    assertEq(b[0].ehNelkul, 0);
+  });
+
+  await test('Beadás után viszont számolja, mi hiányzik', async () => {
+    await tisztaAllapot();
+    const e = ujDolgozo();
+    const van = CaseRepo.create({ employeeId: e.id, type: 'rp_hosszabbitas' });
+    const nincs = CaseRepo.create({ employeeId: e.id, type: 'rp_hosszabbitas' });
+    CaseRepo.update(van.id, { ehNumber: 'EH-1', fileNumber: '106-1-1/2026' });
+    CaseRepo.setStatus(van.id, 'beadva');
+    CaseRepo.setStatus(nincs.id, 'beadva');
+    const b = d().allapotok;
+    assertEq(b.length, 1);
+    assertEq(b[0].db, 2);
+    assertEq(b[0].iktatoNelkul, 1, 'nem pont egy ügynél hiányzik az iktatószám');
+    assertEq(b[0].ehNelkul, 1);
+  });
+
+  await test('A sorrend a folyamat sorrendje, nem a véletlené', async () => {
+    await tisztaAllapot();
+    const e = ujDolgozo();
+    const k = CaseRepo.create({ employeeId: e.id, type: 'rp_hosszabbitas' });
+    CaseRepo.setStatus(k.id, 'elbiralas');
+    CaseRepo.create({ employeeId: e.id, type: 'rp_hosszabbitas' });
+    assertEq(d().allapotok.map(a => a.key).join(','), 'elokeszites,elbiralas');
+  });
+
+  await test('A lezárt ügy nincs benne a bontásban', async () => {
+    await tisztaAllapot();
+    const e = ujDolgozo();
+    const c = CaseRepo.create({ employeeId: e.id, type: 'szallashely_valtozas' });
+    CaseRepo.setStatus(c.id, CaseTypes.statusesOf('szallashely_valtozas').slice(-1)[0].key,
+      { outcome: 'megadva' });
+    assertEq(d().allapotok.length, 0, 'a lezárt ügy is bekerült a nyitottak bontásába');
+  });
+
   section('Benyújtási ablak');
 
   await test('A nyitott ablakban álló ügy „beadható"-ként számít', async () => {
