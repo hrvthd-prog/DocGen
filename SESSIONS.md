@@ -68,6 +68,84 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-01 — PDF Műhely v1.14: egyszerűbb felület, arckép-körülvágás, emlékezet
+
+**Cél (másik repó: `../pdf-muhely`):** a felület legyen hatékonyabb, kelljen egy
+minimális képszerkesztő az arcképek körülvágásához, jegyezze meg az utoljára
+használt útvonalakat, az Összeállító dolgozó-legördülője kiválasztás után is
+adja mind a nevet, és a fotó nélküli formanyomtatvány NE a feltölthetőbe menjen.
+
+**Változás (`pdf-muhely` v1.14):**
+- `attekinto-szabalyok.json` + `load_settings`: a hiányzó `arckep` kulcs a
+  beépített alapértelmezésből pótlódik (id szerint).
+- Fülszerkezet: `1 · Összeállító`, `2 · Iktató`, `3 · Áttekintő` + `Eszközök`
+  alfülekkel; `App.show()`, `active_tab()` lemegy az alfülre.
+- `CropDialog` + `open_image_pdf(path, crop)` — a vágás a kép egylapos PDF-jének
+  cropboxa, a fájl nem módosul.
+- `emlekezet.json` (`recall`/`remember`): munkamappa, mellékletek, doktípus.
+- `_fill_who`: feloldott névnél mind a dolgozói mappa a legördülőben.
+
+**Miért / döntés:** a célmappa-hiba nem a logikában volt, hanem a szállított
+szabályfájlban (még az `arckep` mező előtt készült) — a GUI-teszt ideiglenes
+mappában, szabályfájl nélkül fut, ezért a jó alapértelmezést látta. Tanulság:
+új `Rule`-mezőnél a `get(..., False)` néma adatvesztés a már kint lévő
+fájlokban. Részletek: `pdf-muhely/kepek-pdf-terv.md` 13., `szetvago-terv.md` 16.
+
+**Tesztek:** önteszt 116 → **124**, GUI 71 → **79**, verzió/frissítő/klón-próba
+zöld (`python test/run-all.py`, `python tools/klon-proba.py`).
+
+**Nyitott / következő:** a DocGen-oldalt ez a session nem érintette.
+
+## 2026-10-01 — Ügyállapot láthatóvá tétele + xlsx-kimutatás
+
+**Cél:** a „nyitott" önmagában nem mond semmit — látszódjon, hogy be van-e
+adva, megvan-e már az EH szám / iktatószám. Áttekintőben is, ügylistában is.
+Plusz: külön modul, ami az ügyszámokat, iktatószámokat és a dolgozói adatokat
+xlsx-be menti.
+
+**Változás:**
+- `cases-dashboard.js`: `allapotBontas()` — nyitott ügyek állapot szerint,
+  és azon belül hány hiányol EH számot / iktatószámot. Új blokk az
+  áttekintőben („Nyitott ügyek állapota"), a csempe a listát szűri.
+- `cases-view.js`: `st:<kulcs>` alakú szűrő (ugyanaz az egy `state.szuro`,
+  nem új dimenzió), állapot-chipek a szűrősor alatt, a sorban az
+  azonosítók (`EH … · ikt. …`), beadott ügynél hiány esetén
+  „azonosító nélkül". Új „Mentés xlsx-be" gomb a nézetváltó sávban.
+- **Új:** `js/services/case-xlsx.js` — két lapos munkafüzet („Ügyek",
+  „Dolgozók"), minden cella szöveg-formátummal.
+- CSS: `cases.css` (chipek, sor-azonosítók, `dash-stats--sub`),
+  `transfers.css` (`.cv-export`).
+- **Új teszt:** `test/case-xlsx.test.js` (7 eset), bővült
+  `test/cases-dashboard.test.js` (5 új eset).
+
+**Miért / döntés:**
+- **A bontás a státusz KULCSA szerint csoportosít, saját címkével.** Ugyanaz a
+  kulcs ügytípusonként más szót kap („Beadva" kérelemnél, „Benyújtva"
+  bejelentésnél); egy csoportnak egy neve lehet, ezért van az
+  `ALLAPOT_CIMKE` térkép. Ismeretlen kulcsnál marad a típus saját címkéje.
+- **Előkészítés alatt az azonosító hiánya nem hiány** — ott még nem is
+  lehetne meg. Csak beadás után számolunk hiányt, különben minden új ügy
+  azonnal „hiányosnak" látszana, és a jelzés elértéktelenedne.
+- **Egy szűrődimenzió.** Az állapot-szűrő ugyanabba a `state.szuro`-ba ír
+  (`st:` előtaggal), mint a sürgősségi gombok. Két párhuzamos szűrő
+  kombinációit kellene magyarázni, és üres listákat termelne.
+- **A kimutatás NEM az adatbekérő (`XlsxWrite`).** Az adatbekérő kitöltendő
+  űrlap, amit vissza is olvasunk; ez pillanatkép, amit kézzel néznek. Két cél,
+  két alak.
+- **Cellánkénti írás `addRow([...])` helyett.** Az ExcelJS `instanceof Array`-jel
+  ismeri fel a tömböt, ami a Node-tesztek vm-sandboxában (más realm) hamis —
+  ott az `addRow` néma, üres sorokat hagyott. Ez derült ki a tesztírás közben,
+  és pontosan ezért íródott a teszt.
+- **Minden cella `numFmt: '@'`.** A `106-1-1234/5/2026-H` és a `20260918`
+  alakú azonosítót az Excel szívesen alakítaná számmá vagy dátummá — a nyers
+  alak az egyetlen, ami hatóság előtt használható.
+
+**Tesztek:** `node test/run-all.js` — minden készlet sikeres.
+
+**Nyitott / következő:** az xlsx a böngésző letöltési mappájába megy
+(`saveAs`), nem az `fs-service` adatmappájába — ha kell, az egy külön lépés.
+A Dolgozók lap az aktív export-profil oszlopait veszi; profilonként más lesz.
+
 ## 2026-09-30 (5.) — Az implementáció lezárása: sablon-láthatóság ki, állapot-kivonat, kimenet-kapu
 
 **Cél:** a felhasználó megkérdezte, mi maradt hátra. Végigellenőriztem a kódot, három tételt találtam — mind megvan.

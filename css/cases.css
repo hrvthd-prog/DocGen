@@ -195,6 +195,10 @@
   border: 1px solid var(--c-border); background: transparent; color: var(--c-muted);
 }
 .cv-filter.is-active { background: var(--c-teal); border-color: var(--c-teal); color: #fff; }
+/* Az állapot-szűrők külön sorban, halványabban: a sürgősség az elsődleges
+   dimenzió, az állapot a másodlagos. Pontozott keret jelzi, hogy más fajta. */
+.cv-filters--allapot { margin-top: 5px; }
+.cv-filters--allapot .cv-filter { border-style: dashed; font-size: 10.5px; }
 
 .cv-list { flex: 1; overflow-y: auto; min-height: 0; }
 .cv-empty { padding: 20px 14px; font-size: 12px; color: var(--c-muted); font-style: italic; }
@@ -226,6 +230,9 @@
    ettől szűnik meg. A pötty szélessége miatt a behúzás 15px. */
 .cv-row__meta { flex: 1 1 100%; text-align: left; padding-left: 15px; margin-top: 2px; }
 .cv-row__status { display: inline; font-size: 11px; color: var(--c-text); }
+.cv-row__ids    { display: inline; font-size: 10px; color: var(--c-muted); overflow-wrap: anywhere; }
+.cv-row__ids::before { content: ' · '; color: var(--c-border); }
+.cv-row__ids.is-missing { color: var(--c-amber); font-style: italic; }
 .cv-row__due    { display: inline; font-size: 10px; color: var(--c-muted); overflow-wrap: anywhere; }
 .cv-row__due::before { content: ' · '; color: var(--c-border); }
 .cv-row--lejart .cv-row__due { color: var(--c-red); font-weight: 600; }
@@ -451,6 +458,13 @@
 .dash-stat--amber.is-zero { border-left-color: var(--c-border); }
 /* A nulla nem hír: halványan marad, hogy a nem-nulla ugorjon ki. */
 .dash-stat.is-zero .dash-stat__num { color: var(--c-muted); font-weight: 600; }
+
+/* Az állapot-bontás csempéi: ugyanaz a forma, kisebb súllyal — ez nem a
+   sürgősség, hanem a hol-tart kérdése. */
+.dash-stats--sub { margin-bottom: 0; }
+.dash-stats--sub .dash-stat { flex: 0 1 150px; padding: 8px 10px; border-left-width: 1px; }
+.dash-stats--sub .dash-stat__num { font-size: 17px; }
+.dash-stat__hint { font-size: 10px; color: var(--c-amber); margin-top: 2px; }
 
 /* ── „Nincs teendő" ──────────────────────────────────────────────────────── */
 
