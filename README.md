@@ -426,6 +426,12 @@ dolgozik, nincs közös adat és nincs szint sem. Ilyenkor a fejléc alatt végi
 sáv jelzi, és a generált iratok bélyege **`proba`** jelzést kap, hogy egy
 próbafájl ne keveredjen az élessel.
 
+Ha utána **üres** adatmappát választasz, a böngészőtár teljes tartalma átkerül
+— dolgozók, ügyek, átutalások és beállítások, az azonosítójukkal együtt. Nem
+üres mappába semmi nem íródik: két nyilvántartást az import fésül össze.
+A v10.70 előtti verziók csak a dolgozókat vitték át; az ott maradt ügyeket a
+`tools/ugyek-bongeszotarbol.js` hozza át (használat a fájl elején).
+
 ## Azonosítók
 
 A SAP-szám minden új tartózkodási engedéllyel változik, és a régit nem adják ki

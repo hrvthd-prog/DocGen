@@ -49,7 +49,7 @@ const RegistryModule = (() => {
    */
   async function restore() {
     let handle = null;
-    try { handle = await FsService.loadHandle(DATA_DIR_KEY); } catch {}
+    try { handle = await FsService.loadMachineHandle(DATA_DIR_KEY); } catch {}
 
     if (handle && await FsService.queryPermissionOnly(handle, true)) {
       await useFileBackend(handle);
@@ -70,15 +70,16 @@ const RegistryModule = (() => {
   async function useFileBackend(dirHandle) {
     state.dirHandle   = dirHandle;
     state.backendKind = 'file';
-    SchemaStore.useBackend(makeConfigBackend(dirHandle, 'schema'));
-    ExportProfiles.useBackend(makeConfigBackend(dirHandle, 'profiles'));
-    CaseTypes.useBackend(makeConfigBackend(dirHandle, 'caseTypes'));
+    const h = hatterek(dirHandle);
+    SchemaStore.useBackend(h.schema);
+    ExportProfiles.useBackend(h.profiles);
+    CaseTypes.useBackend(h.caseTypes);
     // A jogosultsági szintek is ADATOK: a közös configban élnek, mint a séma és
     // az ügytípusok — nem beégetve a kódba (TERV-fiokok.md 3.5).
-    Roles.useBackend(makeConfigBackend(dirHandle, 'roles'));
-    EmployeeRepo.useBackend(EmployeeRepo.createFileBackend(dirHandle));
-    CaseRepo.useBackend(CaseRepo.createFileBackend(dirHandle));
-    TransferRepo.useBackend(TransferRepo.createFileBackend(dirHandle));
+    Roles.useBackend(h.roles);
+    EmployeeRepo.useBackend(h.employees);
+    CaseRepo.useBackend(h.cases);
+    TransferRepo.useBackend(h.transfers);
     // A fiókok és a szintek a KÖZÖS mappában élnek, külön fájlban — nem
     // localStorage-ban, mert az böngészőprofilonként külön (TERV-fiokok.md 3.2).
     Auth.useBackend(Auth.createFileBackend(dirHandle));
@@ -140,13 +141,14 @@ const RegistryModule = (() => {
 
   async function useIdbBackend() {
     state.backendKind = 'idb';
-    SchemaStore.useBackend(makeIdbConfigBackend('schema'));
-    ExportProfiles.useBackend(makeIdbConfigBackend('profiles'));
-    CaseTypes.useBackend(makeIdbConfigBackend('caseTypes'));
-    Roles.useBackend(makeIdbConfigBackend('roles'));
-    EmployeeRepo.useBackend(EmployeeRepo.createIdbBackend());
-    CaseRepo.useBackend(CaseRepo.createIdbBackend());
-    TransferRepo.useBackend(TransferRepo.createIdbBackend());
+    const h = hatterek(null);
+    SchemaStore.useBackend(h.schema);
+    ExportProfiles.useBackend(h.profiles);
+    CaseTypes.useBackend(h.caseTypes);
+    Roles.useBackend(h.roles);
+    EmployeeRepo.useBackend(h.employees);
+    CaseRepo.useBackend(h.cases);
+    TransferRepo.useBackend(h.transfers);
     await SchemaStore.load();
     await ExportProfiles.load();
     await CaseTypes.load();
@@ -260,6 +262,24 @@ const RegistryModule = (() => {
       describe: () => 'böngésző tároló',
       async load() { try { return (await FsService.loadHandle(k)) || null; } catch { return null; } },
       async save(data) { await FsService.saveHandle(k, JSON.parse(JSON.stringify(data))); },
+    };
+  }
+
+  /**
+   * Az adatmappa (dir = null: a böngészőtár) minden tárolója EGY listában.
+   * Ebből tölt be az app, és ebből költöztet a mappaválasztás is. Amíg a kettő
+   * külön volt felsorolva, a később jött ügyek és átutalások kimaradtak a
+   * költöztetésből, és a böngészőben ragadtak.
+   */
+  function hatterek(dir) {
+    return {
+      schema:    dir ? makeConfigBackend(dir, 'schema')    : makeIdbConfigBackend('schema'),
+      profiles:  dir ? makeConfigBackend(dir, 'profiles')  : makeIdbConfigBackend('profiles'),
+      caseTypes: dir ? makeConfigBackend(dir, 'caseTypes') : makeIdbConfigBackend('caseTypes'),
+      roles:     dir ? makeConfigBackend(dir, 'roles')     : makeIdbConfigBackend('roles'),
+      employees: dir ? EmployeeRepo.createFileBackend(dir) : EmployeeRepo.createIdbBackend(),
+      cases:     dir ? CaseRepo.createFileBackend(dir)     : CaseRepo.createIdbBackend(),
+      transfers: dir ? TransferRepo.createFileBackend(dir) : TransferRepo.createIdbBackend(),
     };
   }
 
@@ -775,31 +795,58 @@ const RegistryModule = (() => {
       dir = await window.showDirectoryPicker({ id: 'docgen-data', mode: 'readwrite' });
     } catch { return; }   // megszakítva
 
-    // Ha volt már adat a böngésző tárolójában, ne vesszen el
-    const meglevo = state.ready ? EmployeeRepo.all({ includeExited: true }) : [];
-    await FsService.saveHandle(DATA_DIR_KEY, dir);
+    // Ha volt már adat (a böngészőtárban vagy az eddigi mappában), ne vesszen el
+    let atvitt = [];
+    if (state.ready) {
+      try {
+        await EmployeeRepo.flush();
+        await CaseRepo.flush();
+        await TransferRepo.flush();
+        atvitt = await atkoltoztet(
+          hatterek(state.backendKind === 'file' ? state.dirHandle : null), hatterek(dir));
+      } catch (e) {
+        // Pl. sérült célfájl: azt a useFileBackend mondja ki, költöztetés nincs
+        BevLogger.warn('ATKOLTOZTETES', 'Az átköltöztetés elmaradt', e.message, '');
+      }
+    }
+    await FsService.saveMachineHandle(DATA_DIR_KEY, dir);
     await useFileBackend(dir);
 
-    if (meglevo.length && EmployeeRepo.count({ includeExited: true }) === 0) {
-      await migrateInto(meglevo);
+    if (atvitt.length && state.ready) {
+      toast(`Átvéve az adatmappába: ${EmployeeRepo.count({ includeExited: true })} dolgozó, `
+          + `${CaseRepo.all().length} ügy, ${TransferRepo.all().length} átutalási köteg`, 'success');
     }
     toast('Adatmappa beállítva', 'success');
   }
 
-  /** A böngésző tárolójából a fájlba költöztetés – azonosító alapján, duplikátum nélkül. */
-  async function migrateInto(records) {
-    let atvive = 0;
-    for (const r of records) {
-      const m = EmployeeRepo.matchIncoming({ identifiers: r.identifiers, fields: r.fields });
-      if (m.employee) continue;
-      EmployeeRepo.create({
-        fields: r.fields, identifiers: r.identifiers, schemaVersion: r.schemaVersion,
-      });
-      atvive++;
+  /**
+   * Üres adatmappába NYERS másolás: minden rekord az azonosítójával együtt megy.
+   *
+   * Korábban a dolgozók egyenként, create()-tel kerültek át: új belső
+   * azonosítóval, üres változásnaplóval, a kilépettek aktívként. Az ügyek és az
+   * átutalások a régi azonosítóra mutatnak, ezért át sem kerültek.
+   *
+   * Csak ÜRES célba: meglévő adatot nem írunk felül és nem fésülünk össze (az
+   * az import dolga, párosítással). A tárolóknál a rekord számít, a
+   * beállításoknál már a létezés is: egy előre beállított, de még üres mappa
+   * szintjeit vagy sémáját nem írja felül a böngészőtár.
+   *
+   * Visszaadja az átvitt tárolók kulcsait.
+   */
+  async function atkoltoztet(forras, cel) {
+    const rekord = d => !!d && Object.values(d).some(v => Array.isArray(v) && v.length);
+    if (rekord(await cel.employees.load())) return [];
+
+    const vitt = [];
+    for (const [kulcs, h] of Object.entries(forras)) {
+      const adat = await h.load();
+      const meglevo = await cel[kulcs].load();
+      const tarolo = ['employees', 'cases', 'transfers'].includes(kulcs);
+      if (!adat || (tarolo ? !rekord(adat) || rekord(meglevo) : meglevo)) continue;
+      await cel[kulcs].save(adat);
+      vitt.push(kulcs);
     }
-    await EmployeeRepo.flush();
-    if (atvive) toast(`${atvive} korábbi rekord átvéve az adatmappába`, 'success');
-    renderList();
+    return vitt;
   }
 
   /**
@@ -881,5 +928,5 @@ const RegistryModule = (() => {
     else toast('A hozzáférés nem lett megadva.', 'error');
   }
 
-  return { init };
+  return { init, _hatterek: hatterek, _atkoltoztet: atkoltoztet };
 })();

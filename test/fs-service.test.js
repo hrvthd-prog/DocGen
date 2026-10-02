@@ -295,6 +295,18 @@ async function main() {
     assertEq(got.length, 0, 'korlát nélkül egy tévesen megadott mappa végtelen munkát adna');
   });
 
+  section('Gépszintű kulcs (adatmappa)');
+  await test('belépve is a „helyi_" kulcsra ír — induláskor, belépés előtt ott keressük', async () => {
+    sandbox.Settings = { currentUser: () => 'Kovács Anna' };
+    try {
+      await FS.saveMachineHandle('data_dir', 'uj-mappa');
+      assertEq(_store.get('helyi_data_dir'), 'uj-mappa');
+      assertEq(await FS.loadMachineHandle('data_dir'), 'uj-mappa');
+      await FS.saveHandle('output_dir', 'sajat');
+      assertEq(_store.get('Kov_cs_Anna_output_dir'), 'sajat', 'a fiókos kulcs fiókos marad');
+    } finally { delete sandbox.Settings; }
+  });
+
   console.log(`\n${'='.repeat(60)}`);
   console.log(`Eredmény: ${passed} sikeres / ${failed} hibás (összesen ${passed + failed})`);
   if (failed) {

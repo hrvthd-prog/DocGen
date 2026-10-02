@@ -68,6 +68,49 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-02 — Adatvesztés: a mappaválasztás csak a dolgozókat vitte át
+
+**Cél:** a felhasználónak (másik gépen) elveszett egy csomó ügye. Ok:
+próba módban (böngészőtár) dolgozott, majd adatmappát választott — az ügyek
+a böngészőben ragadtak. A DevTools-ban megvan a `helyi_db_cases` 19 üggyel.
+
+**Változás (`v10.70`):**
+- `registry-view.js`: `hatterek(dir)` — a tárolók EGY listája; ebből tölt a
+  `useFileBackend` / `useIdbBackend`, és ebből költöztet az új `atkoltoztet()`.
+  A `migrateInto` kikerült.
+- `fs-service.js`: `saveMachineHandle` / `loadMachineHandle` — fióktól
+  független `helyi_` kulcs; az adatmappa ezt használja.
+- **Új:** `tools/ugyek-bongeszotarbol.js` — DevTools-konzolos mentőszkript a
+  már így járt telepítésekhez (próba futás + nyers JSON-letöltés, utána
+  `MEHET = true`). **Új teszt:** `test/adatmappa.test.js` (6), fs-service +1.
+
+**Miért / döntés:**
+- **Három hiba egy helyen.** A költöztetés (1) csak a dolgozókat vitte, mert
+  külön kézzel sorolta fel a tárolókat — az ügyek és az átutalások később
+  jöttek, és kimaradtak; (2) a dolgozókat `create()`-tel vitte, vagyis új
+  belső azonosítóval, üres változásnaplóval, a kilépetteket aktívként — az
+  ügyek tehát akkor sem találták volna a dolgozójukat; (3) a `data_dir`
+  kulcs a belépett fiók nevét kapta előtagnak, induláskor (belépés előtt)
+  viszont a `helyi_` kulcsot olvassuk — belépve választott mappát a
+  következő indulás nem talált, csendben a régire állt vissza.
+- **Nyers másolás, csak üres célba.** Üres célnál nincs mit párosítani, a
+  rekord azonosítóstul megy. Nem üres célba nem írunk (azt az import fésüli
+  össze). Beállításnál már a létezés is „nem üres": egy előre beállított
+  mappa szintjeit a böngészőtár nem írhatja felül.
+- A `helyi_` előtag maradt (nem lett új kulcs), mert a meglévő telepítések
+  ezen tárolják a mappájukat — új kulccsal mindenki próba módba esett volna.
+
+**Tesztek:** `node test/run-all.js` — minden készlet zöld; klón-próba zöld.
+Visszarontás-próba: a régi viselkedésre (csak dolgozó / védelem nélkül /
+fiókos kulcs) az új tesztek elbuknak. Böngészőben (localhost, OPFS-mappával)
+a valódi `FsService`-szel is lefutott a költöztetés.
+
+**Nyitott / következő:** a felhasználó gépén a 19 ügyet a mentőszkript hozza
+át — ha a próba futás „KIMARAD" sort mutat, előbb a dolgozót kell felvenni.
+Akinek belépve választott mappája a `<fiók>_data_dir` kulcson ragadt, annak
+egyszer újra ki kell választania. A mappaválasztó dialógust (natív ablak)
+automata teszt nem fedi.
+
 ## 2026-10-01 — PDF Műhely v1.14: egyszerűbb felület, arckép-körülvágás, emlékezet
 
 **Cél (másik repó: `../pdf-muhely`):** a felület legyen hatékonyabb, kelljen egy
