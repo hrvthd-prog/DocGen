@@ -340,6 +340,12 @@ const FsService = (() => {
     // Publikus saveHandle/loadHandle automatikusan user-prefixelt kulcsot használ
     saveHandle: (key, handle) => saveHandle(userKey(key), handle),
     loadHandle: (key) => loadHandle(userKey(key)),
+    // Gépszintű kulcs, a belépett fióktól független. Az adatmappa ilyen: belépés
+    // ELŐTT kell (onnan jön a fiókfájl), ezért belépve elmentve a következő
+    // indulás nem találta meg. A „helyi_" a belépés előtti előtag — a meglévő
+    // telepítések ezen tárolják.
+    saveMachineHandle: (key, handle) => saveHandle('helyi_' + key, handle),
+    loadMachineHandle: (key) => loadHandle('helyi_' + key),
     verifyPermission,
     queryPermissionOnly,
   };
