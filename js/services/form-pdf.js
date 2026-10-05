@@ -22,6 +22,10 @@
  *   jelölőnégyzet „Beszél magyarul”   X, ha a mező igaz
  *   választógomb-csoport „Neme” X annál a gombnál, amelyiknek az értéke egyezik
  *
+ * Ha a sablon /Keywords-jében ott a `docgen-nagybetu` (a PDF Műhely Szerkesztés
+ * fülén egy jelölő), minden érték nagybetűvel kerül ki — egyes nyomtatványok ezt
+ * kérik („nyomtatott nagybetűkkel kell kitölteni”, NEAK NYT.53).
+ *
  * ponytail: elforgatott lapon (/Rotate) a mező szövege nem fordul a lappal —
  * a hatósági nyomtatványok állók. Ha kell: a page.getRotation() szerint
  * drawText({ rotate }) és a koordináták forgatása.
@@ -105,6 +109,7 @@ const FormPdf = (() => {
     const L = PDFLib;
     const form = doc.getForm();
     const placed = [], overflow = [];
+    const nagy = /(^|;)\s*docgen-nagybetu\s*(;|$)/i.test(doc.getKeywords() || '');
 
     function draw(page, name, t, x, y, size) {
       page.drawText(t, { x, y, size, font });
@@ -141,6 +146,7 @@ const FormPdf = (() => {
 
       const { base, nth } = _split(name);
       let t = kerdez(base);
+      if (nagy) t = t.toLocaleUpperCase('hu-HU');
       if (nth) t = [...t][nth - 1] || '';
       if (!t) continue;
 

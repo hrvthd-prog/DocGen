@@ -375,3 +375,53 @@ dátum darabja (`{{mai nap_year}}`, `_év`, `_hó`, `_nap`) — eddig üres mara
 - Elforgatott lapon a szöveg nem fordul a lappal (a hatósági nyomtatványok állók).
 - A PDF-sablon irata nem kerül a PDF-láncba, így az összefűzésbe sem (`ponytail:` a kódban).
 - A jelölő böngészőnként tárolódik (mint a fájlnév-minta); több gépen gépenként kell bekapcsolni.
+
+---
+
+## 12. A TAJ-igénylés másik két irata (2026-10-05, negyedik kör)
+
+### 12.1 Mi kell még — forrással
+
+Budapest Főváros Kormányhivatala foglalkoztatói tájékoztatója (*TÁJÉKOZTATÓ TAJ
+szám igényléséhez foglalkoztatók részére*, 2019) szerint a kérelemhez kell:
+foglalkoztató által kiállított **megrendelő** (NYT.52 — kész), **igénylőlap** a
+TAJ-t igazoló hatósági igazolványhoz (NEAK **NYT.53**, A.3517-I. r. sz.), **a
+foglalkoztatott meghatalmazása**, és másolatban: személyazonosításra alkalmas
+igazolvány, tartózkodási hely / szálláshely igazolása, munkaszerződés. A másolatok
+meglévő iratok; sablon a NYT.53-hoz és a meghatalmazáshoz kellett.
+
+### 12.2 A felhasználó döntései
+
+- A NYT.53-at a NEAK nyomtatványtárából töltöttük le (`NYT.53.K.pdf`, kézi
+  kitöltésű változat; a gépi változat `.doc`).
+- A meghatalmazás **PDF-sablon**, mint a NYT.52; a munkavállaló **a foglalkoztatót
+  (céget)** hatalmazza meg.
+
+### 12.3 Ami ebből lett
+
+- **`TAJ-igénylőlap (NYT.53).pdf`** — 34 mező, a Műhely függvényeivel, kattintási
+  pontokból. Fix: „első kiadás” X; az igényt előterjesztő a cég (név, székhely).
+  Lakóhely = a szálláshely (mint a NYT.52-n), dátum = a „mai nap”. A nyomtatvány
+  *„nyomtatott nagybetűkkel kell kitölteni”* — ezért **nagybetűs sablon** (12.4).
+  Célmappa: `01` (az igénylő/meghatalmazott aláírja).
+- **`TAJ-meghatalmazás.pdf`** — saját, egyoldalas, **kétnyelvű** (magyar, alatta
+  angol): a dolgozó idegen nyelvű, értse, mit ír alá. Adatai mezők (név, születési
+  hely és idő, anyja neve, állampolgárság, útlevélszám, szálláshely), a cég adatai
+  fixek (teljes név, székhely, cégjegyzékszám 19-09-503741 — az `EH_EMPLOYER`
+  forrásából, adószám). **Két tanú** neve, lakcíme és aláírása kézzel: így teljes
+  bizonyító erejű magánokirat, ahogy a kormányhivatal kéri. A szöveg nem hatósági
+  minta — jogásszal érdemes átnézetni. Célmappa: `01`.
+
+### 12.4 Nagybetűs kitöltés — általánosan
+
+Ha a sablon `/Keywords`-jében ott a `docgen-nagybetu`, a `FormPdf.fill` minden
+értéket `toLocaleUpperCase('hu-HU')`-val ír (ő → Ő). Sablononként, nem mezőnként:
+ahol a nyomtatvány nagybetűt kér, az egészre kéri. A Műhely Szerkesztés fülén egy
+jelölő állítja (a többi kulcsszó megmarad).
+
+### 12.5 Ellenőrzés
+
+`test/form-pdf.test.js` 29 eset: a nagybetűsítés szintetikus sablonon, és mindkét új
+sablon körbe (értékek, cellák, kilógás nélkül); a kitöltött lapok szemrevételezve.
+A PDF Műhely Áttekintője mindkettőt külön oszlopként ismeri (`tajigeny`,
+`tajmeghat`; a „taj meghatalmazas” kulcsszó nyer a sima „meghatalmazas” ellen).

@@ -68,6 +68,26 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-05 (2.) — A TAJ-igénylés másik két irata: NYT.53 és meghatalmazás
+
+**Cél:** a felhasználó kérdése: milyen irat kell még a TAJ-igényléshez — és készüljön
+el, mint a NYT.52.
+**Változás (`v10.73`):** a kormányhivatal foglalkoztatói tájékoztatója szerint a
+megrendelő mellé igénylőlap (NEAK NYT.53) és a foglalkoztatott meghatalmazása kell
+(+ okmánymásolatok). Új sablonok: `pdf-sablonok/TAJ-igénylőlap (NYT.53).pdf` (a NEAK
+nyomtatványtárából letöltve, 34 mező, nagybetűs) és `pdf-sablonok/TAJ-meghatalmazás.pdf`
+(saját, kétnyelvű, két tanúval). `FormPdf`: nagybetűs kitöltés a `docgen-nagybetu`
+kulcsszóra. README-táblázat, `TERV-pdf-nyomtatvany.md` 12.
+**Miért / döntés:** a NYT.53 maga kéri a nyomtatott nagybetűt — sablonszintű
+kapcsoló lett, nem mezőnkénti. A meghatalmazás PDF-sablon, a céget hatalmazza meg
+(a felhasználó döntése); kétnyelvű, hogy a dolgozó értse; tanúkkal, mert teljes
+bizonyító erejű magánokirat kell.
+**Tesztek:** `node test/run-all.js` — mind zöld (form-pdf 29). A kitöltött lapok
+szemrevételezve.
+**Nyitott / következő:** a meghatalmazás szövegét jogásszal átnézetni; a két új
+sablont az éles gépen a sablonmappába másolni (az „Aláírás nélkül kész” jelölőt
+ezeken NE kapcsold be — aláírandók).
+
 ## 2026-10-05 — Kitölthető PDF-sablonok (példa: NEAK NYT.52 TAJ-megrendelő)
 
 **Cél:** egy csak PDF-ben létező nyomtatványt (NYT.52) több dolgozónak kell

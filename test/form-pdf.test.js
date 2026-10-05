@@ -235,6 +235,16 @@ const szoveg = (res, nev) => res.placed.filter(p => p.name === nev).map(p => p.t
     assertEq(szoveg(r2, 'forename'), 'Győző Űrsula');
   });
 
+  await test('a sablon kérésére (docgen-nagybetu) minden érték nagybetűs, ékezettel együtt', async () => {
+    const d = await PDFLib.PDFDocument.load(SABLON);
+    d.setKeywords(['valami;docgen-nagybetu']);
+    const r2 = await FormPdf.fill(await d.save(), feloldo({ ...milan, surname: 'Kőműves', forename: 'Győző Űrsula' }));
+    assertEq(szoveg(r2, 'surname'), 'KŐMŰVES');
+    assertEq(szoveg(r2, 'forename'), 'GYŐZŐ ŰRSULA');
+    assertEq(szoveg(r2, '{place_of_birth_locality}, {place_of_birth_country}'), 'SUBOTICA, SZERBIA');
+    assertEq(szoveg(r, 'surname'), 'Kovacevic', 'kulcsszó nélkül marad a kisbetű');
+  });
+
   await test('női dolgozónál a nő-négyzet', async () => {
     const r2 = await FormPdf.fill(SABLON, feloldo({ ...milan, sex: 'female' }));
     const x = r2.placed.filter(p => p.text === 'X');
@@ -283,6 +293,45 @@ const szoveg = (res, nev) => res.placed.filter(p => p.name === nev).map(p => p.t
   await test('5 MB alatt', () => {
     assert(n52.bytes.length < 5_000_000, n52.bytes.length);
     console.log(`      (méret: ${(n52.bytes.length / 1024).toFixed(0)} KB)`);
+  });
+
+  section('A valódi sablon: NEAK NYT.53 (TAJ-igénylőlap, nagybetűs)');
+
+  const N53 = path.join(__dirname, '..', 'pdf-sablonok', 'TAJ-igénylőlap (NYT.53).pdf');
+  const n53 = await FormPdf.fill(fs.readFileSync(N53), feloldo({ ...milan, surname: 'Kőműves' }));
+  if (KI) fs.writeFileSync(path.join(KI, 'nyt53.pdf'), n53.bytes);
+
+  await test('nagybetűs kitöltés, ékezettel; a dátumok betűnként', () => {
+    const s = n => szoveg(n53, n);
+    assertEq(s('surname'), 'KŐMŰVES');
+    assertEq(s('{place_of_birth_locality}, {place_of_birth_country}'), 'SUBOTICA, SZERBIA');
+    assertEq(s('mothers_forename_at_birth'), 'JELENA');
+    assertEq(['#1', '#2', '#3', '#4'].map(i => s('date_of_birth_year' + i)).join(''), '1988');
+    assertEq(s('date_of_birth_month#1') + s('date_of_birth_month#2'), '04');
+    assertEq(['#1', '#2', '#3', '#4'].map(i => s('mai nap_year' + i)).join(''), '2026');
+    assertEq(s('{name_of_public_place} {type_of_public_place}'), 'KOSSUTH LAJOS UTCA');
+    assertEq(n53.overflow.length, 0, n53.overflow.join(', '));
+    assert(n53.placed.some(p => p.name === 'Neme=male'), 'férfi');
+  });
+
+  section('A saját sablon: TAJ-meghatalmazás');
+
+  const MH = path.join(__dirname, '..', 'pdf-sablonok', 'TAJ-meghatalmazás.pdf');
+  const mh = await FormPdf.fill(fs.readFileSync(MH), feloldo(milan));
+  if (KI) fs.writeFileSync(path.join(KI, 'meghatalmazas.pdf'), mh.bytes);
+
+  await test('a meghatalmazó adatai és a kelt (nem nagybetűs sablon)', () => {
+    const s = n => szoveg(mh, n);
+    assertEq(s('full_name'), 'Kovacevic Milan');
+    assertEq(s('{place_of_birth_locality}, {place_of_birth_country}, {date_of_birth}'),
+             'Subotica, Szerbia, 1988.04.12.');
+    assertEq(s('mothers_name'), 'Petrovic Jelena');
+    assertEq(s('pp_number'), 'PA1234567');
+    assertEq(s('{postal_code} {locality}, {name_of_public_place} {type_of_public_place} {street_number}'),
+             '1052 Budapest, Kossuth Lajos utca 12');
+    assertEq(s('{floor}/{door}'), '3/14');
+    assertEq(s('mai nap'), '2026.10.05');
+    assertEq(mh.overflow.length, 0, mh.overflow.join(', '));
   });
 
   console.log(`\n${'─'.repeat(60)}`);

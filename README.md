@@ -875,6 +875,11 @@ mezőket átnevezni.
 | választógomb-csoport `Neme` | X annál a gombnál, amelyiknek az értéke egyezik |
 | `mai nap_year` | a nem sémabeli dátum darabja (`_month`, `_day`; Word-sablonban is működik) |
 
+Ha a nyomtatvány **nagybetűs kitöltést** kér („nyomtatott nagybetűkkel kell
+kitölteni”), a Műhely Szerkesztés fülén kapcsold be a sablonon „A DocGen
+nagybetűvel töltse ki” jelölőt (a sablon kulcsszava: `docgen-nagybetu`) — akkor
+minden érték nagybetűvel kerül ki, ékezettel együtt (ő → Ő).
+
 **Használat:** a PDF-et másold a sablonmappába — a sablonlistában **PDF**
 jelvénnyel jelenik meg, és ugyanúgy választható, mint egy Word-sablon. A kész
 irat alapból a dolgozó `01_Elokeszitett` mappájába kerül (aláírásra vár); ha a
@@ -882,10 +887,21 @@ nyomtatványt nem kell aláírni, a sablon helyi menüjében (jobb klikk) kapcso
 az **Aláírás nélkül kész** jelölőt: akkor a `02_Feltoltheto`-ba megy (a jelvény:
 **PDF → 02**). A jelölő böngészőnként tárolódik, mint a fájlnév-minta.
 
-**Kész sablon a repóban:** `pdf-sablonok/TAJ-megrendelő (NYT.52).pdf` — a NEAK
-TAJ-megrendelője. A cégadatok, a „Budapest” és a három „nem” fixen rajta van; a
-dolgozó adatai mezők (a magyarországi szálláshely a *Lakóhely* rovatba). Ennél
-kapcsold be az *Aláírás nélkül kész* jelölőt.
+**Kész sablonok a repóban** (`pdf-sablonok/`) — a TAJ-igénylés foglalkoztatói
+csomagja. A kormányhivatal tájékoztatója szerint a kérelemhez kell: a foglalkoztató
+megrendelője, az igénylőlap, **a foglalkoztatott meghatalmazása**, és másolatban a
+személyazonosító okmány (tartózkodási engedély / útlevél), a szálláshely igazolása
+és a munkaszerződés — az utóbbiak meglévő iratok, sablon nem kell hozzájuk.
+
+| sablon | mi | célmappa |
+|---|---|---|
+| `TAJ-megrendelő (NYT.52).pdf` | NEAK NYT.52; a cégadatok, a „Budapest” és a három „nem” fix | **Aláírás nélkül kész** → `02` |
+| `TAJ-igénylőlap (NYT.53).pdf` | NEAK NYT.53; „első kiadás”, az igényt a cég terjeszti elő (fix); **nagybetűs** | `01` — a meghatalmazott aláírja |
+| `TAJ-meghatalmazás.pdf` | saját, kétnyelvű (magyar–angol): a munkavállaló meghatalmazza a céget; két tanúval (teljes bizonyító erejű magánokirat) | `01` — a dolgozó, a cég és a tanúk aláírják |
+
+Mindhárom sablonon a magyarországi szálláshely a *Lakóhely* rovatba kerül, a kelt
+Budapest és a „mai nap”. **A meghatalmazás szövegét érdemes jogásszal átnézetni**
+— nem hatósági nyomtatvány.
 
 Amit a nyilvántartásban üres, az a hiányzó-adat panelen jelenik meg; ami a
 legkisebb betűvel sem fér a mezőbe, az „(nem fér el)” jelzéssel. Mező nélküli
