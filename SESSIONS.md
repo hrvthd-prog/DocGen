@@ -68,6 +68,31 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-05 — Kitölthető PDF-sablonok (példa: NEAK NYT.52 TAJ-megrendelő)
+
+**Cél:** egy csak PDF-ben létező nyomtatványt (NYT.52) több dolgozónak kell
+kitölteni. Az igény a PDF Műhelyben indult, átkerült ide; a nap végére a felhasználó
+kérésére **általános** lett: bármely kitölthető PDF sablon, a NYT.52 egy példa.
+**Változás (nincs commitolva; a következő commit `v10.72`):** új
+`js/services/form-pdf.js` (kitölthető PDF kitöltése: mezőnév = jelölő),
+`PdfService.loadDocument`, `FsService.listDocxFilesDeep(dir, exts)`,
+`DocxService.makeParser`: `{{mai nap_year}}`-féle dátumrész + `docgenMark`/`CHECKED`
+export; `docgen.js`: PDF-sablon a listában (jelvény), „Aláírás nélkül kész” helyi
+menü → `02`, generálási ág; `pdf-sablonok/TAJ-megrendelő (NYT.52).pdf` (a Műhely
+szerkesztőjével készült sablon, `.gitignore`-kivétel); `test/form-pdf.test.js` (26),
+`test/fs-service.test.js` +1; README-szakasz; `TERV-pdf-nyomtatvany.md` 9–11.
+A közben készült, NYT.52-re beégetett `js/schema/pdf-forms.js` törölve (11.4).
+**Miért / döntés:** kitölthető PDF a sablonformátum (szabványos, bármi elkészíti,
+a mezőnév a Word-sablonok jelölője), de a pdf-lib mezőkitöltését nem használjuk
+(WinAnsi, nincs ő/ű): a mező téglalapjába Carlitóval rajzolunk, és a mezőket
+eltávolítjuk. **Buktató:** a `02`-es kimenetre nem kerülhet DocGen-bélyeg (a
+Producerbe sem) — a Műhely abból „még nem aláírt”-at olvas; a `01`-es igen.
+**Tesztek:** `node test/run-all.js` — mind zöld. Böngészőben a valódi felületen
+(OPFS-mappával, kitalált dolgozóval) végig: lista, jelölő, generálás `02`/`01`-be.
+**Nyitott / következő:** az első éles generálásnál ránézni; a NYT.52-sablont a
+sablonmappába másolni és bekapcsolni rajta az „Aláírás nélkül kész” jelölőt. A
+Műhely-oldal (általános szerkesztő): `pdf-muhely/szerkeszto-terv.md` 16.
+
 ## 2026-10-02 (2.) — Minden indulás próba módban + ügyállapot a dolgozó-listában
 
 **Cél:** (1) a DocGen minden indulásnál próba módba esett, pedig az adatmappa

@@ -852,6 +852,46 @@ közvetlenül rajzolja (pdf-lib + beágyazott Carlito betűkészlet). Nincs hozz
 Word, nincs külső lépés, egy gombnyomás. Lásd az [Átutalások](#átutalások)
 szakaszt.
 
+### Kitölthető PDF-sablon — az app tölti ki
+
+Van nyomtatvány, ami csak PDF-ben létezik, Word-sablon nem készülhet belőle.
+Ilyenkor a **PDF maga a sablon**: űrlapmezők vannak rajta, és **a mező neve a
+DocGen-jelölő** — ugyanaz, amit a Word-sablonba `{{…}}` közé írnál. A DocGen a
+mezők helyére írja az adatot a saját, ékezetbiztos betűjével, a mezőket pedig
+eltávolítja: a kimenet kész irat, nem kitölthető űrlap.
+
+**Sablon készítése:** a PDF Műhely *Eszközök → Szerkesztés* fülén (Űrlapmező
+eszköz) kattints a cellába, és add meg a jelölőt — a mező a cellához igazodik.
+Más eszköz (pl. Acrobat) is jó, és a hatóság eleve kitölthető PDF-jeinél elég a
+mezőket átnevezni.
+
+| mezőnév | mit ír a DocGen |
+|---|---|
+| `surname` | a jelölő értéke (bármely Word-sablonbeli jelölő: `{{mai nap}}`, `{{EH szám}}` is) |
+| `{postal_code} {locality}` | több jelölő és szöveg egy mezőben; az üres darab elválasztója elmarad |
+| `date_of_birth_year#2` | az érték 2. betűje — egyenetlen, betűnkénti cellákhoz |
+| betűnkénti (comb) mező | betűnként egy egyenletes cella |
+| jelölőnégyzet `Neme=male` | X, ha a mező értéke a megadott (mint a `{{CHECK:Neme=male}}`) |
+| választógomb-csoport `Neme` | X annál a gombnál, amelyiknek az értéke egyezik |
+| `mai nap_year` | a nem sémabeli dátum darabja (`_month`, `_day`; Word-sablonban is működik) |
+
+**Használat:** a PDF-et másold a sablonmappába — a sablonlistában **PDF**
+jelvénnyel jelenik meg, és ugyanúgy választható, mint egy Word-sablon. A kész
+irat alapból a dolgozó `01_Elokeszitett` mappájába kerül (aláírásra vár); ha a
+nyomtatványt nem kell aláírni, a sablon helyi menüjében (jobb klikk) kapcsold be
+az **Aláírás nélkül kész** jelölőt: akkor a `02_Feltoltheto`-ba megy (a jelvény:
+**PDF → 02**). A jelölő böngészőnként tárolódik, mint a fájlnév-minta.
+
+**Kész sablon a repóban:** `pdf-sablonok/TAJ-megrendelő (NYT.52).pdf` — a NEAK
+TAJ-megrendelője. A cégadatok, a „Budapest” és a három „nem” fixen rajta van; a
+dolgozó adatai mezők (a magyarországi szálláshely a *Lakóhely* rovatba). Ennél
+kapcsold be az *Aláírás nélkül kész* jelölőt.
+
+Amit a nyilvántartásban üres, az a hiányzó-adat panelen jelenik meg; ami a
+legkisebb betűvel sem fér a mezőbe, az „(nem fér el)” jelzéssel. Mező nélküli
+PDF-re a generálás egyetlen érthető hibát ad. A döntések:
+[TERV-pdf-nyomtatvany.md](TERV-pdf-nyomtatvany.md), 11. fejezet.
+
 ### Ha szerkeszted a `.vbs` fájlokat
 
 UTF-16 LE kódolással, BOM-mal mentsd. A Windows Script Host különben ANSI-ként
@@ -1059,3 +1099,4 @@ változik, azokat módosítjuk, nem a JavaScriptet.
 - [TERV-esemenyek.md](TERV-esemenyek.md) — ügykövetés és státusz-betekintő
 - [TERV-tesztanyag.md](TERV-tesztanyag.md) — próbasablonok és körbe-teszt
 - [TERV-adatbiztonsag.md](TERV-adatbiztonsag.md) — sérült fájl, visszaállítás, kiadás
+- [TERV-pdf-nyomtatvany.md](TERV-pdf-nyomtatvany.md) — kitölthető PDF-sablonok (példa: NEAK NYT.52)

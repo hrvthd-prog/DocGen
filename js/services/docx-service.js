@@ -44,6 +44,8 @@ const DocxService = (() => {
    * @param equals    opcionális függvény: (mezőnév, várt érték) => bool | null
    *                  A `{{CHECK:Neme=male}}` alakhoz. `null` = a séma nem ismeri.
    */
+  const DATUM_RESZ = /^(.*?)[\s._-]*(year|év|ev|month|hónap|honap|hó|ho|day|nap)$/i;
+
   function makeParser(data, emptyTags, resolve, equals) {
     const normalized = {};
     for (const k of Object.keys(data || {})) {
@@ -58,7 +60,16 @@ const DocxService = (() => {
       const origKey = normalized[name.toLowerCase().replace(/_/g, ' ')]
                    ?? normalized[name.toLowerCase()]
                    ?? name;
-      return data ? data[origKey] : '';
+      const v = data ? data[origKey] : '';
+      if (v !== undefined) return v;
+      // Nem sémabeli dátum darabja: {{mai nap_év}}, {{mai nap_year}}. A sémamezőkét
+      // ({{date_of_birth_year}}) a resolve adja; ez a sima kulcsos dátumoké.
+      const m = DATUM_RESZ.exec(name);
+      if (m && m[1].trim()) {
+        const d = /^(\d{4})[.-](\d{2})[.-](\d{2})/.exec(String(lookup(m[1].trim()) ?? '').trim());
+        if (d) return d[/^(year|év|ev)$/i.test(m[2]) ? 1 : /^(day|nap)$/i.test(m[2]) ? 3 : 2];
+      }
+      return v;
     }
 
     /**
@@ -271,13 +282,17 @@ const DocxService = (() => {
    * bélyeg HIÁNYÁBÓL, hogy szkennerből jött — a fájlnév `aláírt` utótagja csak
    * tartalék. (kepek-pdf-terv.md 12.6, TERV-mappaszerkezet.md 3.)
    */
-  function stampDocGen(uint8) {
+  function docgenMark() {
     const verzio = (typeof window !== 'undefined' && window.APP_VERZIO)
       ? window.APP_VERZIO.verzio : '';
     // Próba módban (nincs közös adatmappa) a bélyeg jelzi, hogy ez nem éles
     // irat — így egy próbafájl nem keveredhet a valódiak közé.
     const proba = (typeof Auth !== 'undefined' && Auth.isProba && Auth.isProba());
-    const mark = 'docgen' + (verzio ? ';v' + verzio : '') + (proba ? ';proba' : '');
+    return 'docgen' + (verzio ? ';v' + verzio : '') + (proba ? ';proba' : '');
+  }
+
+  function stampDocGen(uint8) {
+    const mark = docgenMark();
     const zip = new PizZip(uint8);
     const entry = zip.file('docProps/core.xml');
     if (!entry) return uint8;                  // sablon nélküli core.xml: kihagyjuk
@@ -366,6 +381,8 @@ const DocxService = (() => {
   return {
     generateDocx,
     stampDocGen,         // DocGen-bélyeg a core.xml Keywords-be (teszthez is)
+    docgenMark,          // a bélyeg szövege — a PDF-sablon kimenete is ezt kapja
+    CHECKED,             // a bejelölt négyzet jele a makeParser válaszában
     processCheckboxes,   // alacsonyszintű SDT-jelölő feldolgozás (teszthez is)
     makeParser,          // a jelölő-feloldás maga (a render nélkül, teszthez is)
     enrichClientRow,

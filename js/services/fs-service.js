@@ -210,21 +210,24 @@ const FsService = (() => {
   const SCAN_MAX_DEPTH = 4;
   const SKIP_DIRS = new Set(['01_Elokeszitett', '02_Feltoltheto']);
 
-  async function listDocxFilesDeep(dirHandle) {
+  // `exts`: a sablonként számító kiterjesztések — a docgen a kitölthető
+  // PDF-sablonokat is kéri (['.docx', '.pdf']).
+  async function listDocxFilesDeep(dirHandle, exts = ['.docx']) {
     const files = [];
-    await _scanRecursive(dirHandle, null, files, 0);
+    await _scanRecursive(dirHandle, null, files, 0, exts);
     return files.sort((a, b) => a.name.localeCompare(b.name, 'hu'));
   }
 
-  async function _scanRecursive(dirHandle, basePath, files, depth) {
+  async function _scanRecursive(dirHandle, basePath, files, depth, exts) {
     for await (const [name, entry] of dirHandle.entries()) {
-      if (entry.kind === 'file' && name.toLowerCase().endsWith('.docx')) {
+      const kis = name.toLowerCase();
+      if (entry.kind === 'file' && exts.some(e => kis.endsWith(e))) {
         files.push({ name, subdir: basePath });
       } else if (entry.kind === 'directory') {
         if (depth + 1 > SCAN_MAX_DEPTH) continue;
         if (name.startsWith('.') || SKIP_DIRS.has(name)) continue;
         const subPath = basePath ? `${basePath}/${name}` : name;
-        try { await _scanRecursive(entry, subPath, files, depth + 1); } catch {}
+        try { await _scanRecursive(entry, subPath, files, depth + 1, exts); } catch {}
       }
     }
   }

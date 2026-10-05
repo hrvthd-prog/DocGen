@@ -288,6 +288,17 @@ async function main() {
     assertEq(JSON.stringify(got), JSON.stringify(['masik.docx', 'sablon.docx']),
              'a dolgozói iratok és a .eredeti mentések NEM sablonok');
   });
+  await test('kérésre a PDF-sablonokat is listázza, a 01/02 mappán belülit nem', async () => {
+    const root = fakeDir({
+      files: { 'sablon.docx': {}, 'Nyomtatvany.PDF': {}, 'jegyzet.txt': {} },
+      dirs: { 'NEAK': fakeDir({ files: { 'TAJ.pdf': {} } }),
+              '02_Feltoltheto': fakeDir({ files: { 'kesz.pdf': {} } }) },
+    });
+    const got = (await FS.listDocxFilesDeep(root, ['.docx', '.pdf'])).map(f => f.name).sort();
+    assertEq(JSON.stringify(got), JSON.stringify(['Nyomtatvany.PDF', 'TAJ.pdf', 'sablon.docx']));
+    const regi = (await FS.listDocxFilesDeep(root)).map(f => f.name);
+    assertEq(JSON.stringify(regi), JSON.stringify(['sablon.docx']), 'kérés nélkül a régi viselkedés');
+  });
   await test('mélységi korlát: a túl mély szint kimarad', async () => {
     let deep = fakeDir({ files: { 'melyen.docx': {} } });
     for (let i = 0; i < 6; i++) deep = fakeDir({ dirs: { ['sz' + i]: deep } });

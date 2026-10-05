@@ -121,6 +121,18 @@ const PdfService = (() => {
     };
   }
 
+  /**
+   * Meglévő PDF megnyitása a regular betűvel — kész nyomtatvány kitöltéséhez
+   * (form-pdf.js). A részhalmazolásról ugyanaz áll, mint a newDocument-nél.
+   */
+  async function loadDocument(bytes) {
+    const { PDFDocument } = _lib();
+    const fonts = await _loadFonts();
+    const doc = await PDFDocument.load(bytes);
+    doc.registerFontkit(_fontkit());
+    return { doc, font: await doc.embedFont(_bytes(fonts.regular), { subset: false }) };
+  }
+
   function addPage(doc, meret = A4_LANDSCAPE) { return doc.addPage(meret); }
 
   /**
@@ -175,5 +187,5 @@ const PdfService = (() => {
     return w;
   }
 
-  return { available, newDocument, addPage, drawText, sanitize, A4_LANDSCAPE };
+  return { available, newDocument, loadDocument, addPage, drawText, sanitize, A4_LANDSCAPE };
 })();

@@ -28,6 +28,11 @@ logs/
 !test/fixtures/
 !test/fixtures/**
 
+# Kész, kitölthető PDF-sablonok (üres hatósági nyomtatvány + mezők, adat nélkül) —
+# a repóval jutnak el a használat helyére; onnan kell a sablonmappába másolni.
+!pdf-sablonok/
+!pdf-sablonok/*.pdf
+
 # Szerkesztő / ágens metaadat
 .claude/
 .cursor/
