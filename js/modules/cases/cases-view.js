@@ -389,12 +389,13 @@ const CasesModule = (() => {
     return `
       ${fulek}
       ${CaseTimeline.render(c, dolgozoMezoi(c.employeeId))}
+      ${!Auth.can('cases.write') ? '' : `
       <div class="cv-actions">
         <button class="btn btn-ghost btn-sm" id="cv-edit">Adatok szerkesztése</button>
         ${c.closedAt ? '' : '<button class="btn btn-primary btn-sm" id="cv-advance">Státusz rögzítése</button>'}
         <button class="btn btn-secondary btn-sm" id="cv-fee">Díj a kötegbe</button>
         <button class="btn btn-ghost btn-sm cv-del" id="cv-delete">Ügy törlése</button>
-      </div>`;
+      </div>`}`;
   }
 
   /** A dolgozó nyitott meghosszabbítási ügye, ha van. */

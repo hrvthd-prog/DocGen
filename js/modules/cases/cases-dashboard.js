@@ -134,6 +134,31 @@ const CasesDashboard = (() => {
     //    ugyanazt. Ide csak az kerül, amit SEM határidő, SEM ablak nem időzít.
     const hataridoNelkul = ugyek.filter(c => !c.dueAt && !vanAblaka.has(c.id));
 
+    // 4. A hatóság csúszása: letelt a 70 napos ügyintézési határidő, döntés
+    //    viszont nincs. Ez más tétel, mint a mi mulasztásunk — a teendő itt
+    //    nem beadás, hanem sürgetés, és erre hivatkozni is lehet.
+    const csuszas = ugyek
+      .map(c => ({ ugy: c, nap: CaseRepo.authorityDelay(c, ma) }))
+      .filter(x => x.nap)
+      .sort((a, b) => b.nap - a.nap);
+
+    // 5. Beadott ügy azonosító nélkül — NEVESÍTVE.
+    //
+    //    Eddig csak egy szám állt az állapot-csempén („5 iktatószám nélkül"),
+    //    amiből nem derült ki, kinél és mi hiányzik — így azt sem lehetett
+    //    ellenőrizni, hogy a program érzékelte-e a felvitt számot. A sor
+    //    kiírja azt is, ami MEGVAN, tehát egy pillantással látszik, melyik
+    //    mezőbe került a szám.
+    const azonositoHiany = ugyek
+      .filter(c => (c.status || 'elokeszites') !== 'elokeszites' &&
+                   (!c.fileNumber || !c.ehNumber))
+      .map(c => ({
+        ugy: c,
+        hianyzik: [!c.ehNumber ? 'EH szám' : '', !c.fileNumber ? 'iktatószám' : ''].filter(Boolean),
+        megvan:   [c.ehNumber ? `EH ${c.ehNumber}` : '',
+                   c.fileNumber ? `ikt. ${c.fileNumber}` : ''].filter(Boolean),
+      }));
+
     let szamok = { lejart: 0, surgos: 0, nyitott: 0 };
     try { szamok = CaseRepo.summary(ma); } catch { /* marad a nulla */ }
 
@@ -144,9 +169,11 @@ const CasesDashboard = (() => {
       ablak,
       surgetoAblak: SURGETO_FAZIS.flatMap(f => ablak[f]),
       hataridoNelkul,
+      csuszas,
+      azonositoHiany,
       ugyekSzama: ugyek.length,
       // Van-e egyáltalán teendő? Ebből lesz a „minden rendben" állapot.
-      vanTeendo: !!(szamok.lejart || hianyzo.length ||
+      vanTeendo: !!(szamok.lejart || hianyzo.length || csuszas.length ||
                     SURGETO_FAZIS.some(f => ablak[f].length) || hataridoNelkul.length),
     };
   }
@@ -177,7 +204,9 @@ const CasesDashboard = (() => {
         ${allapotHtml(d)}
         ${d.vanTeendo ? '' : rendbenHtml(d)}
         ${hianyzoHtml(d)}
+        ${csuszasHtml(d)}
         ${ablakHtml(d)}
+        ${azonositoHtml(d)}
         ${hataridoNelkulHtml(d)}
       </div>`;
   }
@@ -297,6 +326,57 @@ const CasesDashboard = (() => {
            </button>`).join('')}
        </div>` : ''}`,
       surgeto.length ? 'dash-block--amber' : '');
+  }
+
+  /**
+   * A hatóság csúszása. Külön blokk, mert a teendő is más: itt nem nekünk
+   * van dolgunk a kérelemmel, hanem a hatóságot kell sürgetni — és a napok
+   * száma az, amire hivatkozni lehet.
+   */
+  function csuszasHtml(d) {
+    if (!d.csuszas.length) return '';
+    return blokk(
+      `A hatóság csúszik — ${d.csuszas.length}`,
+      `Letelt az ügyintézési határidő (kérelmeknél alapértelmezés szerint
+       ${CaseTypes.DEFAULT_APPLICATION_DAYS} nap az OIF érkeztetésétől), döntés
+       viszont nincs. A napok száma a lejárat óta telt el.`,
+      `<div class="dash-list">
+        ${d.csuszas.map(t => `
+          <button class="dash-row" data-open-case="${escHtml(t.ugy.id)}" type="button">
+            <span class="dash-row__main">${escHtml(nev(t.ugy.employeeId))}</span>
+            <span class="dash-row__meta is-late">
+              ${t.nap} napja csúszik · határidő volt: ${escHtml(t.ugy.dueAt)}
+            </span>
+            <span class="dash-row__go">Megnyitás</span>
+          </button>`).join('')}
+      </div>`,
+      'dash-block--red');
+  }
+
+  /**
+   * Beadott ügy hiányzó azonosítóval — nevesítve.
+   *
+   * A puszta szám nem volt ellenőrizhető: nem derült ki, kinél hiányzik, és
+   * az sem, hogy a felvitt szám melyik mezőbe került. Ez a lista mindkettőt
+   * megmutatja.
+   */
+  function azonositoHtml(d) {
+    if (!d.azonositoHiany.length) return '';
+    return blokk(
+      `Azonosító hiányzik — ${d.azonositoHiany.length}`,
+      `Beadott ügy, amihez még nem jött meg a hatósági azonosító. Az EH szám a
+       benyújtáskor keletkezik, az iktatószám az OIF érkeztetésekor — addig a
+       hiány nem hiba, csak nyitott szál.`,
+      `<div class="dash-list">
+        ${d.azonositoHiany.map(t => `
+          <button class="dash-row" data-open-case="${escHtml(t.ugy.id)}" type="button">
+            <span class="dash-row__main">${escHtml(nev(t.ugy.employeeId))}</span>
+            <span class="dash-row__meta">
+              ${t.megvan.length ? `${escHtml(t.megvan.join(' · '))} — ` : ''}hiányzik: ${escHtml(t.hianyzik.join(', '))}
+            </span>
+            <span class="dash-row__go">Megnyitás</span>
+          </button>`).join('')}
+      </div>`);
   }
 
   function hataridoNelkulHtml(d) {

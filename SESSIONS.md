@@ -68,6 +68,75 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-07 — Ügyek: státusz-javítás és őszinte idővonal
+
+**Cél:** három hiba az Ügyek modulban. (1) Tévesen rögzített státuszt (hiánypótlás
+az elbírálás alatt helyett) nem lehetett javítani. (2) Beadás után az idővonal azt
+írta, „az ablak már nem releváns" — pedig csak a benyújtási határnapok évültek el,
+az idő nem. (3) A sáv vizuálisan hazudott.
+
+**Változás (`v10.74`):**
+- `CaseRepo.updateEvent()` már `status` és `outcome` paramétert is fogad.
+  Minden ellenőrzés a írás ELŐTT fut (félig javított bejegyzés ne maradjon),
+  utána az új `ujraszamolAllapot()` az UTOLSÓ státuszos bejegyzésből képezi
+  újra az ügy `status` / `outcome` / `closedAt` mezőit. Ez egyben kiváltotta a
+  korábbi ad-hoc `if (e.outcome && c.closedAt)` sort.
+- `CaseForm.openEvent()` párbeszéde kapott státusz- és (lezárásnál) kimenetel-
+  választót.
+- `CaseRepo.submissionStatus()` beadás után a hátralévő időt mondja:
+  „Folyamatban · a jelenlegi engedély még N napig érvényes · ügyintézési
+  határidő: M nap". Új mezők a visszatérési értéken: `submittedAt`, `dueAt`,
+  `daysLeft`. `CaseRepo.timeline()` beadás után kiveszi a három BENYÚJTÁSI
+  mérföldkövet (azok tényleg elévültek), az engedély lejáratát viszont nem.
+- `CaseTimeline`: új, tiszta `barModel(st, maIso)` (HTML nélkül, ezért
+  tesztelhető) adja a sáv geometriáját, a `renderWindowBar` már csak rajzol.
+  Beadás után a sáv a beadás napjától az engedély lejáratáig / az ügyintézési
+  határidőig tart. 30 naponként rovátka került a sávra (`title`-ben a dátum).
+- A `javít` gomb és a `cv-actions` gombsor `Auth.can('cases.write')`-hoz kötve
+  (admin + ügyintéző). Eddig a csak-olvasó szintek is látták őket.
+
+**Miért / döntés:** a sáv címkéi eddig flexbox-szal, EGYENLETESEN oszlottak el,
+miközben a „ma" vonal a valódi arányánál állt — 90 napos ablaknál az „ajánlott"
+a 55.6%-nál van, a flexbox viszont 37.5%-ra tette. A két jelölés egymáshoz
+képest értelmezhetetlen volt. Most minden jelölő abszolút pozíciót kap a saját
+arányánál, két sorban váltakozva (sakktábla), a szélsők befelé igazodnak.
+A sáv alatti tartóvonalak (`__anchor`) kötik a címkét a pozíciójához.
+
+**Tesztek:** `node test/run-all.js` — mind zöld. `test/cases.test.js` 74 → 82
+teszt: státusz-javítás (javítás, lezárás/visszanyitás, kimenetel nélküli
+lezárás elutasítása), a beadás utáni szövegek, és egy új
+„Benyújtási sáv geometriája" szakasz a `barModel`-re. A `case-timeline.js`
+innentől a teszt-sandboxban is betöltődik.
+
+**Ugyanebben a menetben, második kör:**
+- `CaseRepo.authorityDelay(c, ma)` — mennyit csúszik a HATÓSÁG. `null`, ha a
+  kérdés nem értelmes: lezárt ügy, nincs határidő, vagy csak tájékoztató
+  határidő van (bejelentésnél a dátumot mi írtuk be, abból hatósági mulasztás
+  nem következik). A 70 nap (`DEFAULT_APPLICATION_DAYS`) az OIF érkeztetésétől
+  fut, ez eddig is megvolt — új az, hogy a lejárat UTÁN is mond valamit.
+- A beadás utáni szöveg és az idővonal határidő-pontja is ezt mondja:
+  „a hatóság N napja csúszik (nincs döntés)". Határidő nélküli nyitott ügynél
+  pedig kiírja, melyik dátumot kell megadni.
+- Áttekintő: új **„A hatóság csúszik — N"** blokk (piros, csúszás szerint
+  rendezve), és új **„Azonosító hiányzik — N"** blokk.
+- Az azonosító-hiány eddig csak SZÁM volt az állapot-csempén („5 iktatószám
+  nélkül"), amiből nem derült ki, kinél hiányzik — és az sem, hogy a felvitt
+  szám melyik mezőbe került. A felhasználó ezért azt látta, hogy „nem érzékeli
+  az iktatószámokat". A számolás jó volt (a tesztek igazolják), a VISSZAJELZÉS
+  volt ellenőrizhetetlen. Az új blokk nevesíti a dolgozót, kiírja, ami MEGVAN
+  (`EH …` / `ikt. …`) és ami hiányzik, és megnyitja az ügyet.
+
+**Nyitott / következő:** a `barModel` címke-ütközést csak sakktábla-elrendezéssel
+kezeli; nagyon rövid (< ~20 napos) sávnál két szomszédos címke még takarhatja
+egymást. Ha előjön, a megoldás a pct-különbség alapján harmadik sor vagy
+elrejtés. Az `ajanljKovetkezot()` dialógusa kézzel épített `st` objektumot ad a
+`renderWindowBar`-nak (`done: false`) — ha a sáv bemenete tovább bővül, azt is
+igazítani kell. **Visszajelzést kérni:** az „Azonosító hiányzik" blokkban
+tényleg ott van-e a felhasználó által felvitt 5 iktatószám — ha igen, akkor az
+eredeti panasz tisztán a visszajelzés hibája volt; ha nem, akkor kiderül,
+melyik mezőbe került a szám, és ott kell javítani.
+
+
 ## 2026-10-05 (2.) — A TAJ-igénylés másik két irata: NYT.53 és meghatalmazás
 
 **Cél:** a felhasználó kérdése: milyen irat kell még a TAJ-igényléshez — és készüljön

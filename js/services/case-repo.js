@@ -260,6 +260,25 @@ const CaseRepo = (() => {
     return `${elozetes}${n} nap van hátra`;
   }
 
+  /**
+   * Mennyit csúszik a HATÓSÁG ezen az ügyön?
+   *
+   * `null`, ha a kérdés nem értelmes: lezárt ügy (megjött a döntés), nincs
+   * határidő (az érkeztetés napja nincs rögzítve, lásd `triggerDate`), vagy
+   * csak tájékoztató határidő van (bejelentésnél a dátumot mi írtuk be, abból
+   * hatósági mulasztás nem következik). Egyébként a lejárat óta eltelt napok
+   * száma — a 70 napos ügyintézési határidő az érkeztetéstől fut, és ha az
+   * letelt döntés nélkül, az már a hatóságon csúszik, nem rajtunk.
+   *
+   * Pozitív szám = ennyi napja tartozik döntéssel. 0 vagy negatív esetén
+   * `null`: még határidőn belül van, azt a `deadlineText` mondja el.
+   */
+  function authorityDelay(c, ma = null) {
+    if (!c || c.closedAt || !c.dueAt || isAdvisory(c)) return null;
+    const n = daysLeft(c, ma);
+    return (n !== null && n < 0) ? -n : null;
+  }
+
   /** Nyitott ügyek sürgősség szerint, a legégetőbb elöl. */
   function openCases(ma = null) {
     const rang = { lejart: 0, surgos: 1, nyitott: 2 };
@@ -396,18 +415,23 @@ const CaseRepo = (() => {
       });
     }
 
-    // 2. Benyújtási ablak – csak ha az engedély lejárata ismert
+    // 2. Benyújtási ablak – csak ha az engedély lejárata ismert.
+    //    Beadás után a HÁROM BENYÚJTÁSI mérföldkő tényleg nem mond semmit (a
+    //    kérelem bent van), az engedély lejárata viszont annál inkább: addig
+    //    tart a jelenlegi jogállás. Ezért csak azt a hármat vesszük ki.
     const ablak = CaseTypes.submissionWindow(c.type, employeeFields);
     if (ablak) {
-      pontok.push({ kind: 'ablak', date: ablak.earliest, computed: true,
-        label: 'Benyújtás legkorábban', windowRole: 'earliest',
-        note: 'Ennél korábban nem fogadják be' });
-      pontok.push({ kind: 'ablak', date: ablak.latest, computed: true,
-        label: 'Benyújtás ajánlott határnapja', windowRole: 'latest',
-        note: 'Eddig érdemes beadni' });
-      pontok.push({ kind: 'ablak', date: ablak.final, computed: true,
-        label: 'Benyújtás legvégső napja', windowRole: 'final',
-        note: 'Az utolsó nap, amikor még beadható' });
+      if (!beadottE(c)) {
+        pontok.push({ kind: 'ablak', date: ablak.earliest, computed: true,
+          label: 'Benyújtás legkorábban', windowRole: 'earliest',
+          note: 'Ennél korábban nem fogadják be' });
+        pontok.push({ kind: 'ablak', date: ablak.latest, computed: true,
+          label: 'Benyújtás ajánlott határnapja', windowRole: 'latest',
+          note: 'Eddig érdemes beadni' });
+        pontok.push({ kind: 'ablak', date: ablak.final, computed: true,
+          label: 'Benyújtás legvégső napja', windowRole: 'final',
+          note: 'Az utolsó nap, amikor még beadható' });
+      }
       pontok.push({ kind: 'ablak', date: ablak.basis, computed: true,
         label: 'A jelenlegi engedély lejár', windowRole: 'basis' });
     }
@@ -417,10 +441,12 @@ const CaseRepo = (() => {
       pontok.push({
         kind: 'hatarido', date: c.dueAt, computed: true,
         label: isAdvisory(c) ? 'Határidő (tájékoztató)' : 'Ügyintézési határidő',
-        note: c.triggerDate
-          ? `${CaseTypes.triggerLabel(c.type)}: ${c.triggerDate}`
-          : '',
+        note: [
+          c.triggerDate ? `${CaseTypes.triggerLabel(c.type)}: ${c.triggerDate}` : '',
+          authorityDelay(c, maIso) ? `a hatóság ${authorityDelay(c, maIso)} napja csúszik` : '',
+        ].filter(Boolean).join(' · '),
         advisory: isAdvisory(c),
+        delay: authorityDelay(c, maIso),
       });
     }
 
@@ -460,8 +486,8 @@ const CaseRepo = (() => {
                          Date.UTC(a.getFullYear(), a.getMonth(), a.getDate())) / 86400000);
     };
 
-    // Beadás után az ablaknak már nincs jelentősége
-    const beadva = c.events.some(e => e.status && e.status !== 'elokeszites');
+    const beadva = beadottE(c);
+    const beadasEsemeny = c.events.find(e => e.status && e.status !== 'elokeszites');
 
     const szoveg = {
       korai:   () => `Még nem adható be – ${napokig(ablak.earliest)} nap múlva nyílik`,
@@ -473,9 +499,45 @@ const CaseRepo = (() => {
     return {
       window: ablak,
       phase: fazis,
-      text: beadva ? 'Beadva – az ablak már nem releváns' : szoveg(),
+      text: beadva ? folyamatbanSzoveg(c, ablak, napokig) : szoveg(),
       done: beadva,
+      submittedAt: beadasEsemeny ? beadasEsemeny.occurredAt : null,
+      dueAt: c.dueAt || null,
+      daysLeft: napokig(ablak.basis),
     };
+  }
+
+  /** Beadott-e már a kérelem? (az előkészítés még nem beadás) */
+  function beadottE(c) {
+    return c.events.some(e => e.status && e.status !== 'elokeszites');
+  }
+
+  /**
+   * Beadás utáni összefoglaló.
+   *
+   * Korábban itt „az ablak már nem releváns" állt — ami félrevezető volt: a
+   * benyújtási határnapok valóban elévültek, de az IDŐ nem lett lényegtelen.
+   * Folyamatban lévő ügynél épp az a kérdés, meddig tart a jelenlegi engedély
+   * és mikor jár le az ügyintézési határidő — most ezt mondjuk meg.
+   */
+  function folyamatbanSzoveg(c, ablak, napokig) {
+    const n = napokig(ablak.basis);
+    const reszek = [c.closedAt ? 'Lezárva' : 'Folyamatban'];
+    reszek.push(n > 0 ? `a jelenlegi engedély még ${n} napig érvényes`
+      : n === 0 ? 'a jelenlegi engedély ma jár le'
+      : `a jelenlegi engedély ${-n} napja lejárt (elbírálásig a tartózkodás jogszerű)`);
+    if (c.dueAt && !c.closedAt) {
+      const d = napokig(c.dueAt);
+      reszek.push(d > 0 ? `ügyintézési határidő: ${d} nap`
+        : d === 0 ? 'az ügyintézési határidő ma jár le'
+        : (isAdvisory(c)
+            ? `az ügyintézési határidő ${-d} napja lejárt`
+            : `a hatóság ${-d} napja csúszik (nincs döntés)`));
+    } else if (!c.dueAt && !c.closedAt) {
+      // Határidő nélkül nincs mihez képest csúszni – ez a legfontosabb hiány.
+      reszek.push(`nincs határidő – add meg: ${CaseTypes.triggerLabel(c.type)}`);
+    }
+    return reszek.join(' · ');
   }
 
   // ── Módosítás ──────────────────────────────────────────────────────────────
@@ -687,27 +749,71 @@ const CaseRepo = (() => {
   }
 
   /**
-   * Meglévő bejegyzés javítása – elgépelt dátum vagy megjegyzés.
+   * Az ügy állapota mindig az UTOLSÓ státuszos bejegyzésből következik.
+   * Bejegyzés-javítás után ezt újra kell képezni, különben az ügy a hibás
+   * státuszon ragadna: a felhasználó kijavítja az idővonalat, a kártya mégis
+   * a régit mutatja.
+   */
+  function ujraszamolAllapot(c) {
+    const utolso = c.events.slice().reverse().find(e => e.status);
+    if (!utolso) return;
+    const zaro = CaseTypes.isTerminal(c.type, utolso.status);
+    c.status   = utolso.status;
+    c.outcome  = zaro ? (utolso.outcome || null) : null;
+    c.closedAt = zaro ? utolso.occurredAt : null;
+  }
+
+  /**
+   * Meglévő bejegyzés javítása – elgépelt dátum, megjegyzés vagy ROSSZ STÁTUSZ.
+   *
+   * A státusz azért javítható, mert a leggyakoribb elírás épp ez: a
+   * legördülőből egy sorral feljebb/lejjebb választani (hiánypótlás vs.
+   * elbírálás alatt) pillanat műve, és eddig nem volt rá visszaút — új
+   * bejegyzést kellett rögzíteni, amitől az idővonal hazudott.
    *
    * A rögzítés ideje (`at`) és a rögzítő szándékosan NEM módosítható: az az
    * audit-nyom. Csak azt írjuk át, amit a felhasználó eredetileg is megadott.
    */
-  function updateEvent(id, index, { occurredAt, note } = {}) {
+  function updateEvent(id, index, { occurredAt, note, status, outcome } = {}) {
     ensureLoaded();
     const c = get(id);
     if (!c) throw new Error('Nincs ilyen ügy.');
     const e = c.events[index];
     if (!e) throw new Error('Nincs ilyen bejegyzés.');
 
+    // Előbb minden ellenőrzés, csak utána írunk: félig javított bejegyzés ne
+    // maradjon a naplóban, ha pl. a kimenetel hiányzik.
+    let ujStatus = null, ujKimenetel = null;
+    if (status !== undefined || outcome !== undefined) {
+      if (!e.status) {
+        throw new Error('Ez a bejegyzés nem státuszváltás, a státusza nem módosítható.');
+      }
+      ujStatus = status === undefined ? e.status : String(status);
+      if (!CaseTypes.statusesOf(c.type).some(s => s.key === ujStatus)) {
+        throw new Error(`A(z) „${ujStatus}" státusz nem tartozik ehhez az ügytípushoz.`);
+      }
+      const zaro = CaseTypes.isTerminal(c.type, ujStatus);
+      ujKimenetel = zaro ? ((outcome === undefined ? e.outcome : outcome) || null) : null;
+      if (zaro && !ujKimenetel) {
+        throw new Error('Lezáráshoz meg kell adni a kimenetelt (megadva, elutasítva, megszüntetve…).');
+      }
+      if (ujKimenetel && !CaseTypes.outcomes().some(o => o.key === ujKimenetel)) {
+        throw new Error(`Ismeretlen kimenetel: ${ujKimenetel}.`);
+      }
+    }
+
     if (occurredAt !== undefined) {
       const nap = String(occurredAt || '').slice(0, 10);
       if (!nap) throw new Error('A történés napja nem lehet üres.');
       if (nap > today()) throw new Error('A történés napja nem lehet a jövőben.');
       e.occurredAt = nap;
-      // Ha a lezáró bejegyzést javítjuk, a lezárás dátuma is követi
-      if (e.outcome && c.closedAt) c.closedAt = nap;
     }
     if (note !== undefined) e.note = String(note || '');
+    if (ujStatus) { e.status = ujStatus; e.outcome = ujKimenetel; }
+
+    // A dátum- és a státuszjavítás is hathat az ügy állapotára (a lezáró
+    // bejegyzés napja = a lezárás napja), ezért egy helyen képezzük újra.
+    ujraszamolAllapot(c);
 
     c.updatedAt = nowIso();
     c.updatedBy = currentUserName();
@@ -900,7 +1006,7 @@ const CaseRepo = (() => {
     load, save, scheduleSave, flush,
     all, get, forEmployee, isOpen, daysLeft, urgency, isAdvisory, deadlineText, openCases, search,
     docIdentifiers, docTags, DOC_TAGS,
-    timeline, submissionStatus,
+    timeline, submissionStatus, authorityDelay,
     create, update, setStatus, addEvent, updateEvent, recordProducedIdentifier,
     openNextCase, hasOpenCaseOfType, isBackdated, summary, EXPIRY_FIELD_MAP,
     destroy, destroyForEmployee, suggestRenewals,

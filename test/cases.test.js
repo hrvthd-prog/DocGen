@@ -39,12 +39,13 @@ for (const [rel, name] of [
   ['../js/services/employee-repo.js', 'EmployeeRepo'],
   ['../js/schema/case-types.js',      'CaseTypes'],
   ['../js/services/case-repo.js',     'CaseRepo'],
+  ['../js/modules/cases/case-timeline.js', 'CaseTimeline'],
 ]) {
   let code = fs.readFileSync(path.join(__dirname, rel), 'utf8');
   code += `\nglobalThis.${name} = ${name};`;
   vm.runInContext(code, sandbox, { filename: rel });
 }
-const { EmployeeRepo, CaseTypes, CaseRepo } = sandbox;
+const { EmployeeRepo, CaseTypes, CaseRepo, CaseTimeline } = sandbox;
 CaseTypes.loadFrom(null);
 
 async function tisztaAllapot() {
@@ -272,7 +273,7 @@ atest('az összefoglaló szöveg megmondja, mit kell tenni', async () => {
   assert(/lejárt/.test(CaseRepo.submissionStatus(ugy, F, '2026-12-25').text));
 });
 
-atest('beadás után az ablak már nem sürget', async () => {
+atest('beadás után nem sürget, hanem a hátralévő időt mondja', async () => {
   await tisztaAllapot();
   const emp = EmployeeRepo.create({
     fields: { surname: 'Kis', forename: 'Éva', expiration_of_rp: '2026-12-31' },
@@ -282,7 +283,39 @@ atest('beadás után az ablak már nem sürget', async () => {
 
   const st = CaseRepo.submissionStatus(CaseRepo.get(ugy.id), emp.fields, '2026-12-25');
   assertEq(st.done, true);
-  assert(/nem releváns/.test(st.text), `sürget beadás után is: ${st.text}`);
+  assert(!/releváns/.test(st.text), `még mindig „nem releváns": ${st.text}`);
+  assert(/még 6 napig érvényes/.test(st.text), `nem mondja a hátralévő időt: ${st.text}`);
+  assertEq(st.daysLeft, 6);
+});
+
+atest('a lejárt engedély sem „nem releváns" – a kérelem folyamatban van', async () => {
+  await tisztaAllapot();
+  const emp = EmployeeRepo.create({
+    fields: { surname: 'Kis', forename: 'Éva', expiration_of_rp: '2026-08-31' },
+  });
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas' });
+  CaseRepo.setStatus(ugy.id, 'beadva', { occurredAt: '2026-08-01' });
+
+  const st = CaseRepo.submissionStatus(CaseRepo.get(ugy.id), emp.fields, '2026-09-10');
+  assert(/10 napja lejárt/.test(st.text), st.text);
+  assertEq(st.submittedAt, '2026-08-01');
+});
+
+atest('beadás után a benyújtási mérföldkövek lekerülnek az idővonalról', async () => {
+  await tisztaAllapot();
+  const emp = EmployeeRepo.create({
+    fields: { surname: 'Kis', forename: 'Éva', expiration_of_rp: '2026-12-31' },
+  });
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas' });
+
+  const elotte = CaseRepo.timeline(ugy.id, emp.fields, '2026-09-01')
+    .filter(p => p.kind === 'ablak').map(p => p.windowRole);
+  assertEq(elotte.join(','), 'earliest,latest,final,basis');
+
+  CaseRepo.setStatus(ugy.id, 'beadva', { occurredAt: '2026-09-01' });
+  const utana = CaseRepo.timeline(ugy.id, emp.fields, '2026-09-02')
+    .filter(p => p.kind === 'ablak').map(p => p.windowRole);
+  assertEq(utana.join(','), 'basis', 'az ajánlott/legvégső nap beadás után is ott maradt');
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -787,6 +820,97 @@ atest('a lezáró bejegyzés javítása a lezárás dátumát is viszi', async (
   CaseRepo.updateEvent(ugy.id, 1, { occurredAt: '2026-07-18' });
 
   assertEq(CaseRepo.get(ugy.id).closedAt, '2026-07-18');
+});
+
+atest('tévesen választott státusz utólag javítható', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso' });
+  CaseRepo.setStatus(ugy.id, 'hianypotlas', { occurredAt: '2026-07-02' });
+
+  CaseRepo.updateEvent(ugy.id, 1, { status: 'elbiralas' });
+
+  const c = CaseRepo.get(ugy.id);
+  assertEq(c.events[1].status, 'elbiralas', 'a bejegyzés státusza nem változott');
+  assertEq(c.status, 'elbiralas', 'az ügy a régi, hibás státuszon ragadt');
+});
+
+atest('a státuszjavítás lezárhat és vissza is nyithat egy ügyet', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso' });
+  CaseRepo.setStatus(ugy.id, 'elbiralas', { occurredAt: '2026-07-02' });
+
+  CaseRepo.updateEvent(ugy.id, 1, { status: 'lezarva', outcome: 'megadva' });
+  assertEq(CaseRepo.get(ugy.id).closedAt, '2026-07-02', 'a lezárás a történés napjára kerül');
+  assertEq(CaseRepo.get(ugy.id).outcome, 'megadva');
+
+  CaseRepo.updateEvent(ugy.id, 1, { status: 'elbiralas' });
+  assertEq(CaseRepo.get(ugy.id).closedAt, null, 'a visszanyitás nem törölte a lezárást');
+  assertEq(CaseRepo.get(ugy.id).outcome, null);
+});
+
+atest('kimenetel nélküli lezárásra javítás nem megy át – és nem is ír félig', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso' });
+  CaseRepo.setStatus(ugy.id, 'beadva', { occurredAt: '2026-07-02' });
+
+  await assertThrows(() => CaseRepo.updateEvent(ugy.id, 1, { status: 'lezarva' }),
+    /kimenetel/);
+  assertEq(CaseRepo.get(ugy.id).events[1].status, 'beadva', 'félig átírta a bejegyzést');
+
+  await assertThrows(() => CaseRepo.updateEvent(ugy.id, 1, { status: 'nincs_ilyen' }),
+    /nem tartozik/);
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+asection('Benyújtási sáv geometriája');
+
+atest('a mérföldkövek a VALÓDI arányuknál állnak, nem egyenletesen', async () => {
+  const ablak = CaseTypes.submissionWindow('rp_hosszabbitas', { expiration_of_rp: '2026-12-31' });
+  const m = CaseTimeline.barModel(
+    { window: ablak, phase: 'idealis', text: '', done: false }, '2026-11-01');
+
+  assertEq(m.from, '2026-10-02');            // lejárat − 90 nap
+  assertEq(m.to,   '2026-12-31');
+  assertEq(m.days, 90);
+
+  const p = Object.fromEntries(m.marks.map(k => [k.label, Math.round(k.pct * 10) / 10]));
+  assertEq(p['legkorábbi'], 0);
+  assertEq(p['ajánlott'],  Math.round((50 / 90) * 1000) / 10);   // −40 nap → 55.6%
+  assertEq(p['legvégső'],  Math.round((80 / 90) * 1000) / 10);   // −10 nap → 88.9%
+  assertEq(p['engedély lejár'], 100);
+
+  // a mai nap ugyanazon a skálán: 2026-11-01 a 30. nap
+  assertEq(Math.round(m.now.pct * 10) / 10, Math.round((30 / 90) * 1000) / 10);
+  assertEq(m.now.out, false);
+
+  // a szélső címkék befelé igazodnak, különben kilógnának a sávból
+  assertEq(m.marks[0].shift, '0');
+  assertEq(m.marks[m.marks.length - 1].shift, '-100%');
+});
+
+atest('30 naponként rovátka kerül a sávra', async () => {
+  const ablak = CaseTypes.submissionWindow('rp_hosszabbitas', { expiration_of_rp: '2026-12-31' });
+  const m = CaseTimeline.barModel(
+    { window: ablak, phase: 'korai', text: '', done: false }, '2026-09-01');
+
+  assertEq(m.ticks.map(t => t.iso).join(','), '2026-11-01,2026-12-01');
+  assertEq(m.now.out, true, 'a sávon kívüli mai nap nincs megjelölve kívülállóként');
+});
+
+atest('beadás után a sáv a beadástól a hátralévő időig tart', async () => {
+  const ablak = CaseTypes.submissionWindow('rp_hosszabbitas', { expiration_of_rp: '2026-12-31' });
+  const m = CaseTimeline.barModel({
+    window: ablak, phase: 'idealis', text: '', done: true,
+    submittedAt: '2026-11-01', dueAt: '2027-01-20',
+  }, '2026-12-01');
+
+  assertEq(m.from, '2026-11-01', 'nem a beadás napjától indul');
+  assertEq(m.to,   '2027-01-20', 'a határidő kilóg a sávból');
+  assertEq(m.marks.map(k => k.label).join(','), 'beadva,engedély lejár,ügyintézési határidő');
+  assertEq(m.segments.length, 1, 'beadás után nincs több sürgető szakasz');
 });
 
 // ════════════════════════════════════════════════════════════════════════════

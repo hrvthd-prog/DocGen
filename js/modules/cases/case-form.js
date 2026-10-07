@@ -350,16 +350,40 @@ const CaseForm = (() => {
 
   // ── Bejegyzés utólagos javítása ────────────────────────────────────────────
 
-  /** Elgépelt dátum vagy megjegyzés javítása egy meglévő idővonal-bejegyzésen. */
+  /**
+   * Elgépelt dátum, megjegyzés vagy ROSSZ STÁTUSZ javítása egy meglévő
+   * idővonal-bejegyzésen.
+   *
+   * A státusz azért szerkeszthető, mert mellényúlni a legördülőben egy
+   * pillanat (hiánypótlás vs. elbírálás alatt), és eddig nem volt rá visszaút.
+   */
   function openEvent({ caseId, index, onSaved = null } = {}) {
     const c = CaseRepo.get(caseId);
     if (!c || !c.events[index]) { toast('A bejegyzés nem található', 'error'); return; }
     const e = c.events[index];
+    const statuszok = e.status ? CaseTypes.statusesOf(c.type) : [];
 
     showDialog({
       title: 'Bejegyzés javítása',
       body: `
         <div class="cf-grid">
+          ${statuszok.length ? `
+          <label class="cf-field">
+            <span>Státusz</span>
+            <select id="ce-status" class="field-input">
+              ${statuszok.map(st => `<option value="${escHtml(st.key)}" ${st.key === e.status ? 'selected' : ''}>${escHtml(st.label)}${st.terminal ? ' (lezárás)' : ''}</option>`).join('')}
+            </select>
+            <small>Rossz státuszt választottál? Itt javítható.</small>
+          </label>
+
+          <label class="cf-field" id="ce-outcome-wrap" style="display:none">
+            <span>Kimenetel <strong>(lezáráshoz kötelező)</strong></span>
+            <select id="ce-outcome" class="field-input">
+              <option value="">— válassz —</option>
+              ${CaseTypes.outcomes().map(o => `<option value="${escHtml(o.key)}" ${o.key === e.outcome ? 'selected' : ''}>${escHtml(o.label)}</option>`).join('')}
+            </select>
+          </label>` : ''}
+
           <label class="cf-field">
             <span>Mikor történt?</span>
             ${dateFieldHtml({ id: 'ce-occurred', value: e.occurredAt || '' })}
@@ -382,12 +406,25 @@ const CaseForm = (() => {
         <button class="btn btn-primary btn-sm" id="ce-save">Mentés</button>`,
     });
 
+    const statusEl = document.getElementById('ce-status');
+    if (statusEl) {
+      const frissit = () => {
+        document.getElementById('ce-outcome-wrap').style.display =
+          CaseTypes.isTerminal(c.type, statusEl.value) ? '' : 'none';
+      };
+      statusEl.addEventListener('change', frissit);
+      frissit();
+    }
+
     document.getElementById('ce-save').addEventListener('click', () => {
       try {
-        CaseRepo.updateEvent(caseId, index, {
+        CaseRepo.updateEvent(caseId, index, Object.assign({
           occurredAt: document.getElementById('ce-occurred').value,
           note:       document.getElementById('ce-note').value,
-        });
+        }, statusEl ? {
+          status:  statusEl.value,
+          outcome: document.getElementById('ce-outcome').value || null,
+        } : {}));
         closeDialog();
         toast('✓ Bejegyzés javítva', 'success');
         if (onSaved) onSaved();

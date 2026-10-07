@@ -286,6 +286,72 @@ function d(extra = {}) { return CasesDashboard.adatok(Object.assign({ ma: MA }, 
     assertEq(ossz, 0, 'bejelentésre is számolt benyújtási ablakot');
   });
 
+  section('A hatóság csúszása');
+
+  await test('Letelt a 70 napos határidő döntés nélkül — a hatóság csúszik', async () => {
+    await tisztaAllapot();
+    const e = ujDolgozo();
+    // Az érkeztetés 80 napja volt, a határidő tehát 10 napja letelt.
+    const c = CaseRepo.create({ employeeId: e.id, type: 'rp_elso', triggerDate: nap(-80) });
+    CaseRepo.setStatus(c.id, 'elbiralas', { occurredAt: nap(-75) });
+
+    assertEq(CaseRepo.authorityDelay(CaseRepo.get(c.id), MA), 10);
+    const x = d();
+    assertEq(x.csuszas.length, 1);
+    assertEq(x.csuszas[0].nap, 10);
+    assertEq(x.vanTeendo, true, 'a csúszás nem számított teendőnek');
+  });
+
+  await test('Határidőn belül, lezárva és határidő nélkül nem csúszás', async () => {
+    await tisztaAllapot();
+    const e = ujDolgozo();
+    const belul = CaseRepo.create({ employeeId: e.id, type: 'rp_elso', triggerDate: nap(-10) });
+    const lezart = CaseRepo.create({ employeeId: e.id, type: 'rp_elso', triggerDate: nap(-80) });
+    CaseRepo.setStatus(lezart.id, 'lezarva', { outcome: 'megadva', occurredAt: nap(-1) });
+    CaseRepo.create({ employeeId: e.id, type: 'rp_elso' });          // nincs határidő
+
+    assertEq(CaseRepo.authorityDelay(CaseRepo.get(belul.id), MA), null);
+    assertEq(CaseRepo.authorityDelay(CaseRepo.get(lezart.id), MA), null);
+    assertEq(d().csuszas.length, 0);
+  });
+
+  await test('Tájékoztató határidő lejárata nem a hatóság csúszása', async () => {
+    await tisztaAllapot();
+    const e = ujDolgozo();
+    // Bejelentés: a dátumot MI írtuk be, hatósági mulasztás nem következik belőle.
+    const c = CaseRepo.create({ employeeId: e.id, type: 'szallashely_valtozas',
+                                triggerDate: nap(-60) });
+    CaseRepo.setStatus(c.id, 'beadva', { occurredAt: nap(-59) });
+    assert(CaseRepo.get(c.id).dueAt, 'a bejelentésnek sincs határideje – rossz a fixture');
+    assertEq(CaseRepo.authorityDelay(CaseRepo.get(c.id), MA), null);
+  });
+
+  section('Hiányzó azonosító — nevesítve');
+
+  await test('Megmondja, kinél és MI hiányzik, és azt is, ami megvan', async () => {
+    await tisztaAllapot();
+    const e = ujDolgozo();
+    const csakEh = CaseRepo.create({ employeeId: e.id, type: 'rp_elso', ehNumber: 'EH18506859' });
+    CaseRepo.setStatus(csakEh.id, 'beadva');
+
+    const x = d().azonositoHiany;
+    assertEq(x.length, 1);
+    assertEq(x[0].hianyzik.join(','), 'iktatószám');
+    assertEq(x[0].megvan.join(','), 'EH EH18506859', 'nem érzékelte a felvitt EH számot');
+  });
+
+  await test('Ha mindkét szám megvan, nem jelez — és előkészítés alatt sem', async () => {
+    await tisztaAllapot();
+    const e = ujDolgozo();
+    const kesz = CaseRepo.create({ employeeId: e.id, type: 'rp_elso',
+      ehNumber: 'EH1', fileNumber: '106-1-12345-2/2026-T' });
+    CaseRepo.setStatus(kesz.id, 'elbiralas');
+    CaseRepo.create({ employeeId: e.id, type: 'rp_elso' });          // előkészítés
+
+    assertEq(d().azonositoHiany.length, 0,
+      'a felvitt iktatószám ellenére hiányt jelzett');
+  });
+
   section('Számlálók');
 
   await test('A lejárt és a sürgős ügy a megfelelő számlálóba kerül', async () => {

@@ -30,6 +30,11 @@ const CaseTimeline = (() => {
     lekesve: 'Lekésve',
   };
 
+  /** Írhatja-e a felhasználó az ügyeket? (a dialógusok a Settings elől rejtve) */
+  function irhat() {
+    return typeof Auth === 'undefined' || Auth.can('cases.write');
+  }
+
   function huDatum(iso) {
     if (!iso) return '';
     const [y, m, d] = String(iso).slice(0, 10).split('-');
@@ -47,54 +52,120 @@ const CaseTimeline = (() => {
 
   // ── 1. Benyújtási sáv ──────────────────────────────────────────────────────
 
+  /** Két ISO nap távolsága napokban (UTC, nyári időszámítástól mentes). */
+  function napKulonbseg(a, b) {
+    return Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
+  }
+
+  function napPlusz(iso, n) {
+    return new Date(Date.parse(iso) + n * 86400000).toISOString().slice(0, 10);
+  }
+
+  /** A legkésőbbi ISO dátum a listából (az üreseket kihagyva). */
+  function legkesobbi(lista) {
+    return lista.filter(Boolean).sort().pop();
+  }
+
+  const TICK_NAP = 30;      // ennyi naponként kap a sáv egy rovátkát
+
   /**
-   * A sáv a legkorábbi naptól az engedély lejáratáig tart, benne a két belső
-   * mérföldkővel és a mai nap jelölőjével. Ha a mai nap kilóg a sávból, a
-   * jelölő a szélére kerül – nem tűnik el, csak nem torzítja a skálát.
+   * A sáv modellje — tiszta adat, HTML nélkül, ezért tesztelhető.
+   *
+   * BEADÁS ELŐTT a sáv a benyújtási ablakot mutatja: legkorábbi nap →
+   * az engedély lejárata, benne a két belső mérföldkővel.
+   *
+   * BEADÁS UTÁN a benyújtási mérföldkövek már nem mondanak semmit (a kérelem
+   * bent van), ezért a sáv átvált: a beadás napjától az engedély lejáratáig /
+   * az ügyintézési határidőig tart. A kérdés ilyenkor nem az, hogy „mikorra
+   * kell beadni", hanem hogy „mennyi van még hátra".
+   *
+   * A mérföldkövek a VALÓDI arányuknál állnak (nem egyenletesen elosztva, mint
+   * korábban): a mai nap jelölője csak így olvasható hozzájuk. Minden
+   * `pct` 0–100 közé vágva, hogy a sávon kívülre eső dátum se torzítsa a skálát.
    */
+  function barModel(st, maIso) {
+    const a = st.window;
+    const done = !!st.done;
+
+    const kezd = (done && st.submittedAt) ? st.submittedAt : a.earliest;
+    const veg  = legkesobbi([a.basis, done ? st.dueAt : null, done ? maIso : null, kezd]);
+    const teljes = Math.max(1, napKulonbseg(kezd, veg));
+
+    const pct = iso => Math.max(0, Math.min(100, (napKulonbseg(kezd, iso) / teljes) * 100));
+
+    const szakaszok = done
+      // Az eltelt idő a beadás óta – a maradék a világos alapsáv.
+      ? [{ cls: 'done', from: 0, to: pct(maIso) }]
+      : [{ cls: 'ok',   from: 0,              to: pct(a.latest) },
+         { cls: 'warn', from: pct(a.latest),  to: pct(a.final) },
+         { cls: 'late', from: pct(a.final),   to: 100 }];
+
+    const nyers = done
+      ? [{ iso: st.submittedAt, label: 'beadva' },
+         { iso: st.dueAt,       label: 'ügyintézési határidő' },
+         { iso: a.basis,        label: 'engedély lejár' }]
+      : [{ iso: a.earliest, label: 'legkorábbi' },
+         { iso: a.latest,   label: 'ajánlott' },
+         { iso: a.final,    label: 'legvégső' },
+         { iso: a.basis,    label: 'engedély lejár' }];
+
+    const jelolok = nyers
+      .filter(m => m.iso)
+      .sort((x, y) => x.iso.localeCompare(y.iso))
+      .map((m, i) => {
+        const p = pct(m.iso);
+        return Object.assign({}, m, {
+          pct: p,
+          row: i % 2,                                     // sakktábla: ne fedjék egymást
+          shift: p <= 8 ? '0' : (p >= 92 ? '-100%' : '-50%'),
+        });
+      });
+
+    const rovatkak = [];
+    for (let n = TICK_NAP; n < teljes; n += TICK_NAP) {
+      rovatkak.push({ iso: napPlusz(kezd, n), pct: (n / teljes) * 100 });
+    }
+
+    return {
+      from: kezd, to: veg, days: teljes, done,
+      segments: szakaszok, marks: jelolok, ticks: rovatkak,
+      now: { pct: pct(maIso), out: maIso < kezd || maIso > veg },
+    };
+  }
+
   function renderWindowBar(st, maIso) {
     if (!st) return '';
-    const a = st.window;
-    const kezd = new Date(a.earliest).getTime();
-    const veg  = new Date(a.basis).getTime();
-    const teljes = Math.max(1, veg - kezd);
-    const pct = iso => {
-      const t = new Date(iso).getTime();
-      return Math.max(0, Math.min(100, ((t - kezd) / teljes) * 100));
-    };
-
-    const maT = new Date(maIso).getTime();
-    const maKilog = maT < kezd || maT > veg;
-    const maPct = pct(maIso);
-
+    const m = barModel(st, maIso);
     const szin = SZIN[st.phase] || 'var(--c-slate)';
 
     return `
-      <div class="ct-window ${st.done ? 'ct-window--done' : ''}">
+      <div class="ct-window ${m.done ? 'ct-window--done' : ''}">
         <div class="ct-window__head">
-          <span class="ct-window__badge" style="background:${st.done ? 'var(--c-slate)' : szin}">
-            ${st.done ? 'Beadva' : escHtml(FAZIS_CIMKE[st.phase] || '')}
+          <span class="ct-window__badge" style="background:${m.done ? 'var(--c-slate)' : szin}">
+            ${m.done ? 'Beadva' : escHtml(FAZIS_CIMKE[st.phase] || '')}
           </span>
           <span class="ct-window__text">${escHtml(st.text)}</span>
         </div>
 
         <div class="ct-window__bar">
-          <div class="ct-window__seg ct-window__seg--ok"
-               style="left:0;width:${pct(a.latest)}%"></div>
-          <div class="ct-window__seg ct-window__seg--warn"
-               style="left:${pct(a.latest)}%;width:${pct(a.final) - pct(a.latest)}%"></div>
-          <div class="ct-window__seg ct-window__seg--late"
-               style="left:${pct(a.final)}%;width:${100 - pct(a.final)}%"></div>
-          ${st.done ? '' : `
-            <div class="ct-window__now ${maKilog ? 'ct-window__now--out' : ''}"
-                 style="left:${maPct}%" title="Ma – ${escHtml(huDatum(maIso))}"></div>`}
+          ${m.segments.map(sz => `
+            <div class="ct-window__seg ct-window__seg--${sz.cls}"
+                 style="left:${sz.from}%;width:${Math.max(0, sz.to - sz.from)}%"></div>`).join('')}
+          ${m.ticks.map(t => `
+            <i class="ct-window__tick" style="left:${t.pct}%"
+               title="${escHtml(huDatum(t.iso))}"></i>`).join('')}
+          ${m.marks.map(k => `
+            <i class="ct-window__anchor ct-window__anchor--r${k.row}"
+               style="left:${k.pct}%"></i>`).join('')}
+          <div class="ct-window__now ${m.now.out ? 'ct-window__now--out' : ''}"
+               style="left:${m.now.pct}%" title="Ma – ${escHtml(huDatum(maIso))}"></div>
         </div>
 
         <div class="ct-window__marks">
-          <span><strong>${escHtml(huDatum(a.earliest))}</strong><br>legkorábbi</span>
-          <span><strong>${escHtml(huDatum(a.latest))}</strong><br>ajánlott</span>
-          <span><strong>${escHtml(huDatum(a.final))}</strong><br>legvégső</span>
-          <span><strong>${escHtml(huDatum(a.basis))}</strong><br>engedély lejár</span>
+          ${m.marks.map(k => `
+            <span class="ct-window__mark ct-window__mark--r${k.row}"
+                  style="left:${k.pct}%;transform:translateX(${k.shift})">
+              <strong>${escHtml(huDatum(k.iso))}</strong>${escHtml(k.label)}</span>`).join('')}
         </div>
       </div>`;
   }
@@ -139,8 +210,9 @@ const CaseTimeline = (() => {
            utólag rögzítve: ${escHtml(huDatum(p.recordedAt))}</span>`
       : '';
 
-    // Csak a rögzített eseményeket lehet javítani – a számított pontokat nem
-    const szerkeszt = p.kind === 'esemeny'
+    // Csak a rögzített eseményeket lehet javítani – a számított pontokat nem,
+    // és csak annak, aki az ügyeket írhatja (admin, ügyintéző).
+    const szerkeszt = p.kind === 'esemeny' && irhat()
       ? `<button class="ct-edit" data-event-index="${p.eventIndex}"
                  title="Dátum vagy megjegyzés javítása">javít</button>`
       : '';
@@ -200,5 +272,5 @@ const CaseTimeline = (() => {
         }</ul>`;
   }
 
-  return { render, renderWindowBar, huDatum, napSzoveg, FAZIS_CIMKE };
+  return { render, renderWindowBar, barModel, huDatum, napSzoveg, FAZIS_CIMKE };
 })();

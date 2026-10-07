@@ -21,7 +21,6 @@
   border-bottom: 1px solid var(--c-border);
   background: var(--c-bg);
 }
-.ct-window--done { opacity: .6; }
 
 .ct-window__head {
   display: flex; align-items: center; gap: 8px;
@@ -42,6 +41,20 @@
 .ct-window__seg--ok   { background: var(--c-green); border-radius: 4px 0 0 4px; }
 .ct-window__seg--warn { background: var(--c-amber); }
 .ct-window__seg--late { background: var(--c-red); border-radius: 0 4px 4px 0; }
+/* Beadás után: az eltelt idő a beadás óta, a maradék a világos alapsáv */
+.ct-window__seg--done { background: var(--c-slate); border-radius: 4px 0 0 4px; }
+
+/* 30 naponkénti rovátka: enélkül a sáv hossza nem mond semmit az időskáláról */
+.ct-window__tick {
+  position: absolute; top: 0; width: 1px; height: 8px;
+  background: var(--c-bg); opacity: .6;
+}
+/* A jelölő-címke tartóvonala – a címke a VALÓDI arányánál áll, nem egyenletesen */
+.ct-window__anchor {
+  position: absolute; top: 8px; width: 1px; height: 9px;
+  background: var(--c-border);
+}
+.ct-window__anchor--r1 { height: 33px; }
 
 /* A mai nap jelölője: kilóg a sávból, hogy ne keveredjen a szakaszokkal */
 .ct-window__now {
@@ -56,16 +69,16 @@
 /* Ha a mai nap a sávon kívülre esik, halványabb – nem pontos pozíció */
 .ct-window__now--out { opacity: .45; }
 
+/* A jelölők abszolút pozíciót kapnak (a dátumuk valódi arányánál), két sorban
+   váltakozva – egyenletes elosztásnál a „ma" vonal máshol állt, mint ahova a
+   címkék mutattak, és épp a legfontosabb kérdésre (hol tartunk?) hazudott. */
 .ct-window__marks {
-  display: flex; justify-content: space-between;
-  margin-top: 8px; font-size: 10px; color: var(--c-muted);
-  line-height: 1.35; gap: 4px;
+  position: relative; height: 44px; margin-top: 9px;
+  font-size: 10px; color: var(--c-muted); line-height: 1.35;
 }
-.ct-window__marks span { flex: 1; }
-.ct-window__marks span:nth-child(2),
-.ct-window__marks span:nth-child(3) { text-align: center; }
-.ct-window__marks span:last-child   { text-align: right; }
-.ct-window__marks strong { color: var(--c-text); font-weight: 600; }
+.ct-window__mark { position: absolute; top: 0; white-space: nowrap; }
+.ct-window__mark--r1 { top: 24px; }
+.ct-window__mark strong { display: block; color: var(--c-text); font-weight: 600; }
 
 /* ── Függőleges idővonal ─────────────────────────────────────────────────── */
 
@@ -123,7 +136,6 @@
 
 @media (max-width: 700px) {
   .ct-window__marks { font-size: 9px; }
-  .ct-window__marks span:nth-child(2) { text-align: left; }
 }
 
 /* ── Ügyek fül ───────────────────────────────────────────────────────────── */
