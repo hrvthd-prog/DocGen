@@ -594,6 +594,75 @@ atest('EH számra és iktatószámra lehet keresni', async () => {
   assertEq(CaseRepo.search('nincsilyen').length, 0);
 });
 
+// Az iktatószám megjelenése ADJA a kezdő napot – a típus `triggerLabel`-je
+// maga mondja: „OIF érkeztetés napja (iktatószám megkapása)". Eddig csak az
+// Ügy-űrlap dátummezője írta a `triggerDate`-et, így aki a státuszrögzítőben
+// vitte fel a számot, annál a határidő üresen maradt, és a felület továbbra is
+// azt kérte, amit épp megadott.
+atest('a státuszváltáskor felvitt iktatószám magától ad határidőt', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso' });
+  assertEq(ugy.dueAt, null);
+
+  CaseRepo.setStatus(ugy.id, 'beadva', { fileNumber: 'IKT-999/2026', occurredAt: '2026-01-01' });
+  const u = CaseRepo.get(ugy.id);
+  assertEq(u.triggerDate, '2026-01-01', 'nem az érkeztetés napját vette alapul');
+  assertEq(u.dueAt, '2026-03-12', 'nem számolta ki a 70 napot');
+  assert(!/add meg/.test(CaseRepo.deadlineText(u, '2026-01-10')),
+    `még mindig a dátumot kéri: ${CaseRepo.deadlineText(u, '2026-01-10')}`);
+});
+
+atest('eseményként (státuszváltás nélkül) felvitt szám is ad határidőt', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso' });
+
+  CaseRepo.addEvent(ugy.id, { note: 'megjött az iktatószám', fileNumber: 'IKT-7/2026',
+                              occurredAt: '2026-02-03' });
+  assertEq(CaseRepo.get(ugy.id).dueAt, '2026-04-14');
+});
+
+atest('a már megadott kezdő napot és a kézi határidőt nem írja felül', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso',
+                                triggerDate: '2026-01-01', dueAt: '2026-05-05' });
+  CaseRepo.setStatus(ugy.id, 'beadva', { fileNumber: 'IKT-1/2026', occurredAt: '2026-02-02' });
+  const u = CaseRepo.get(ugy.id);
+  assertEq(u.triggerDate, '2026-01-01', 'elmozdította a kezdő napot');
+  assertEq(u.dueAt, '2026-05-05', 'felülírta a kézi határidőt');
+});
+
+atest('bejelentésnél az iktatószám NEM ad határidőt – ott a tény napja kell', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'szallashely_valtozas' });
+  CaseRepo.setStatus(ugy.id, 'beadva', { fileNumber: 'IKT-5/2026', occurredAt: '2026-02-02' });
+  const u = CaseRepo.get(ugy.id);
+  assertEq(u.triggerDate, null, 'a költözés napját az iktatószámból találta ki');
+  assertEq(u.dueAt, null);
+});
+
+atest('a korábban felvitt iktatószámok betöltéskor visszamenőleg kapnak határidőt', async () => {
+  // Ez a felhasználó tényleges helyzete: a számok már bent voltak, a határidő
+  // mégis üres maradt. A `migrate` tölti ki, a szám első felbukkanása szerint.
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso' });
+  CaseRepo.setStatus(ugy.id, 'beadva', { fileNumber: 'IKT-42/2026', occurredAt: '2026-01-01' });
+  // A régi hiba előállítása: a határidő üres, a szám megvan
+  const nyers = CaseRepo.get(ugy.id);
+  nyers.triggerDate = null;
+  nyers.dueAt = null;
+  await CaseRepo.save();
+  await CaseRepo.load();
+
+  const u = CaseRepo.get(ugy.id);
+  assertEq(u.triggerDate, '2026-01-01');
+  assertEq(u.dueAt, '2026-03-12');
+});
+
 // ════════════════════════════════════════════════════════════════════════════
 asection('Ügy törlése');
 

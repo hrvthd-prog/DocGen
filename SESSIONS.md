@@ -68,6 +68,40 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-08 — Az iktatószám ADJA a határidő kezdő napját
+
+**Cél:** „megadtam az OIF ügyszámokat, a program mégis azt írja: nincs határidő –
+add meg: OIF érkeztetés napja (iktatószám megkapása)".
+
+**Változás (`v10.75`):** `case-repo.js` új, közös `hataridotIktatoszambol(c, nap)` —
+ha van iktatószám, de nincs sem `triggerDate`, sem `dueAt`, a kezdő nap annak a
+bejegyzésnek a `occurredAt`-ja, amelyiken a szám ELŐSZÖR felbukkan, és ebből
+számolódik a 70 nap. Minden írási úton meghívva: `create`, `update` (csak
+üresről felvitt számnál), `setStatus`, `addEvent`, és `migrate` — ez utóbbi a
+MÁR rögzített ügyeket is felhozza betöltéskor.
+
+**Miért / döntés:** a hiba nem a számításban volt, hanem egy hiányzó kapcsolatban.
+A kérelem `triggerLabel`-je maga mondja ki, hogy a kezdő nap *az iktatószám
+megkapása* — a `triggerDate`-et viszont KIZÁRÓLAG az Ügy-űrlap dátummezője írta,
+miközben a számot a felhasználó jellemzően a státusz- vagy eseményrögzítőben
+viszi fel („megjött az iktatószám"). Így a szám bekerült, a határidő üresen
+maradt, és a felület továbbra is azt kérte, amit az ember épp megadott.
+A következtetés csak HIÁNYT pótol: meglévő `triggerDate`/`dueAt` érintetlen
+(a kézi felülírás erősebb). Bejelentésnél nem fut — ott a határidő a tény
+napjától (költözés, munkakezdés) megy, abból az iktatószám nem következik.
+A `migrate`-beli kitöltés nem jelöl `dirty`-t: idempotens, minden betöltéskor
+újraszámolódik, és a következő mentéssel amúgy is lemegy.
+
+**Tesztek:** `node test/run-all.js` — mind zöld. `test/cases.test.js` 82 → 87:
+státuszváltáskor / eseményként felvitt szám határidőt ad, a kézi értékeket nem
+írja felül, bejelentésnél nem fut, és a régi (szám megvan, határidő üres) ügy
+betöltéskor visszamenőleg megkapja.
+
+**Nyitott / következő:** az Ügy-űrlapon a számot és a dátumot egyszerre felvivő
+úton a tartaléknap `today()` — ha valaki napokkal később viszi fel a számot ÉS a
+dátummezőt üresen hagyja, a kezdő nap pár napot csúszhat. Mindkét mező
+szerkeszthető az űrlapon, de egy figyelmeztető jelzés ott még hiányzik.
+
 ## 2026-10-07 — Ügyek: státusz-javítás és őszinte idővonal
 
 **Cél:** három hiba az Ügyek modulban. (1) Tévesen rögzített státuszt (hiánypótlás

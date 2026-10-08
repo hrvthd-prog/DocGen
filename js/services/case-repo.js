@@ -118,6 +118,10 @@ const CaseRepo = (() => {
     o.createdAt  = o.createdAt || nowIso();
     o.updatedAt  = o.updatedAt || o.createdAt;
     o.updatedBy  = o.updatedBy || '';
+    // A korábban felvitt iktatószámokhoz visszamenőleg is kiszámoljuk a
+    // határidőt – különben a már rögzített ügyek örökre határidő nélkül
+    // maradnának.
+    hataridotIktatoszambol(o, o.openedAt);
     return o;
   }
 
@@ -592,6 +596,8 @@ const CaseRepo = (() => {
       user: c.updatedBy, ehNumber: c.ehNumber, fileNumber: c.fileNumber,
     }));
 
+    hataridotIktatoszambol(c, indul);
+
     cache.cases.push(c);
     scheduleSave();
     emit();
@@ -646,6 +652,9 @@ const CaseRepo = (() => {
     Object.assign(c, next, { updatedAt: nowIso(), updatedBy: currentUserName() });
     javitEsemenyeken(c, 'ehNumber',   regiEh,  c.ehNumber);
     javitEsemenyeken(c, 'fileNumber', regiIkt, c.fileNumber);
+    // Üresről felvitt iktatószám = most kaptuk meg. (Javításnál nem: ott a
+    // kezdő nap nem változott.)
+    if (!regiIkt) hataridotIktatoszambol(c, today());
     scheduleSave();
     emit();
     return c;
@@ -672,6 +681,36 @@ const CaseRepo = (() => {
     if (!regi || regi === uj) return;
     for (const e of c.events) if (e[mezo] === regi) e[mezo] = uj;
   }
+
+  /**
+   * Az iktatószám MEGJELENÉSE adja a határidő kezdő napját.
+   *
+   * A kérelmek `triggerLabel`-je maga mondja ki: „OIF érkeztetés napja
+   * (iktatószám megkapása)". A kezdő napot viszont eddig KIZÁRÓLAG az Ügy
+   * űrlap dátummezője írta – miközben az iktatószám jellemzően a státusz-
+   * vagy eseményrögzítőben kerül fel („megjött az iktatószám"). Így a szám
+   * bekerült, a `triggerDate` üres maradt, és a felület továbbra is azt kérte,
+   * amit a felhasználó épp megadott: „nincs határidő – add meg: OIF érkeztetés
+   * napja (iktatószám megkapása)".
+   *
+   * Ezért itt, egy helyen következtetjük ki, minden írási úton (`create`,
+   * `update`, `setStatus`, `addEvent`) és a régi adatokon is (`migrate`).
+   * A kezdő nap annak a bejegyzésnek a TÖRTÉNÉS-napja, amelyiken a szám
+   * először felbukkan – ott áll, mikor kaptuk meg. Ha nincs ilyen bejegyzés
+   * (az űrlapon vitték fel), a hívó adja a tartaléknapot.
+   *
+   * Csak hiányt pótol: ha van `triggerDate` vagy `dueAt`, nem nyúl hozzá —
+   * a kézi felülírás erősebb. Bejelentésnél nem fut: ott a határidő a TÉNY
+   * napjától (költözés, munkakezdés) megy, abból az iktatószám nem következik.
+   */
+  function hataridotIktatoszambol(c, tartalekNap) {
+    if (c.triggerDate || c.dueAt || !c.fileNumber || isAdvisory(c)) return false;
+    const e = c.events.find(x => x.fileNumber);
+    c.triggerDate = (e && e.occurredAt) || tartalekNap || today();
+    c.dueAt = CaseTypes.suggestDueDate(c.type, c.triggerDate);
+    return !!c.dueAt;
+  }
+
 
   /**
    * Státuszváltás – ez a fő művelet.
@@ -717,6 +756,7 @@ const CaseRepo = (() => {
       at: nowIso(), occurredAt, status, outcome: c.outcome, note,
       user: c.updatedBy, ehNumber: c.ehNumber, fileNumber: c.fileNumber,
     }));
+    hataridotIktatoszambol(c, occurredAt);
 
     scheduleSave();
     emit();
@@ -741,6 +781,7 @@ const CaseRepo = (() => {
       at: nowIso(), occurredAt, status: c.status, note,
       user: currentUserName(), ehNumber: c.ehNumber, fileNumber: c.fileNumber,
     }));
+    hataridotIktatoszambol(c, occurredAt);
     c.updatedAt = nowIso();
     c.updatedBy = currentUserName();
     scheduleSave();

@@ -41,3 +41,9 @@ betölthető.
 
 Commit és push **közvetlenül `main`-re** — ebben a projektben **nincs külön ág
 / PR**. (Egyszemélyes projekt, a branch csak felesleges kerülő.)
+
+**Hibajavítás után a commit és a push automatikus**, ha `node test/run-all.js`
+mindent zöldre futtat — nem kell rá rákérdezni. (A javítás a repóban van, nem a
+munkakönyvtárban: egy elmaradt commit a következő sessionnek láthatatlan.)
+Kivétel: ha a felhasználó az adott menetben kifejezetten kéri, hogy ne legyen.
+Piros teszt mellett nincs commit.
