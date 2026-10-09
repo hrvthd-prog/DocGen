@@ -135,19 +135,22 @@
     }
 
     const p = new URLSearchParams(location.search);
-    Settings.set('cases_side_collapsed', false);
+    // A nézet a `Settings`-ből indul; a próbalap mindig az áttekintővel kezd,
+    // hogy a képernyőkép kiszámítható legyen.
+    Settings.set('cases_view', 'attekintes');
 
     CasesModule.init(document.getElementById('tab-cases'));
 
     // A nézetváltás kattintással megy: a `state.nezet` a modul betöltésekor
     // olvassa ki a beállítást, utólag írni hatástalan lenne.
-    if (p.get('nezet') === 'atutalasok') {
-      const gomb = document.querySelector('.cv-viewbtn[data-nezet="atutalasok"]');
+    const nezet = p.get('nezet');
+    if (nezet) {
+      const gomb = document.querySelector(`.cv-viewbtn[data-nezet="${nezet}"]`);
       if (gomb) gomb.click();
     }
-    // Kérésre kiválaszt egy ügyet – így a visszatérő gomb is látszik.
+    // Kérésre kiválaszt egy ügyet – így a részletező fejléce is látszik.
     if (p.get('ugy')) {
-      const el = document.querySelector('.cv-row');
+      const el = document.querySelector('.cv-tr[data-id]');
       if (el) el.click();
     }
     document.title = 'kész';

@@ -3,45 +3,66 @@
 /**
  * Ügyek fül – az összes dolgozó összes ügye egy helyen.
  *
- * A cél, hogy reggel megnyitva azonnal látszódjon, mi ég: a lista
- * alapértelmezés szerint sürgősség szerint rendez, a lejárt és a közelgő
- * ügyek elöl. Egy ügyre kattintva megnyílik az idővonala.
+ * ── Miért NÉGY NÉZET, és miért nincs oldalsáv? ────────────────────────────
+ * Korábban egy kétoszlopos master–detail volt: bal oldalt egy 380 px-es
+ * (dokkolt ablakban 300 px-es) sávban kereső + sürgősségi szűrők + állapot-
+ * szűrők + a teljes dolgozólista + az ügylista, jobb oldalt a részletező.
+ * Négy dolog osztozott egy hasábon, és mindegyik rosszul járt:
+ *
+ * - Az ügysor hat adatot hordoz (név, típus, állapot, EH szám, iktatószám,
+ *   határidő). Egy 300 px-es hasábban ez két-három tördelt sor, és nem lehet
+ *   végigfutni rajta — pont azt nem, hogy KINÉL hiányzik az iktatószám,
+ *   mert a hiányok nem kerülnek egymás alá.
+ * - Az áttekintő nem nézet volt, hanem a részletező ÜRES ÁLLAPOTA: az első
+ *   megnyitott üggyel eltűnt, és csak Esc-cel jött vissza. A legfontosabb
+ *   képernyő volt a legnehezebben elérhető.
+ * - A részletező (főleg az EH-panel) a maradék helyen szorongott; ezt
+ *   foltozta az Alt+L-es összecsukás és a 600 px-es töréspont.
+ *
+ * Ezért: EGY nézet látszik egyszerre, teljes szélességben, és a váltás
+ * lapozás. Az ügylista táblázat lett (a hiányzó azonosító így oszlopba
+ * kerül és szűrhető), az áttekintő önálló nézet, a dolgozólista is.
+ * Ami a sávval elveszett — hogy a lista a részletező mellett is látszik —,
+ * azt a részletező fejlécében a ‹ › lépkedés pótolja.
  */
 const CasesModule = (() => {
 
   let container = null;
 
-  const state = {
-    szuro:      'nyitott',      // nyitott | lejart | surgos | lezart | mind
-    kereses:    '',
-    kivalasztott: null,
-    lap:        'idovonal',     // idovonal | eh  – ügyváltáskor NEM áll vissza:
-                                // aki EH-t tölt, sorra veszi a dolgozókat
-    // Az ügylista elrejthető. Egy kérelem előkészítése közben ritkán kell, a
-    // helye viszont dokkolt (fél képernyős) ablakban a legdrágább.
-    savZarva:   Settings.get('cases_side_collapsed', false),
-    // A közelgő lejáratok rendezése. A nap szerinti a kiindulás (az ég sürgősebb),
-    // de névsorban keresni is kell tudni, ha valakit név szerint keresünk.
-    javaslatRend: Settings.get('cases_suggest_sort', 'nap'),
-    // Ügylista vagy átutalások. A fül SZINTJÉN váltunk, mert egy átutalási
-    // köteg sok ügyet fog át – egy kiválasztott ügy alá zárva folyton ki
-    // kellene lépni belőle.
-    nezet: Settings.get('cases_view', 'ugyek'),
-  };
-
-  const RENDEZESEK = [
-    { key: 'nap',     label: 'nap szerint' },
-    { key: 'nev-fel', label: 'A → Z' },
-    { key: 'nev-le',  label: 'Z → A' },
+  /** A fül nézetei. A sorrend a belépés sorrendje: a nap az áttekintővel kezd. */
+  const NEZETEK = [
+    { key: 'attekintes', label: 'Áttekintés' },
+    { key: 'ugyek',      label: 'Ügyek' },
+    { key: 'dolgozok',   label: 'Dolgozók' },
+    { key: 'atutalasok', label: 'Átutalások' },
   ];
 
   const SZUROK = [
     { key: 'nyitott', label: 'Nyitott' },
     { key: 'lejart',  label: 'Lejárt' },
     { key: 'surgos',  label: 'Sürgős' },
+    // Saját szűrő, mert ez a kérdés önállóan is felmerül: mely beadott ügyhöz
+    // nem jött még meg a hatósági azonosító. Eddig csak az áttekintőn látszott.
+    { key: 'hiany',   label: 'Azonosító nélkül' },
     { key: 'lezart',  label: 'Lezárt' },
     { key: 'mind',    label: 'Mind' },
   ];
+
+  const state = {
+    nezet:   Settings.get('cases_view', 'attekintes'),
+    szuro:   'nyitott',
+    kereses: '',
+    // Ha van kiválasztott ügy, a részletező a NÉZET FÖLÉ kerül (bármelyikről
+    // nyitható), és a „Vissza" egyszerűen leveszi. Nem kell külön megjegyezni,
+    // honnan jöttünk: a nézet maga az, ahol állunk.
+    kivalasztott: null,
+    lap:     'idovonal',   // idovonal | eh – ügyváltáskor NEM áll vissza:
+                           // aki EH-t tölt, sorra veszi a dolgozókat
+    rend:    Settings.get('cases_sort', 'hatarido'),   // hatarido | nev | allapot
+    irany:   Settings.get('cases_sort_dir', 1),
+    dRend:   Settings.get('cases_emp_sort', 'nap'),    // nap | nev
+    dIrany:  Settings.get('cases_emp_sort_dir', 1),
+  };
 
   function init(el) {
     container = el;
@@ -51,20 +72,12 @@ const CasesModule = (() => {
     window.addEventListener('docgenTabActivated', e => {
       if (e.detail === 'cases') render();
     });
-    // Alt+L: a lista be/ki. Az Alt+1..4 a füleké (app.js), az „L" szabad.
-    document.addEventListener('keydown', e => {
-      if (!e.altKey || e.key.toLowerCase() !== 'l') return;
-      if (!container.classList.contains('active')) return;
-      e.preventDefault();
-      savValt();
-    });
 
-    // Esc: vissza az áttekintőhöz. Csak akkor, ha nincs nyitott párbeszéd és
-    // nem egy mezőben gépel valaki – ott az Esc mást jelent.
+    // Esc: vissza a listához. Csak akkor, ha nincs nyitott párbeszéd és nem
+    // egy mezőben gépel valaki – ott az Esc mást jelent.
     document.addEventListener('keydown', e => {
       if (e.key !== 'Escape' || !state.kivalasztott) return;
       if (!container.classList.contains('active')) return;
-      if (state.nezet !== 'ugyek') return;
       const dlg = document.getElementById('dialog-overlay');
       if (dlg && !dlg.classList.contains('hidden')) return;
       const a = document.activeElement;
@@ -73,6 +86,7 @@ const CasesModule = (() => {
       state.kivalasztott = null;
       render();
     });
+
     CaseRepo.onChange(() => { render(); frissitJelzo(); });
     TransferRepo.onChange(() => { if (state.nezet === 'atutalasok') render(); });
     // Az EH-panelen a mentés is ezt hívná, és a teljes újrarajzolás elvenné a
@@ -86,17 +100,9 @@ const CasesModule = (() => {
     return !!(a && a.closest && a.closest('.eh-wrap'));
   }
 
-  /**
-   * Ügylista mutatása / elrejtése.
-   *
-   * Dokkolt (fél képernyős) ablakban a bal sáv a hely harmada, miközben egy
-   * kérelem előkészítése közben alig kell. Az állapot megjegyződik: aki
-   * becsukja, annak holnap is csukva induljon.
-   */
-  function savValt() {
-    state.savZarva = !state.savZarva;
-    Settings.set('cases_side_collapsed', state.savZarva);
-    render();
+  /** Írhat-e a felhasználó? A próbalapon nincs Auth – ott mindent szabad. */
+  function irhat() {
+    return typeof Auth === 'undefined' || Auth.can('cases.write');
   }
 
   /**
@@ -125,13 +131,12 @@ const CasesModule = (() => {
     jelzo.title = `${db} lejárt határidejű ügy`;
   }
 
-  /** Kis szám az Átutalások gombon: hány tétel vár az előkészítés alatti kötegben. */
-  function atutalasJelzo() {
+  /** Hány tétel vár az előkészítés alatti átutalási kötegben? */
+  function atutalasDb() {
     try {
-      const nyitott = TransferRepo.all().filter(TransferRepo.isOpen);
-      const db = nyitott.reduce((n, b) => n + b.rows.length, 0);
-      return db ? ` <span class="cv-viewbtn__badge">${db}</span>` : '';
-    } catch { return ''; }
+      return TransferRepo.all().filter(TransferRepo.isOpen)
+        .reduce((n, b) => n + b.rows.length, 0);
+    } catch { return 0; }
   }
 
   function keszAll() {
@@ -148,37 +153,24 @@ const CasesModule = (() => {
     } catch { return '(ismeretlen)'; }
   }
 
-  function kivalasztottNeve() {
-    const c = CaseRepo.get(state.kivalasztott);
-    return c ? dolgozoNeve(c.employeeId) : '';
-  }
-
   function dolgozoMezoi(employeeId) {
     try { return (EmployeeRepo.get(employeeId) || {}).fields || {}; }
     catch { return {}; }
   }
 
-  // ── Lista ──────────────────────────────────────────────────────────────────
+  // ── Szűrés és rendezés ─────────────────────────────────────────────────────
+
+  /** Beadott ügy, amihez még nem jött meg valamelyik hatósági azonosító. */
+  function azonositoHianyos(c) {
+    return !c.closedAt && (c.status || 'elokeszites') !== 'elokeszites' &&
+           (!c.fileNumber || !c.ehNumber);
+  }
 
   function szurtLista() {
     let lista = state.kereses ? CaseRepo.search(state.kereses) : CaseRepo.all();
 
-    // A `st:<kulcs>` alakú szűrő az áttekintő állapot-csempéiről jön: nyitott
-    // ügyek egyetlen szakaszban. Ugyanaz az egy szűrő-állapot vezérli, mint a
-    // sürgősségi gombokat — két párhuzamos szűrődimenzió csak zavarna.
-    if (state.szuro.startsWith('st:')) {
-      const kulcs = state.szuro.slice(3);
-      lista = lista.filter(c => CaseRepo.urgency(c) !== 'lezart' &&
-                                (c.status || 'elokeszites') === kulcs);
-    } else if (state.szuro !== 'mind') {
-      lista = lista.filter(c => {
-        const s = CaseRepo.urgency(c);
-        if (state.szuro === 'nyitott') return s !== 'lezart';
-        return s === state.szuro;
-      });
-    }
-
-    // Név szerinti kereséshez a dolgozó nevét is nézzük
+    // Név szerinti kereséshez a dolgozó nevét is nézzük: a CaseRepo.search
+    // csak az ügy saját mezőiben keres.
     if (state.kereses) {
       const talalt = new Set(lista.map(c => c.id));
       const needle = state.kereses.toLowerCase();
@@ -188,30 +180,78 @@ const CasesModule = (() => {
       }
     }
 
-    const rang = { lejart: 0, surgos: 1, nyitott: 2, lezart: 3 };
-    return lista.sort((a, b) => {
-      const ra = rang[CaseRepo.urgency(a)], rb = rang[CaseRepo.urgency(b)];
-      if (ra !== rb) return ra - rb;
-      return String(a.dueAt || '9999').localeCompare(String(b.dueAt || '9999'));
-    });
+    // A `st:<kulcs>` alakú szűrő az áttekintő állapot-csempéiről jön: nyitott
+    // ügyek egyetlen szakaszban. Ugyanaz az egy szűrő-állapot vezérli, mint a
+    // sürgősségi gombokat — két párhuzamos szűrődimenzió csak zavarna.
+    if (state.szuro.startsWith('st:')) {
+      const kulcs = state.szuro.slice(3);
+      lista = lista.filter(c => CaseRepo.urgency(c) !== 'lezart' &&
+                                (c.status || 'elokeszites') === kulcs);
+    } else if (state.szuro === 'hiany') {
+      lista = lista.filter(azonositoHianyos);
+    } else if (state.szuro !== 'mind') {
+      lista = lista.filter(c => {
+        const s = CaseRepo.urgency(c);
+        if (state.szuro === 'nyitott') return s !== 'lezart';
+        return s === state.szuro;
+      });
+    }
+
+    return rendez(lista);
   }
 
   /**
-   * Az ügy azonosítói a sorban: EH szám és iktatószám.
-   *
-   * „Nyitott" önmagában nem mond semmit — az számít, hogy beadtuk-e már, és
-   * ha igen, megjött-e hozzá a hatósági azonosító. Előkészítés alatt (és
-   * lezárt ügynél) a hiány nem hiány, ott nem jelzünk.
+   * Rendezés. Az alapértelmezés a sürgősség: lejárt, sürgős, nyitott, lezárt,
+   * azon belül határidő szerint — ez a „mi ég" sorrend, és ez a `hatarido`
+   * oszlop növekvő iránya. A név és az állapot az oszlopfejlécről kapcsolható.
    */
-  function azonositoHtml(c) {
-    const reszek = [];
-    if (c.ehNumber)   reszek.push(`EH ${escHtml(c.ehNumber)}`);
-    if (c.fileNumber) reszek.push(`ikt. ${escHtml(c.fileNumber)}`);
-    if (reszek.length) return `<span class="cv-row__ids">${reszek.join(' · ')}</span>`;
+  function rendez(lista) {
+    const rang = { lejart: 0, surgos: 1, nyitott: 2, lezart: 3 };
+    const ALLAPOTOK = ['elokeszites', 'beadva', 'hianypotlas', 'elbiralas'];
+    const allapotRang = c => {
+      const i = ALLAPOTOK.indexOf(c.status || 'elokeszites');
+      return i === -1 ? ALLAPOTOK.length : i;
+    };
+    // A nevet egyszer kérjük el: a `dolgozoNeve` rekordot olvas és értéket old
+    // fel, összehasonlításonként újra megtenni pazarlás.
+    const nev = new Map(lista.map(c => [c.id, dolgozoNeve(c.employeeId)]));
 
-    const beadva = !c.closedAt && (c.status || 'elokeszites') !== 'elokeszites';
-    return beadva ? '<span class="cv-row__ids is-missing">azonosító nélkül</span>' : '';
+    const alap = (a, b) => {
+      const ra = rang[CaseRepo.urgency(a)], rb = rang[CaseRepo.urgency(b)];
+      if (ra !== rb) return ra - rb;
+      return String(a.dueAt || '9999').localeCompare(String(b.dueAt || '9999'));
+    };
+
+    const osszehasonlit =
+        state.rend === 'nev'     ? (a, b) => nev.get(a.id).localeCompare(nev.get(b.id), 'hu')
+      : state.rend === 'allapot' ? (a, b) => allapotRang(a) - allapotRang(b) || alap(a, b)
+      :                            alap;
+
+    return lista.slice().sort((a, b) => state.irany * osszehasonlit(a, b));
   }
+
+  // ── Nézetváltó sáv ─────────────────────────────────────────────────────────
+
+  function navHtml() {
+    let ugyDb = 0, dolgozoDb = 0;
+    try { ugyDb = CaseRepo.summary().nyitott; } catch { /* marad 0 */ }
+    try { dolgozoDb = EmployeeRepo.all().length; } catch { /* marad 0 */ }
+    const atDb = atutalasDb();
+    const szam = { ugyek: ugyDb, dolgozok: dolgozoDb };
+
+    return `
+      <div class="cv-viewbar">
+        ${NEZETEK.map(n => `
+          <button class="cv-viewbtn ${state.nezet === n.key ? 'is-active' : ''}"
+                  data-nezet="${n.key}" type="button">${n.label}${
+            n.key === 'atutalasok' && atDb ? `<span class="cv-viewbtn__badge">${atDb}</span>` : ''}${
+            szam[n.key] ? `<span class="cv-viewbtn__db">${szam[n.key]}</span>` : ''}</button>`).join('')}
+        <button class="cv-export" id="cv-export" type="button"
+                title="Ügyszámok, iktatószámok és a dolgozói adatok mentése xlsx-be">Mentés xlsx-be</button>
+      </div>`;
+  }
+
+  // ── Ügylista (táblázat) ────────────────────────────────────────────────────
 
   /**
    * Állapot-szűrők: csak azok a szakaszok, amikben tényleg van nyitott ügy.
@@ -221,32 +261,292 @@ const CasesModule = (() => {
     let bontas = [];
     try { bontas = CasesDashboard.allapotBontas(); } catch { return ''; }
     if (bontas.length < 2) return '';
+    return bontas.map(a => `
+      <button class="cv-filter cv-filter--allapot ${state.szuro === 'st:' + a.key ? 'is-active' : ''}"
+              data-filter="st:${escHtml(a.key)}"
+              title="${escHtml(a.label)} — ${a.db} nyitott ügy">${escHtml(a.label)} ${a.db}</button>`).join('');
+  }
+
+  function fejlecHtml(oszlop, cimke, extra = '') {
+    const aktiv = state.rend === oszlop;
     return `
-      <div class="cv-filters cv-filters--allapot">
-        ${bontas.map(a => `
-          <button class="cv-filter ${state.szuro === 'st:' + a.key ? 'is-active' : ''}"
-                  data-filter="st:${escHtml(a.key)}"
-                  title="${escHtml(a.label)} — ${a.db} nyitott ügy">${escHtml(a.label)} ${a.db}</button>`).join('')}
-      </div>`;
+      <th class="cv-th cv-th--sort ${aktiv ? 'is-sorted' : ''} ${extra}" data-sort="${oszlop}"
+          title="Rendezés: ${escHtml(cimke)}">${escHtml(cimke)}<span
+          class="cv-th__arrow">${aktiv ? (state.irany > 0 ? '▲' : '▼') : ''}</span></th>`;
+  }
+
+  /**
+   * Az azonosító-cella: mindkét szám egymás alá.
+   *
+   * Nem két oszlop, mert dokkolt ablakban nem férne el — és így is teljesül,
+   * ami a lényeg: a hiányok egy hasábban, egymás alatt futnak, tehát végig
+   * lehet pásztázni rajtuk. Előkészítés alatt (és lezárt ügynél) a hiány nem
+   * hiány: ott az azonosító még nem is létezhetne, úgyhogy nem jelzünk.
+   */
+  function azonositoCella(c) {
+    const beadva = !c.closedAt && (c.status || 'elokeszites') !== 'elokeszites';
+    const sor = (cimke, ertek) => {
+      if (!ertek) return beadva ? `<span class="cv-id is-missing">${cimke} hiányzik</span>` : '';
+      return `<span class="cv-id">${onCimkezett(cimke, ertek) ? '' : cimke + ' '
+        }<b>${escHtml(ertek)}</b></span>`;
+    };
+    return sor('EH', c.ehNumber) + sor('ikt.', c.fileNumber) ||
+           '<span class="cv-id is-none">—</span>';
+  }
+
+  /**
+   * Az EH szám maga is „EH"-val kezdődik, a címke elé írása tehát
+   * „EH EH16262640"-et adna. Ilyenkor az érték magát jelöli.
+   */
+  function onCimkezett(cimke, ertek) {
+    return cimke === 'EH' && /^EH/i.test(String(ertek));
   }
 
   function sorHtml(c) {
     const s = CaseRepo.urgency(c);
-    const kivalasztva = state.kivalasztott === c.id;
     return `
-      <button class="cv-row ${kivalasztva ? 'is-selected' : ''} cv-row--${s}" data-id="${escHtml(c.id)}">
-        <span class="cv-row__dot cv-row__dot--${s}"></span>
-        <span class="cv-row__main">
-          <span class="cv-row__name">${escHtml(dolgozoNeve(c.employeeId))}</span>
-          <span class="cv-row__type">${escHtml(CaseTypes.label(c.type))}</span>
-        </span>
-        <span class="cv-row__meta">
-          <span class="cv-row__status">${escHtml(CaseTypes.statusLabel(c.type, c.status))}</span>
-          ${azonositoHtml(c)}
-          <span class="cv-row__due">${escHtml(CaseRepo.deadlineText(c))}</span>
-        </span>
-      </button>`;
+      <tr class="cv-tr cv-tr--${s} ${state.kivalasztott === c.id ? 'is-selected' : ''}"
+          data-id="${escHtml(c.id)}" tabindex="0">
+        <td class="cv-td--nev">
+          <span class="cv-t__nev">${escHtml(dolgozoNeve(c.employeeId))}</span>
+          <span class="cv-t__tip">${escHtml(CaseTypes.label(c.type))}</span>
+        </td>
+        <td class="cv-td--allapot">${escHtml(CaseTypes.statusLabel(c.type, c.status))}</td>
+        <td class="cv-td--id">${azonositoCella(c)}</td>
+        <td class="cv-td--due">${escHtml(CaseRepo.deadlineText(c))}</td>
+      </tr>`;
   }
+
+  function ugyekHtml() {
+    const lista = szurtLista();
+    return `
+      <div class="cv-page">
+        <div class="cv-toolbar">
+          <input type="search" id="cv-search" class="field-input cv-search"
+                 placeholder="Keresés: név, EH szám, iktatószám"
+                 value="${escHtml(state.kereses)}">
+          <div class="cv-filters">
+            ${SZUROK.map(f => `
+              <button class="cv-filter ${state.szuro === f.key ? 'is-active' : ''}"
+                      data-filter="${f.key}">${f.label}</button>`).join('')}
+            ${allapotSzurokHtml()}
+          </div>
+        </div>
+        <div class="cv-table-wrap">
+          ${lista.length ? `
+            <table class="data-table cv-table">
+              <thead><tr>
+                ${fejlecHtml('nev', 'Név és ügytípus', 'cv-th--nev')}
+                ${fejlecHtml('allapot', 'Állapot', 'cv-th--allapot')}
+                <th class="cv-th cv-th--azon">Azonosítók</th>
+                ${fejlecHtml('hatarido', 'Határidő', 'cv-th--hatarido')}
+              </tr></thead>
+              <tbody>${lista.map(sorHtml).join('')}</tbody>
+            </table>`
+          : '<div class="cv-empty">Nincs a szűrésnek megfelelő ügy.</div>'}
+        </div>
+        <div class="cv-foot">
+          ${irhat() ? '<button class="btn btn-primary btn-sm" id="cv-new">Új ügy</button>' : ''}
+          <span class="cv-count">${lista.length} ügy</span>
+        </div>
+      </div>`;
+  }
+
+  // ── Dolgozók ───────────────────────────────────────────────────────────────
+
+  /** A dolgozó nyitott meghosszabbítási ügye, ha van. */
+  function nyitottHosszabbitas(employeeId) {
+    try {
+      return CaseRepo.forEmployee(employeeId)
+        .find(c => !c.closedAt && c.type === 'rp_hosszabbitas') || null;
+    } catch { return null; }
+  }
+
+  /**
+   * MINDEN dolgozó, nem csak a 90 napon belül lejárók — ez a nézet a belépő
+   * ahhoz, hogy valakire egyáltalán ügyet lehessen nyitni. A napszámot a
+   * `suggestRenewals` adja (ugyanaz a dátumszámítás, mint az áttekintőn);
+   * akit az kihagy — nincs lejárata, vagy már van nyitott meghosszabbítása —,
+   * azt utána fűzzük hozzá. Nyitott ügyű dolgozóra kattintva az ÜGY nyílik
+   * meg, nem egy új: különben egy kattintással duplán nyitnánk ugyanazt.
+   */
+  function dolgozoLista() {
+    let mind = [];
+    try { mind = EmployeeRepo.all(); } catch { return []; }
+
+    let sorok = [];
+    try { sorok = CaseRepo.suggestRenewals(mind, { belul: Infinity }); }
+    catch { sorok = []; }
+
+    // A hozzáfűzés sorrendje adja a nap szerinti rendezést: a `suggestRenewals`
+    // lejárat szerint rendezve ad, a napszám nélküliek utánuk kerülnek.
+    const megvan = new Set(sorok.map(j => j.employee.id));
+    for (const emp of mind) {
+      if (megvan.has(emp.id)) continue;
+      sorok.push({ employee: emp, expiresAt: null, daysLeft: null });
+    }
+    for (const j of sorok) j.nyitottUgy = nyitottHosszabbitas(j.employee.id);
+
+    if (state.kereses) {
+      const needle = state.kereses.toLowerCase();
+      sorok = sorok.filter(j => dolgozoNeve(j.employee.id).toLowerCase().includes(needle));
+    }
+
+    if (state.dRend === 'nev') {
+      const nev = new Map(sorok.map(j => [j.employee.id, dolgozoNeve(j.employee.id)]));
+      sorok.sort((a, b) => nev.get(a.employee.id).localeCompare(nev.get(b.employee.id), 'hu'));
+    }
+    return state.dIrany > 0 ? sorok : sorok.reverse();
+  }
+
+  function napSzoveg(n) {
+    if (n == null)  return 'nincs lejárat';
+    if (n < 0)      return `${-n} napja lejárt`;
+    if (n === 0)    return 'ma jár le';
+    return `${n} nap`;
+  }
+
+  function ugyAllapot(c) {
+    try {
+      return CaseTypes.statusLabel(c.type, c.status || CaseTypes.firstStatus(c.type));
+    } catch { return 'nyitott ügy'; }
+  }
+
+  function dFejlecHtml(oszlop, cimke) {
+    const aktiv = state.dRend === oszlop;
+    return `
+      <th class="cv-th cv-th--sort ${aktiv ? 'is-sorted' : ''}" data-dsort="${oszlop}"
+          title="Rendezés: ${escHtml(cimke)}">${escHtml(cimke)}<span
+          class="cv-th__arrow">${aktiv ? (state.dIrany > 0 ? '▲' : '▼') : ''}</span></th>`;
+  }
+
+  function dolgozoSorHtml(j) {
+    const lejart = j.daysLeft != null && j.daysLeft < 0;
+    return `
+      <tr class="cv-tr ${lejart ? 'cv-tr--lejart' : ''}" tabindex="0"
+          ${j.nyitottUgy ? `data-open-case="${escHtml(j.nyitottUgy.id)}" title="Nyitott meghosszabbítási ügy — megnyitás"`
+                         : `data-new-for="${escHtml(j.employee.id)}" title="Új ügy nyitása"`}>
+        <td class="cv-td--nev"><span class="cv-t__nev">${escHtml(dolgozoNeve(j.employee.id))}</span></td>
+        <td class="cv-td--date">${escHtml(j.expiresAt || '—')}</td>
+        <td class="cv-td--due ${lejart ? 'is-late' : ''}">${escHtml(napSzoveg(j.daysLeft))}</td>
+        <td>${j.nyitottUgy ? escHtml(ugyAllapot(j.nyitottUgy))
+                           : '<span class="cv-id is-none">nincs nyitott ügy</span>'}</td>
+        <td class="cv-td--go">${j.nyitottUgy ? 'Megnyitás' : (irhat() ? 'Ügy nyitása' : '')}</td>
+      </tr>`;
+  }
+
+  function dolgozokHtml() {
+    const sorok = dolgozoLista();
+    return `
+      <div class="cv-page">
+        <div class="cv-toolbar">
+          <input type="search" id="cv-search" class="field-input cv-search"
+                 placeholder="Keresés név szerint" value="${escHtml(state.kereses)}">
+        </div>
+        <div class="cv-table-wrap">
+          ${sorok.length ? `
+            <table class="data-table cv-table cv-table--emp">
+              <thead><tr>
+                ${dFejlecHtml('nev', 'Név')}
+                <th class="cv-th">Engedély lejárata</th>
+                ${dFejlecHtml('nap', 'Hátralévő idő')}
+                <th class="cv-th">Meghosszabbítás</th>
+                <th class="cv-th cv-th--go"></th>
+              </tr></thead>
+              <tbody>${sorok.map(dolgozoSorHtml).join('')}</tbody>
+            </table>`
+          : '<div class="cv-empty">Nincs a keresésnek megfelelő dolgozó.</div>'}
+        </div>
+        <div class="cv-foot">
+          ${irhat() ? '<button class="btn btn-primary btn-sm" id="cv-new">Új ügy</button>' : ''}
+          <span class="cv-count">${sorok.length} dolgozó</span>
+        </div>
+      </div>`;
+  }
+
+  // ── Részletező ─────────────────────────────────────────────────────────────
+
+  /**
+   * A fejléc ‹ › lépkedése. Csak az Ügyek nézetben van értelme: ott a
+   * „következő ügy" a szűrt lista következő sora. Az áttekintőről nyitott
+   * ügynek nincs ilyen szomszédja — ott a Vissza az egyetlen kiút.
+   */
+  function lepkedesHtml() {
+    if (state.nezet !== 'ugyek') return '';
+    const lista = szurtLista();
+    const i = lista.findIndex(c => c.id === state.kivalasztott);
+    if (i === -1) return '';
+    return `
+      <div class="cv-step">
+        <button class="cv-stepbtn" id="cv-prev" type="button" ${i === 0 ? 'disabled' : ''}
+                title="Előző ügy a listában">‹</button>
+        <span class="cv-step__num">${i + 1} / ${lista.length}</span>
+        <button class="cv-stepbtn" id="cv-next" type="button"
+                ${i === lista.length - 1 ? 'disabled' : ''}
+                title="Következő ügy a listában">›</button>
+      </div>`;
+  }
+
+  function reszletHtml() {
+    const c = CaseRepo.get(state.kivalasztott);
+    if (!c) return `
+      <div class="cv-page">
+        <div class="cv-dhead">
+          <button class="cv-backbtn" id="cv-back" type="button">‹ Vissza</button>
+        </div>
+        <div class="ct-empty">Az ügy már nem létezik.</div>
+      </div>`;
+
+    const emp = EmployeeRepo.get(c.employeeId);
+
+    // A fejléc alcíme összefogja, amit eddig a sor és az idővonal külön mondott:
+    // típus, állapot, a két azonosító és a határidő. Ez az a négy-öt adat, ami
+    // miatt eddig vissza kellett lépni a listára.
+    const alcim = [
+      CaseTypes.label(c.type),
+      CaseTypes.statusLabel(c.type, c.status),
+      c.ehNumber   ? (onCimkezett('EH', c.ehNumber) ? c.ehNumber : `EH ${c.ehNumber}`) : '',
+      c.fileNumber ? `ikt. ${c.fileNumber}` : '',
+      CaseRepo.deadlineText(c),
+    ].filter(Boolean).join(' · ');
+
+    const torzs = state.lap === 'eh'
+      ? (emp ? CaseEh.render(c, emp)
+             : '<div class="ct-empty">A dolgozó rekordja nem található.</div>')
+      : CaseTimeline.render(c, dolgozoMezoi(c.employeeId));
+
+    // Az EH-panel a teljes magasságot kapja: kitöltés közben az idővonal alatt
+    // sosem látszana a lényeg, és pont ez a munkamenet a cél. Ezért a műveleti
+    // sor csak az idővonal mellett jelenik meg.
+    const muveletek = (state.lap === 'eh' || !irhat()) ? '' : `
+      <div class="cv-actions">
+        <button class="btn btn-ghost btn-sm" id="cv-edit">Adatok szerkesztése</button>
+        ${c.closedAt ? '' : '<button class="btn btn-primary btn-sm" id="cv-advance">Státusz rögzítése</button>'}
+        <button class="btn btn-secondary btn-sm" id="cv-fee">Díj a kötegbe</button>
+        <button class="btn btn-ghost btn-sm cv-del" id="cv-delete">Ügy törlése</button>
+      </div>`;
+
+    return `
+      <div class="cv-page cv-page--detail">
+        <div class="cv-dhead">
+          <button class="cv-backbtn" id="cv-back" type="button"
+                  title="Vissza a listához (Esc)">‹ Vissza</button>
+          <div class="cv-dhead__who">
+            <span class="cv-dhead__nev">${escHtml(dolgozoNeve(c.employeeId))}</span>
+            <span class="cv-dhead__sub">${escHtml(alcim)}</span>
+          </div>
+          ${lepkedesHtml()}
+        </div>
+        <div class="cv-tabs">
+          <button class="cv-tab ${state.lap === 'idovonal' ? 'is-active' : ''}" data-lap="idovonal">Idővonal</button>
+          <button class="cv-tab ${state.lap === 'eh' ? 'is-active' : ''}" data-lap="eh">Enter Hungary</button>
+        </div>
+        <div class="cv-dbody">${torzs}</div>
+        ${muveletek}
+      </div>`;
+  }
+
+  // ── Kimutatás ──────────────────────────────────────────────────────────────
 
   /**
    * Ügy- és dolgozói kimutatás xlsx-be. A gomb a kiírás idejére letilt: a
@@ -280,227 +580,13 @@ const CasesModule = (() => {
     }
   }
 
-  // ── Megjelenítés ───────────────────────────────────────────────────────────
-
-  function render() {
-    if (!container) return;
-
-    if (!keszAll()) {
-      container.innerHTML = `
-        <div class="cv-wrap"><div class="cv-notready">
-          Előbb válaszd ki az adatmappát a <strong>Nyilvántartás</strong> fülön.
-        </div></div>`;
-      return;
-    }
-
-    container.innerHTML = `
-      <div class="cv-viewbar">
-        <button class="cv-viewbtn ${state.nezet === 'ugyek' ? 'is-active' : ''}"
-                data-nezet="ugyek" type="button">Ügylista</button>
-        <button class="cv-viewbtn ${state.nezet === 'atutalasok' ? 'is-active' : ''}"
-                data-nezet="atutalasok" type="button">Átutalások${atutalasJelzo()}</button>
-        <button class="cv-export" id="cv-export" type="button"
-                title="Ügyszámok, iktatószámok és a dolgozói adatok mentése xlsx-be">Mentés xlsx-be</button>
-      </div>
-      <div class="cv-view" id="cv-view"></div>`;
-
-    const exportGomb = container.querySelector('#cv-export');
-    if (exportGomb) exportGomb.addEventListener('click', () => exportXlsx(exportGomb));
-
-    container.querySelectorAll('.cv-viewbtn').forEach(gomb => {
-      gomb.addEventListener('click', () => {
-        state.nezet = gomb.dataset.nezet;
-        Settings.set('cases_view', state.nezet);
-        render();
-      });
-    });
-
-    const nezetEl = container.querySelector('#cv-view');
-    if (state.nezet === 'atutalasok') { TransfersView.render(nezetEl); return; }
-
-    const lista = szurtLista();
-    const felvetes = javaslatokHtml();
-    const zart = state.savZarva;
-
-    nezetEl.innerHTML = `
-      <div class="cv-wrap${zart ? ' is-collapsed' : ''}">
-        <aside class="cv-side">
-          <div class="cv-toolbar">
-            <input type="search" id="cv-search" class="field-input" placeholder="Keresés: név, EH szám, iktatószám"
-                   value="${escHtml(state.kereses)}">
-            <div class="cv-filters">
-              ${SZUROK.map(f => `
-                <button class="cv-filter ${state.szuro === f.key ? 'is-active' : ''}"
-                        data-filter="${f.key}">${f.label}</button>`).join('')}
-            </div>
-            ${allapotSzurokHtml()}
-          </div>
-          ${felvetes}
-          <div class="cv-list">
-            ${lista.length ? lista.map(sorHtml).join('')
-                           : '<div class="cv-empty">Nincs a szűrésnek megfelelő ügy.</div>'}
-          </div>
-          <div class="cv-foot">
-            <button class="btn btn-primary btn-sm" id="cv-new">Új ügy</button>
-            <span class="cv-count">${lista.length} ügy</span>
-          </div>
-        </aside>
-
-        <section class="cv-detail" id="cv-detail">
-          <div class="cv-bar">
-            <button class="cv-sidetoggle" id="cv-sidetoggle" type="button"
-                    title="${zart ? 'Ügylista mutatása' : 'Ügylista elrejtése'} (Alt+L)"
-                    aria-expanded="${zart ? 'false' : 'true'}">${zart ? '›' : '‹'}</button>
-            ${zart ? `<span class="cv-bar__lista">${lista.length} ügy</span>` : ''}
-            ${state.kivalasztott ? `<button class="cv-back" id="cv-back" type="button"
-                    title="Vissza az áttekintőhöz (Esc)">⌂ Áttekintés</button>` : ''}
-            <span class="cv-bar__person">${state.kivalasztott ? escHtml(kivalasztottNeve()) : ''}</span>
-          </div>
-          ${reszletHtml()}
-        </section>
-      </div>`;
-
-    bind();
-  }
-
-  function reszletHtml() {
-    // Nincs kiválasztott ügy → áttekintő. Ez a panel korábban üresen állt, és
-    // épp a leghasznosabb pillanatban nem mondott semmit: megnyitáskor.
-    if (!state.kivalasztott) return CasesDashboard.render();
-    const c = CaseRepo.get(state.kivalasztott);
-    if (!c) return '<div class="ct-empty">Az ügy már nem létezik.</div>';
-
-    const emp = EmployeeRepo.get(c.employeeId);
-    const fulek = `
-      <div class="cv-tabs">
-        <button class="cv-tab ${state.lap === 'idovonal' ? 'is-active' : ''}" data-lap="idovonal">Idővonal</button>
-        <button class="cv-tab ${state.lap === 'eh' ? 'is-active' : ''}" data-lap="eh">Enter Hungary</button>
-      </div>`;
-
-    // Az EH-panel a teljes magasságot kapja: kitöltés közben az idővonal
-    // alatt sosem látszana a lényeg, és pont ez a munkamenet a cél.
-    if (state.lap === 'eh') {
-      return `
-        ${fulek}
-        ${emp ? CaseEh.render(c, emp)
-              : '<div class="ct-empty">A dolgozó rekordja nem található.</div>'}`;
-    }
-
-    return `
-      ${fulek}
-      ${CaseTimeline.render(c, dolgozoMezoi(c.employeeId))}
-      ${!Auth.can('cases.write') ? '' : `
-      <div class="cv-actions">
-        <button class="btn btn-ghost btn-sm" id="cv-edit">Adatok szerkesztése</button>
-        ${c.closedAt ? '' : '<button class="btn btn-primary btn-sm" id="cv-advance">Státusz rögzítése</button>'}
-        <button class="btn btn-secondary btn-sm" id="cv-fee">Díj a kötegbe</button>
-        <button class="btn btn-ghost btn-sm cv-del" id="cv-delete">Ügy törlése</button>
-      </div>`}`;
-  }
-
-  /** A dolgozó nyitott meghosszabbítási ügye, ha van. */
-  function nyitottHosszabbitas(employeeId) {
-    try {
-      return CaseRepo.forEmployee(employeeId)
-        .find(c => !c.closedAt && c.type === 'rp_hosszabbitas') || null;
-    } catch { return null; }
-  }
-
-  /**
-   * A bal sáv dolgozó-listája — MINDENKI, nem csak a 90 napon belül lejárók.
-   *
-   * Korábban csak a közelgő lejáratok látszottak. Aki nem volt köztük, ahhoz
-   * erről a fülről nem lehetett hozzáférni: sem ügyet nyitni, sem az EH-panelt
-   * megnyitni rá — pedig ez a lista a fül belépője. A sürgősség így sem vész
-   * el: a nap szerinti rendezés a legközelebbi lejárattal kezd, a lejárat
-   * nélküliek a sor végére kerülnek.
-   *
-   * A napszámot a `suggestRenewals` adja (ugyanaz a dátumszámítás, mint eddig);
-   * akit az kihagy — nincs lejárata, vagy már van nyitott meghosszabbítása —,
-   * azt utána fűzzük hozzá. Nyitott ügyű dolgozóra kattintva az ÜGY nyílik meg,
-   * nem egy új: különben egy kattintással duplán nyitnánk ugyanazt.
-   */
-  function javaslatokHtml() {
-    let mind = [];
-    try { mind = EmployeeRepo.all(); } catch { return ''; }
-
-    let javaslatok = [];
-    try { javaslatok = CaseRepo.suggestRenewals(mind, { belul: Infinity }); }
-    catch { javaslatok = []; }
-
-    // A hozzáfűzés sorrendje adja a nap szerinti rendezést: a `suggestRenewals`
-    // lejárat szerint rendezve ad, a napszám nélküliek utánuk kerülnek.
-    const megvan = new Set(javaslatok.map(j => j.employee.id));
-    for (const emp of mind) {
-      if (megvan.has(emp.id)) continue;
-      javaslatok.push({ employee: emp, daysLeft: null, nyitottUgy: nyitottHosszabbitas(emp.id) });
-    }
-
-    // A keresőmező eddig csak az ügylistára hatott. Teljes névsor mellett ez
-    // zavaró: aki nevet gépel, azt várja, hogy ez a lista is szűküljön.
-    if (state.kereses) {
-      const needle = state.kereses.toLowerCase();
-      javaslatok = javaslatok.filter(j => dolgozoNeve(j.employee.id).toLowerCase().includes(needle));
-    }
-    if (!javaslatok.length) return '';
-
-    // A CaseRepo nap szerint rendezve adja; a névsor a megjelenítés dolga.
-    const rend = RENDEZESEK.find(r => r.key === state.javaslatRend) || RENDEZESEK[0];
-    if (rend.key !== 'nap') {
-      const irany = rend.key === 'nev-fel' ? 1 : -1;
-      // A nevet egyszer kérjük el: a `dolgozoNeve` rekordot olvas és értéket
-      // old fel, összehasonlításonként újra megtenni pazarlás.
-      const nev = new Map(javaslatok.map(j => [j.employee.id, dolgozoNeve(j.employee.id)]));
-      javaslatok.sort((a, b) => irany *
-        nev.get(a.employee.id).localeCompare(nev.get(b.employee.id), 'hu'));
-    }
-
-    return `
-      <div class="cv-suggest">
-        <div class="cv-suggest__title">
-          <span>Dolgozók (${javaslatok.length})</span>
-          <button class="cv-filter cv-suggest__sort" type="button" id="cv-suggest-sort"
-                  title="Rendezés váltása: nap szerint → A → Z → Z → A">${escHtml(rend.label)}</button>
-        </div>
-        <div class="cv-suggest__list">
-          ${javaslatok.map(j => `
-            <button class="cv-suggest__item" ${j.nyitottUgy
-                ? `data-open-case="${escHtml(j.nyitottUgy.id)}" title="Nyitott meghosszabbítási ügy — megnyitás"`
-                : `data-new-for="${escHtml(j.employee.id)}" title="Új ügy nyitása"`}>
-              <span class="cv-suggest__nev">${escHtml(dolgozoNeve(j.employee.id))}</span>
-              <span class="cv-suggest__days">${escHtml(javaslatMeta(j))}</span>
-            </button>`).join('')}
-        </div>
-      </div>`;
-  }
-
-  /**
-   * A soron jobbra álló szöveg: a hátralévő napok, vagy ami helyettük áll.
-   *
-   * Nyitott ügynél az ÁLLAPOT áll itt („Beadva", „Hiánypótlás", „Elbírálás
-   * alatt”), nem a semmitmondó „nyitott ügy": ebben a listában épp az a kérdés,
-   * hol tart az ügy. A címke az ügytípus sajátja (ugyanaz, amit az ügy sora és
-   * az idővonal mutat), státusz nélküli régi ügynél a típus első állapota.
-   */
-  function javaslatMeta(j) {
-    if (j.nyitottUgy) return ugyAllapot(j.nyitottUgy);
-    if (j.daysLeft == null) return 'nincs lejárat';
-    return j.daysLeft < 0 ? `${-j.daysLeft} napja lejárt` : `${j.daysLeft} nap`;
-  }
-
-  function ugyAllapot(c) {
-    try {
-      return CaseTypes.statusLabel(c.type, c.status || CaseTypes.firstStatus(c.type));
-    } catch { return 'nyitott ügy'; }
-  }
-
   // ── Törlés ─────────────────────────────────────────────────────────────────
 
   /**
    * Ügy végleges törlése.
    *
-   * A dolgozót nem kell külön „visszaállítani" a lejárók közé: a bal sáv
-   * listája a NYITOTT ügyekből számol élőben, ezért az ügy eltűnésével a
+   * A dolgozót nem kell külön „visszaállítani" a lejárók közé: a Dolgozók
+   * nézet a NYITOTT ügyekből számol élőben, ezért az ügy eltűnésével a
    * dolgozó magától visszakapja a napszámát. Ami viszont NEM áll vissza, azt
    * ki kell írni — a lezáráskor rögzített új azonosító a dolgozónál marad.
    */
@@ -547,7 +633,7 @@ const CasesModule = (() => {
         BevLogger.info('UGY_TORLES', `Ügy törölve: ${nev} – ${CaseTypes.label(c.type)}`,
                        '', `esemenyek=${db}`);
         // A kijelölés a törölt ügyre mutatna: a részletező „már nem létezik"-et
-        // írna ki, ami zavaróbb, mint az üres állapot.
+        // írna ki, ami zavaróbb, mint maga a lista.
         state.kivalasztott = null;
         toast('✓ Ügy törölve', 'success');
         render();
@@ -555,6 +641,57 @@ const CasesModule = (() => {
         toast('A törlés nem sikerült: ' + e.message, 'error');
       }
     });
+  }
+
+  // ── Megjelenítés ───────────────────────────────────────────────────────────
+
+  function valt(nezet) {
+    state.nezet = nezet;
+    state.kivalasztott = null;
+    Settings.set('cases_view', nezet);
+    render();
+  }
+
+  /** Ügy megnyitása — a nézet marad, a részletező kerül fölé. */
+  function megnyit(id) {
+    state.kivalasztott = id;
+    render();
+  }
+
+  function render() {
+    if (!container) return;
+
+    if (!keszAll()) {
+      container.innerHTML = `
+        <div class="cv-notready">
+          Előbb válaszd ki az adatmappát a <strong>Nyilvántartás</strong> fülön.
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = `${navHtml()}<div class="cv-view" id="cv-view"></div>`;
+
+    container.querySelectorAll('.cv-viewbtn').forEach(gomb => {
+      gomb.addEventListener('click', () => valt(gomb.dataset.nezet));
+    });
+    const exportGomb = container.querySelector('#cv-export');
+    if (exportGomb) exportGomb.addEventListener('click', () => exportXlsx(exportGomb));
+
+    const el = container.querySelector('#cv-view');
+
+    // Az Átutalások saját modul, és saját gyökeret kap – ott nincs mit kötni.
+    if (!state.kivalasztott && state.nezet === 'atutalasok') {
+      TransfersView.render(el);
+      return;
+    }
+
+    if (state.kivalasztott)                el.innerHTML = reszletHtml();
+    else if (state.nezet === 'attekintes') el.innerHTML =
+      `<div class="cv-page cv-page--scroll">${CasesDashboard.render()}</div>`;
+    else if (state.nezet === 'dolgozok')   el.innerHTML = dolgozokHtml();
+    else                                   el.innerHTML = ugyekHtml();
+
+    bind();
   }
 
   // ── Események ──────────────────────────────────────────────────────────────
@@ -572,48 +709,81 @@ const CasesModule = (() => {
       });
     }
 
-    // Az áttekintő számláló-csempéi ugyanazt csinálják, mint a szűrőgombok:
-    // kattintásra a lista szűrődik. Enélkül a szám csak dísz lenne.
+    // Az áttekintő számláló-csempéi ugyanazt csinálják, mint a szűrőgombok —
+    // de át is visznek az Ügyek nézetre: enélkül egy olyan listát szűrnének,
+    // ami épp nem látszik.
     container.querySelectorAll('.cv-filter, .dash-stat').forEach(b => {
-      b.addEventListener('click', () => { state.szuro = b.dataset.filter; render(); });
+      b.addEventListener('click', () => {
+        state.szuro = b.dataset.filter;
+        if (state.nezet === 'ugyek') { state.kivalasztott = null; render(); }
+        else valt('ugyek');
+      });
     });
+
+    container.querySelectorAll('[data-sort]').forEach(th => {
+      th.addEventListener('click', () => {
+        if (state.rend === th.dataset.sort) state.irany = -state.irany;
+        else { state.rend = th.dataset.sort; state.irany = 1; }
+        Settings.set('cases_sort', state.rend);
+        Settings.set('cases_sort_dir', state.irany);
+        render();
+      });
+    });
+    container.querySelectorAll('[data-dsort]').forEach(th => {
+      th.addEventListener('click', () => {
+        if (state.dRend === th.dataset.dsort) state.dIrany = -state.dIrany;
+        else { state.dRend = th.dataset.dsort; state.dIrany = 1; }
+        Settings.set('cases_emp_sort', state.dRend);
+        Settings.set('cases_emp_sort_dir', state.dIrany);
+        render();
+      });
+    });
+
+    // A `<tr>` nem gomb, ezért a billentyűkezelés a miénk – enélkül a táblázat
+    // csak egérrel lenne járható.
+    const sorAktival = (el, fn) => {
+      el.addEventListener('click', fn);
+      el.addEventListener('keydown', e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        fn();
+      });
+    };
+
+    container.querySelectorAll('.cv-tr[data-id]').forEach(tr =>
+      sorAktival(tr, () => megnyit(tr.dataset.id)));
+    container.querySelectorAll('[data-open-case]').forEach(el =>
+      sorAktival(el, () => megnyit(el.dataset.openCase)));
+    container.querySelectorAll('[data-new-for]').forEach(el =>
+      sorAktival(el, () => {
+        if (!irhat()) return;
+        CaseForm.open({
+          employeeId: el.dataset.newFor, type: 'rp_hosszabbitas',
+          onSaved: id => megnyit(id),
+        });
+      }));
 
     const vissza = q('#cv-back');
     if (vissza) vissza.addEventListener('click', () => { state.kivalasztott = null; render(); });
 
-    container.querySelectorAll('.cv-row').forEach(b => {
-      b.addEventListener('click', () => { state.kivalasztott = b.dataset.id; render(); });
-    });
+    const lep = irany => {
+      const lista = szurtLista();
+      const cel = lista[lista.findIndex(c => c.id === state.kivalasztott) + irany];
+      if (cel) megnyit(cel.id);
+    };
+    const elozo = q('#cv-prev');
+    if (elozo) elozo.addEventListener('click', () => lep(-1));
+    const kovetkezo = q('#cv-next');
+    if (kovetkezo) kovetkezo.addEventListener('click', () => lep(1));
+
+    const uj = q('#cv-new');
+    if (uj) uj.addEventListener('click', () => CaseForm.open({ onSaved: id => megnyit(id) }));
 
     const dij = q('#cv-fee');
     if (dij) dij.addEventListener('click', () => {
       const c = CaseRepo.get(state.kivalasztott);
       if (c && TransfersView.addFromCase(c)) render();
     });
-
-    const rendGomb = q('#cv-suggest-sort');
-    if (rendGomb) rendGomb.addEventListener('click', () => {
-      const i = RENDEZESEK.findIndex(r => r.key === state.javaslatRend);
-      state.javaslatRend = RENDEZESEK[(i + 1) % RENDEZESEK.length].key;
-      Settings.set('cases_suggest_sort', state.javaslatRend);
-      render();
-    });
-
-    container.querySelectorAll('[data-open-case]').forEach(b => {
-      b.addEventListener('click', () => { state.kivalasztott = b.dataset.openCase; render(); });
-    });
-
-    container.querySelectorAll('[data-new-for]').forEach(b => {
-      b.addEventListener('click', () => CaseForm.open({
-        employeeId: b.dataset.newFor, type: 'rp_hosszabbitas',
-        onSaved: id => { state.kivalasztott = id; render(); },
-      }));
-    });
-
-    const uj = q('#cv-new');
-    if (uj) uj.addEventListener('click', () => CaseForm.open({
-      onSaved: id => { state.kivalasztott = id; render(); },
-    }));
 
     const szerk = q('#cv-edit');
     if (szerk) szerk.addEventListener('click', () => CaseForm.open({
@@ -623,8 +793,8 @@ const CasesModule = (() => {
     const torol = q('#cv-delete');
     if (torol) torol.addEventListener('click', () => torlesMegerosites(state.kivalasztott));
 
-    const lep = q('#cv-advance');
-    if (lep) lep.addEventListener('click', () => CaseForm.openStatus({
+    const statusz = q('#cv-advance');
+    if (statusz) statusz.addEventListener('click', () => CaseForm.openStatus({
       caseId: state.kivalasztott, onSaved: () => render(),
     }));
 
@@ -640,9 +810,6 @@ const CasesModule = (() => {
     container.querySelectorAll('.cv-tab').forEach(b => {
       b.addEventListener('click', () => { state.lap = b.dataset.lap; render(); });
     });
-
-    const savGomb = q('#cv-sidetoggle');
-    if (savGomb) savGomb.addEventListener('click', savValt);
 
     if (state.lap === 'eh' && state.kivalasztott) {
       const c = CaseRepo.get(state.kivalasztott);

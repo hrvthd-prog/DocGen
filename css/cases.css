@@ -141,153 +141,179 @@
 /* ── Ügyek fül ───────────────────────────────────────────────────────────── */
 
 /* Az `.app-root { min-width: 920px }` (app.css) a Nyilvántartás táblázatáért
-   van. Az Ügyek fülön viszont fele-fele dokkolt böngészőben (~945 px) csak
-   25 px tartalékot hagy: egy 110%-os zoom vagy eltérő Windows-DPI azonnal
-   vízszintes görgetősávot ad. Itt nincs rá szükség, a panel maga görget. */
+   van. Az Ügyek fülön nincs rá szükség: itt nem két oszlop osztozik a helyen,
+   és a nézetek maguk görgetnek. */
 .app-root:has(.tab-btn[data-tab="cases"].active) { min-width: 0; }
 
-/* A BELSŐ panelek görgetnek, nem az egész oldal.
+/* A BELSŐ panel görget, nem az egész oldal.
    A `.tab-content.active` csak `min-height`-ot kap (app.css), ezért a fül
-   tartalma korlátlanul nő: 15 nyitott ügynél az oldal 3700 px lett, az EH-panel
-   184 sorával ~6000 px – és ilyenkor a fejléc, a fülsáv és az EH ragadó
-   fejléce is kicsúszik felfelé. Fix magassággal a bal sáv listái és a jobb
-   oldali panel külön-külön görgethető, a keret pedig a helyén marad. */
+   tartalma korlátlanul nőne: 15 nyitott ügynél az oldal 3700 px lett, az
+   EH-panel 184 sorával ~6000 px – és ilyenkor a fejléc, a fülsáv és az EH
+   ragadó fejléce is kicsúszik felfelé. Fix magassággal a nézet törzse
+   görgethető, a keret pedig a helyén marad.
+
+   Oszlop-irány, mert a fülön két réteg van egymás ALATT: a nézetváltó sáv és
+   a tartalom. A `.tab-content.active` sor-irányú flexet ad (app.css) —
+   enélkül a sáv a tartalom MELLÉ kerülne. */
 #tab-cases.active {
   height: calc(100vh - var(--header-h) - var(--tabnav-h));
   min-height: 0;
   overflow: hidden;
-  /* Oszlop-irány, mert a fülön két réteg van egymás ALATT: a nézetváltó sáv
-     (Ügylista | Átutalások) és a tartalom. A `.tab-content.active` sor-irányú
-     flexet ad (app.css) — enélkül a sáv a tartalom MELLÉ kerülne. */
   flex-direction: column;
 }
 
-/* A .tab-content maga is flex-konténer, ezért a burkoló flex-ELEM: enélkül
-   a tartalmához zsugorodna, és a részletező panel elkeskenyedne. */
-.cv-wrap { display: flex; flex: 1; width: 100%; min-width: 0; height: 100%; min-height: 0; }
-
-.cv-side {
-  width: 380px; flex: 0 0 380px;
-  display: flex; flex-direction: column; min-height: 0;
-  border-right: 1px solid var(--c-border); background: var(--c-sidebar);
-}
-.cv-detail {
-  flex: 1; min-width: 0; overflow-y: auto; background: var(--c-card);
-}
-
-/* ── Összecsukható ügylista ──────────────────────────────────────────────── */
-
-/* Dokkolt (fél képernyős) ablakban a bal sáv a hely harmada, miközben egy
-   kérelem előkészítése közben alig kell. A `display: none` és nem `width: 0`:
-   a rejtett sáv így a Tab-láncból is kiesik – az EH-panelen a Tab a másolás
-   útját járja, nem az ügylistát. */
-.cv-wrap.is-collapsed .cv-side { display: none; }
-
-.cv-bar {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 14px 0;
-}
-.cv-sidetoggle {
-  flex: 0 0 auto; width: 22px; height: 22px; padding: 0;
-  border: 1px solid var(--c-border); border-radius: 4px;
-  background: transparent; color: var(--c-muted);
-  cursor: pointer; font-size: 13px; line-height: 1;
-}
-.cv-sidetoggle:hover { background: var(--c-teal); border-color: var(--c-teal); color: #fff; }
-.cv-bar__lista  { font-size: 11px; color: var(--c-muted); }
-.cv-bar__person { font-size: 12px; color: var(--c-muted); font-weight: 600;
-                  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
 .cv-notready { padding: 24px; font-size: 13px; color: var(--c-muted); }
 
-.cv-toolbar { padding: 10px 12px 8px; border-bottom: 1px solid var(--c-border); }
-.cv-filters { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+/* Egy nézet = a sáv alatti egész hely. Mindegyik ugyanabból a három rétegből
+   áll: eszköztár, görgethető törzs, lábléc – ezért közös a váz. */
+.cv-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.cv-page {
+  flex: 1; min-height: 0; display: flex; flex-direction: column;
+  background: var(--c-card);
+}
+/* Az áttekintő egyben görög: ott nincs külön fejléc és lábléc. */
+.cv-page--scroll { overflow-y: auto; }
+
+/* A nézetváltó sávban a nyitott ügyek / dolgozók száma. Halvány, mert
+   tájékoztat, nem figyelmeztet – a figyelmeztetés a piros fül-jelző dolga. */
+.cv-viewbtn__db { font-size: 10.5px; color: var(--c-muted); margin-left: 5px; }
+
+/* ── Eszköztár ───────────────────────────────────────────────────────────── */
+
+/* Kereső és szűrők EGY sorban, amíg elférnek. A sáv-elrendezésben ugyanez
+   három sort vitt el, mert 300 px-en minden tört; teljes szélességen a
+   szűrők a kereső mellé férnek, és a lista azonnal kezdődik. */
+.cv-toolbar {
+  display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap;
+  padding: 10px 14px; border-bottom: 1px solid var(--c-border);
+  flex: 0 0 auto;
+}
+.cv-search { flex: 0 1 320px; min-width: 180px; }
+.cv-filters { display: flex; gap: 4px; flex-wrap: wrap; }
 .cv-filter {
   font-size: 11px; padding: 3px 9px; border-radius: 12px; cursor: pointer;
   border: 1px solid var(--c-border); background: transparent; color: var(--c-muted);
 }
+.cv-filter:hover { color: var(--c-text); }
 .cv-filter.is-active { background: var(--c-teal); border-color: var(--c-teal); color: #fff; }
-/* Az állapot-szűrők külön sorban, halványabban: a sürgősség az elsődleges
-   dimenzió, az állapot a másodlagos. Pontozott keret jelzi, hogy más fajta. */
-.cv-filters--allapot { margin-top: 5px; }
-.cv-filters--allapot .cv-filter { border-style: dashed; font-size: 10.5px; }
+/* Az állapot-szűrő MÁS dimenzió (hol tart az ügy), nem sürgősség. A pontozott
+   keret ezt mondja ki, hogy a kettő ne tűnjön egy készletnek. */
+.cv-filter--allapot { border-style: dashed; font-size: 10.5px; }
 
-.cv-list { flex: 1; overflow-y: auto; min-height: 0; }
+/* ── Ügy- és dolgozótáblázat ─────────────────────────────────────────────── */
+
+.cv-table-wrap { flex: 1; min-height: 0; overflow: auto; }
+.cv-table { width: 100%; }
+/* A `.data-table` (app.css) a Nyilvántartás rácsáért csonkol: `nowrap` +
+   `max-width: 180px` + ellipszis. Itt ez pont a lényeget vágná el — a
+   határidő egész mondat („Nincs határidő – add meg: OIF érkeztetés napja"),
+   az azonosító-cella pedig két sorból áll. Ezért tördelünk. */
+.cv-table td { white-space: normal; max-width: none; overflow: visible; }
+
+.cv-th--sort { cursor: pointer; user-select: none; white-space: nowrap; }
+.cv-th--sort:hover { color: var(--c-teal); }
+.cv-th--sort.is-sorted { color: var(--c-teal); }
+.cv-th__arrow { font-size: 9px; margin-left: 4px; }
+/* Rögzített arányok, hogy 1600 px-en se sodródjon szét a sor: a határidő
+   egész mondat lehet, ezért az kapja a legtöbbet, de nem az ÖSSZES maradékot. */
+.cv-th--nev      { width: 30%; }
+.cv-th--allapot  { width: 12%; }
+.cv-th--azon     { width: 18%; }
+.cv-th--hatarido { width: 40%; }
+.cv-th--go       { width: 1%; }
+
+/* A sürgősség bal oldali csík, nem pötty: a pötty külön cellát kért volna,
+   és szűk ablakban pont az első oszlopot szorította. */
+.cv-tr { cursor: pointer; }
+.cv-tr--lejart td:first-child { box-shadow: inset 3px 0 0 var(--c-red); }
+.cv-tr--surgos td:first-child { box-shadow: inset 3px 0 0 var(--c-amber); }
+.cv-tr--lezart td { opacity: .6; }
+/* A `tbody tr:nth-child(even) td` zebrája (app.css) ugyanilyen erős, ezért a
+   kijelölés is ennyi tagot kap – különben minden második sor elnyelné. */
+.cv-table tbody tr.is-selected td { background: rgba(61,166,140,.14); }
+.cv-tr:focus-visible { outline: 2px solid var(--c-teal); outline-offset: -2px; }
+
+.cv-t__nev { display: block; font-size: 12.5px; font-weight: 600; color: var(--c-text); }
+.cv-t__tip { display: block; font-size: 11px; color: var(--c-muted); }
+.cv-td--allapot { font-size: 11.5px; }
+.cv-td--date    { font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.cv-td--due     { font-size: 11.5px; }
+.cv-tr--lejart .cv-td--due,
+.cv-td--due.is-late        { color: var(--c-red);   font-weight: 600; }
+.cv-tr--surgos .cv-td--due { color: var(--c-amber); font-weight: 600; }
+/* A sor végi művelet csak rámutatáskor látszik: a lista így nem lesz tele
+   ismétlődő „Megnyitás" szóval, de a kattintás célja mégis kiderül.
+   Átlátszó SZÍN, nem `opacity: 0`: az áttetsző cella a sor csíkozását is
+   elvinné, és a táblázat jobb széle megtörne. */
+.cv-td--go {
+  text-align: right; font-size: 11px; white-space: nowrap;
+  color: transparent; transition: color .12s;
+}
+.cv-tr:hover .cv-td--go, .cv-tr:focus .cv-td--go { color: var(--c-teal); }
+
+/* A két azonosító egymás ALATT. Nem két oszlop: dokkolt ablakban nem férne el,
+   és így is teljesül a lényeg — a hiányok egy hasábban futnak egymás alatt,
+   tehát végig lehet pásztázni, kinél nincs még iktatószám. */
+.cv-id { display: block; font-size: 11px; color: var(--c-muted); overflow-wrap: anywhere; }
+.cv-id b { color: var(--c-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.cv-id.is-missing { color: var(--c-amber); font-style: italic; }
+.cv-id.is-none    { color: var(--c-border); }
+
 .cv-empty { padding: 20px 14px; font-size: 12px; color: var(--c-muted); font-style: italic; }
 
-/* A sor KÉT SORBAN áll: fent a név + ügytípus, alatta a státusz + határidő.
-   Egy sorban a határidő szövege („Nincs határidő – add meg: OIF érkeztetés
-   napja (iktatószám megkapása)") a `flex: 0 0 auto` miatt nem zsugorodott,
-   és ~960 px-es ablakban (fele-fele dokkolt böngésző) a névre tolódott. */
-.cv-row {
-  display: flex; align-items: flex-start; gap: 8px; width: 100%;
-  padding: 8px 12px; border: 0; border-bottom: 1px solid var(--c-border);
-  background: transparent; text-align: left; cursor: pointer;
-  flex-wrap: wrap;
-}
-.cv-row:hover { background: var(--c-bg); }
-.cv-row.is-selected { background: var(--c-bg); box-shadow: inset 3px 0 0 var(--c-teal); }
-
-.cv-row__dot { flex: 0 0 7px; width: 7px; height: 7px; border-radius: 50%; margin-top: 5px; }
-.cv-row__dot--lejart  { background: var(--c-red); }
-.cv-row__dot--surgos  { background: var(--c-amber); }
-.cv-row__dot--nyitott { background: var(--c-slate); }
-.cv-row__dot--lezart  { background: var(--c-border); }
-
-.cv-row__main { flex: 1 1 100%; min-width: 0; }
-.cv-row__name { display: block; font-size: 12px; font-weight: 600; color: var(--c-text); }
-.cv-row__type { display: block; font-size: 11px; color: var(--c-muted); }
-/* Balra igazítva, teljes szélességben: szűk sávban a jobbra igazítás úgysem
-   ér semmit (a név is, a határidő is ugyanott kezdődne), a rátolódás viszont
-   ettől szűnik meg. A pötty szélessége miatt a behúzás 15px. */
-.cv-row__meta { flex: 1 1 100%; text-align: left; padding-left: 15px; margin-top: 2px; }
-.cv-row__status { display: inline; font-size: 11px; color: var(--c-text); }
-.cv-row__ids    { display: inline; font-size: 10px; color: var(--c-muted); overflow-wrap: anywhere; }
-.cv-row__ids::before { content: ' · '; color: var(--c-border); }
-.cv-row__ids.is-missing { color: var(--c-amber); font-style: italic; }
-.cv-row__due    { display: inline; font-size: 10px; color: var(--c-muted); overflow-wrap: anywhere; }
-.cv-row__due::before { content: ' · '; color: var(--c-border); }
-.cv-row--lejart .cv-row__due { color: var(--c-red); font-weight: 600; }
-.cv-row--surgos .cv-row__due { color: var(--c-amber); font-weight: 600; }
-
 .cv-foot {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 8px 12px; border-top: 1px solid var(--c-border);
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 14px; border-top: 1px solid var(--c-border); flex: 0 0 auto;
 }
 .cv-count { font-size: 11px; color: var(--c-muted); }
 
-.cv-suggest { padding: 8px 12px; border-bottom: 1px solid var(--c-border); }
-.cv-suggest__title {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .04em; color: var(--c-amber); margin-bottom: 5px;
-}
-/* A rendezésváltó a `.cv-filter` pirula – a nagybetűsítést és a ritkítást
-   viszont a címtől örökölné, ott az „A → Z" szétesne. */
-.cv-suggest__sort {
-  flex: 0 0 auto; text-transform: none; letter-spacing: 0; font-weight: 400;
-}
-/* MIND a javaslat látszik, görgetve. A korlát azért `vh` és nem fix px:
-   a sáv magassága a képernyőé. A 30% felső korlát hagyja, hogy a nyitott
-   ügyek listája alatta se szoruljon ki. */
-.cv-suggest__list { max-height: 30vh; overflow-y: auto; }
-.cv-suggest__item {
-  display: flex; justify-content: space-between; gap: 8px; width: 100%;
-  font-size: 11px; padding: 3px 0; border: 0; background: transparent;
-  color: var(--c-text); cursor: pointer; text-align: left;
-}
-.cv-suggest__item:hover { text-decoration: underline; }
-.cv-suggest__nev  { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cv-suggest__days { color: var(--c-muted); flex: 0 0 auto; }
+/* ── Részletező ──────────────────────────────────────────────────────────── */
 
+.cv-page--detail { min-width: 0; }
+
+.cv-dhead {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 14px; border-bottom: 1px solid var(--c-border); flex: 0 0 auto;
+}
+.cv-dhead__who { flex: 1; min-width: 0; }
+.cv-dhead__nev { display: block; font-size: 13.5px; font-weight: 600; color: var(--c-text); }
+/* Ez az a néhány adat, amiért eddig vissza kellett lépni a listára: típus,
+   állapot, a két azonosító és a határidő. Nem csonkul, inkább tördel — a sor
+   VÉGÉN áll a határidő, pont az veszne el egy ellipszissel. */
+.cv-dhead__sub { display: block; font-size: 11.5px; color: var(--c-muted); line-height: 1.4; }
+
+.cv-backbtn {
+  flex: 0 0 auto; padding: 4px 11px;
+  border: 1px solid var(--c-border); border-radius: 5px;
+  background: transparent; color: var(--c-muted);
+  cursor: pointer; font: inherit; font-size: 11.5px; line-height: 1.5;
+}
+.cv-backbtn:hover { background: var(--c-teal); border-color: var(--c-teal); color: #fff; }
+
+/* Lépkedés a szűrt listában. Ez pótolja, amit az oldalsáv adott: hogy a
+   szomszédos ügy egy kattintásra legyen, anélkül hogy a lista végig ott
+   foglalná a hely harmadát. */
+.cv-step { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.cv-stepbtn {
+  width: 24px; height: 24px; padding: 0; border-radius: 4px;
+  border: 1px solid var(--c-border); background: transparent;
+  color: var(--c-muted); cursor: pointer; font-size: 14px; line-height: 1;
+}
+.cv-stepbtn:hover:not(:disabled) { background: var(--c-teal); border-color: var(--c-teal); color: #fff; }
+.cv-stepbtn:disabled { opacity: .35; cursor: default; }
+.cv-step__num { font-size: 11px; color: var(--c-muted); font-variant-numeric: tabular-nums; }
+
+/* A törzs görget; a fejléc, a fülsor és a műveleti sor a helyén marad.
+   Az EH-panel ragadó fejléce ebben a dobozban ragad. */
+.cv-dbody { flex: 1; min-height: 0; overflow-y: auto; }
+
+.cv-actions {
+  display: flex; gap: 8px; padding: 12px 14px; flex: 0 0 auto;
+  border-top: 1px solid var(--c-border);
+}
 /* A törlés a sor jobb szélére kerül, elhúzva a mindennapi műveletektől. */
 .cv-del { margin-left: auto; color: var(--c-red); }
 .cv-del:hover { background: var(--c-red); color: #fff; }
-
-.cv-actions {
-  display: flex; gap: 8px; padding: 12px 14px;
-  border-top: 1px solid var(--c-border);
-}
 
 /* ── Részletező fülei ────────────────────────────────────────────────────── */
 
@@ -388,22 +414,24 @@
 .cf-field > small { font-size: 10px; color: var(--c-muted); }
 .cf-window:not(:empty) { margin-top: 12px; border: 1px solid var(--c-border); border-radius: 6px; }
 
-/* Fele-fele dokkolt böngésző 1920×1080-on = ~945 px viewport. A fix 380 px-es
-   bal sáv ott a hely 40%-a, miközben EH-kitöltés közben alig nézünk rá. */
-@media (max-width: 1200px) {
-  .cv-side { width: 300px; flex: 0 0 300px; }
+/* Dokkolt (fél képernyős) böngésző: 1920×1080-on fele-fele ~960 ESZKÖZpixel,
+   ami 125%-os Windows-skálázással mindössze ~756 CSS pixel — ez a tényleges
+   éles méret, nem a 960. A négy oszlop itt is elfér, csak szorosabban: a
+   kereső saját sort kap (így a szűrők alá rendeződnek, nem mellé törnek), és
+   a cellák belső margója szűkül. Oszlopot NEM rejtünk el: a határidő és az
+   azonosító épp az, amiért ez a lista létezik. */
+@media (max-width: 1000px) {
+  .cv-search { flex: 1 1 100%; }
+  .cv-table th, .cv-table td { padding-left: 8px; padding-right: 8px; }
+  .cv-th--nev { width: 34%; }
+  .cv-th--azon { width: 20%; }
+  .cv-t__nev  { font-size: 12px; }
 }
 
-/* A sáv a tartalom FÖLÉ csak nagyon szűk ablakban kerüljön.
-   A korábbi 780 px-es töréspont a dokkolt nézetet is elkapta: 1920×1080-on
-   fele-fele ~960 eszközpixel, ami 125%-os Windows-skálázással mindössze
-   ~756 CSS pixel — a sáv így felülre csúszott, és a magasság 45%-át elvette,
-   pont ott, ahol a legkevesebb hely van. A 600 px alá szorított töréspont
-   megtartja az oldalsó elrendezést; ha ott is szűk, a lista becsukható. */
-@media (max-width: 600px) {
-  .cv-wrap { flex-direction: column; }
-  .cv-side { width: auto; flex: 0 0 auto; max-height: 45%; border-right: 0;
-             border-bottom: 1px solid var(--c-border); }
+/* Ennél szűkebben a részletező fejlécében a „3 / 12" számláló lemarad; a két
+   nyíl marad, mert azzal lehet lépkedni. */
+@media (max-width: 700px) {
+  .cv-step__num { display: none; }
 }
 
 @media (max-width: 780px) {
@@ -432,20 +460,16 @@
 }
 
 /* ── Ügyek áttekintő ─────────────────────────────────────────────────────── */
-/* A részletező panel alapállapota: ez látszik, amíg nincs kiválasztott ügy.
-   Korábban itt egy „Válassz ki egy ügyet" felirat állt — a legdrágább hely a
-   felületen, épp a legfontosabb pillanatban üresen. */
+/* Önálló nézet, nem a részletező üres állapota: az első megnyitott üggyel
+   eddig eltűnt, pedig ez az a képernyő, amiért reggel megnyitjuk a fület.
 
-.dash { padding: 14px 16px 24px; }
-
-/* Visszaút a kiválasztott ügyből. Az Esc ugyanezt csinálja. */
-.cv-back {
-  flex: 0 0 auto; padding: 3px 10px;
-  border: 1px solid var(--c-border); border-radius: 5px;
-  background: transparent; color: var(--c-muted);
-  cursor: pointer; font: inherit; font-size: 11.5px; line-height: 1.5;
-}
-.cv-back:hover { background: var(--c-teal); border-color: var(--c-teal); color: #fff; }
+   A `max-width` azért kell, mert a blokkok sorai „név — állapot — művelet"
+   hármasok: 1600 px-en a két szélső adat két méterre kerülne egymástól, és a
+   szemnek vissza kellene találnia. A sávos elrendezésben a panel épp ekkora
+   volt — ott ez véletlenül jött ki jól, itt szándékosan. */
+.dash { padding: 14px 16px 24px; max-width: 1150px; }
+/* Teljes magasságú nézetben a belső görgetők szorosabbak a kelleténél. */
+.cv-page--scroll .dash-list { max-height: 420px; }
 
 /* ── Számlálók ───────────────────────────────────────────────────────────── */
 

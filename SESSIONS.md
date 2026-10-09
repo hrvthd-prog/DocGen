@@ -68,6 +68,59 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-08 — Ügyek: oldalsáv helyett négy teljes szélességű nézet
+
+**Cél:** „az oldalsávos megoldás nem hatékony, túl kis hely marad az ügyeknek,
+nehéz a navigáció; az iktatószám nélküli ügyeket nehéz megnézni; nem áll kézre
+a dashboard".
+
+**Változás (`v10.76`):** `cases-view.js` héja átírva, `cases.css` elrendezés-
+része kicserélve. A `CasesDashboard` / `CaseTimeline` / `CaseEh` / `CaseForm` /
+`TransfersView` modulokhoz nem nyúltunk.
+- A kétoszlopos master–detail megszűnt. A már meglévő `.cv-viewbar` négy
+  nézetre bővült: **Áttekintés · Ügyek · Dolgozók · Átutalások**; egyszerre egy
+  látszik, teljes szélességben.
+- Az ügylista **táblázat** (`.data-table` újrahasznosítva): Név + ügytípus |
+  Állapot | Azonosítók | Határidő. A Név / Állapot / Határidő fejléc rendez,
+  az irány a `Settings`-ben őrződik. Új szűrő: **„Azonosító nélkül"**.
+- A részletező teljes lapot kap: fejlécében `‹ Vissza`, a dolgozó neve, és egy
+  alcím a típussal, állapottal, mindkét azonosítóval és a határidővel; jobbra
+  `‹ n/m ›` lépkedés a szűrt listában.
+- Elmaradt: `cv-wrap` / `cv-side` / `cv-row*` / `cv-suggest*` / `cv-bar` /
+  `cv-sidetoggle`, az **Alt+L** összecsukás és a `cases_side_collapsed` +
+  `cases_suggest_sort` beállítás.
+
+**Miért / döntés:**
+- A panasz oka nem a sáv szélessége volt, hanem hogy egy 300 px-es hasáb vitt
+  négy dolgot (kereső, két szűrősor, teljes dolgozólista, ügylista). Hat mező
+  egy sorban ott nem fér el — ezért nem lehetett VÉGIGFUTNI azon, kinél
+  hiányzik az iktatószám. Táblázatban a hiány oszlopba rendeződik.
+- Az áttekintő eddig a részletező ÜRES ÁLLAPOTA volt (`reszletHtml()` első
+  sora): az első megnyitott üggyel eltűnt. Most saját nézet, egy kattintásra.
+- A két azonosító EGY cellába került, egymás alá — két oszlop dokkolt ablakban
+  nem férne el, a hiányok pásztázhatósága viszont így is megvan.
+- A lépkedés (`‹ ›`) tudatos csere: a sáv egyetlen valódi haszna az volt, hogy
+  a szomszéd ügy egy kattintás. Ezt 24 px-ből megkapjuk 300 helyett. Csak az
+  Ügyek nézetben jelenik meg: az áttekintőről nyitott ügynek nincs szomszédja.
+- A `.data-table` (app.css) `nowrap` + `max-width: 180px` + ellipszist ad a
+  Nyilvántartás rácsáért; itt felülírva, mert a határidő egész mondat lehet.
+- A sor végi „Megnyitás" `color: transparent`, nem `opacity: 0` — az áttetsző
+  cella a zebracsíkot is elvinné, és a táblázat jobb széle megtörne.
+
+**Tesztek:** `node test/run-all.js` — mind zöld (a fül felületét Node nem fedi).
+Szemrevételezés a `tools/ui-proba.html`-lel, headless Chrome-mal, **1600×1000**
+és **760×1000** méretben (ez utóbbi a dokkolt, 125%-os skálázású éles méret),
+mind a négy nézetre és a részletezőre. A próbalap `?nezet=` paramétere most
+mind a négy nézetet érti, az `?ugy=1` a `.cv-tr`-re kattint.
+
+**Nyitott / következő:**
+- Az **Átutalások** nézetnek saját belső oldalsávja van (`.tv-side`) — azt ez a
+  menet nem érintette, de ugyanaz a szűk-hasáb probléma vonatkozik rá.
+- Az `index.html`-ben az Ügyek fül `accesskey="3"`; a nézetek közt nincs
+  billentyűs váltás (az Alt+L megszűnt, újat nem vezettünk be).
+- Az `allapot.js` („Ügyállás" fül, megtekintő szint) a régi mintát követi,
+  nem lett egységesítve.
+
 ## 2026-10-08 — Az iktatószám ADJA a határidő kezdő napját
 
 **Cél:** „megadtam az OIF ügyszámokat, a program mégis azt írja: nincs határidő –
