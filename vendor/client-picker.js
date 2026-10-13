@@ -317,8 +317,10 @@
         : st.sort.dir === 'asc' ? svgSortAsc() : svgSortDesc();
       const hasFilter = !!st.filters[col];
       const w = this.colWidths[col];
+      // Nincs inline position:relative — felülírná a CSS sticky-jét, és a
+      // fejléc elgörgetne. A sticky th maga is tartóblokk a .cp-th-resize-nak.
       return `
-        <th data-col="${esc(col)}" style="position:relative${w ? ';width:'+w+'px' : ''}">
+        <th data-col="${esc(col)}"${w ? ` style="width:${w}px"` : ''}>
           <div class="cp-th-inner ${hasFilter ? 'cp-has-filter' : ''}" data-col="${esc(col)}">
             <span class="cp-th-label" title="${esc(col)}">${esc(col)}</span>
             <span class="cp-th-sort ${isSorted ? 'cp-active' : ''}">${sortIcon}</span>

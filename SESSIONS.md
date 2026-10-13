@@ -68,6 +68,23 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-13 — Nyilvántartás: rögzített táblázatfejléc
+
+**Cél:** „a táblázat fejléce nincs rögzítve, csak a # marad meg".
+
+**Változás (`v10.77`):** `vendor/client-picker.js` `_renderHead()` — az
+adatoszlopok `<th>`-járól lekerült az inline `position:relative`.
+**Miért / döntés:** az inline stílus felülírta a CSS `position: sticky`-t, így
+görgetéskor csak a jelölő- és a `#` oszlop (ezeken nincs inline stílus) fejléce
+maradt a helyén. A sticky elem maga is pozicionált, ezért a `.cp-th-resize`
+fogantyú `relative` nélkül is a saját `<th>`-jához igazodik. A közös komponensben
+javítva, tehát a DocGen fül modális választója is rendbe jött.
+**Tesztek:** `node test/run-all.js` zöld. Headless Chrome-mérés (eldobható lap,
+nincs a repóban): 600 px görgetés után előtte az adatfejlécek −600 px-en
+(`relative`), utána mind 0 px-en (`sticky`).
+
+**Nyitott / következő:** —
+
 ## 2026-10-08 — Ügyek: oldalsáv helyett négy teljes szélességű nézet
 
 **Cél:** „az oldalsávos megoldás nem hatékony, túl kis hely marad az ügyeknek,
