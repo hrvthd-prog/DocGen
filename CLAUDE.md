@@ -24,6 +24,20 @@ megvalósítva**),
 `TERV-pdf-nyomtatvany.md` (kitölthető PDF-sablonok; példa: NEAK NYT.52).
 A használat: `README.md`.
 
+## Hol fut?
+
+- **Éles használat és éles adat csak a felhasználó céges gépén** van
+  (adatmappa, IndexedDB `docgen_fs`). Fejlesztőgépen (otthoni Windows, VPS
+  `/root/DocGen`, felhős session) ne keress éles adatot — ha kell, DevTools-
+  konzolos szkriptet adj (mint a `tools/ugyek-bongeszotarbol.js`).
+- Böngészős viselkedést (mappaválasztó, File System Access engedély, felület)
+  csak ott lehet ellenőrizni: ami a Node-teszteken túl van, azt konkrét, nála
+  elvégezhető lépésként írd a SESSIONS.md „Nyitott” pontjába, és ne állítsd,
+  hogy működik.
+- Linuxon a Windows-only készletek (`docx-pdf`, `frissit`) kihagyják magukat.
+  Friss klónban: `git config core.hooksPath tools/hooks` és
+  `git config push.followTags true` — enélkül nem lép a verzió, nincs tag.
+
 ## Tesztek
 
 ```bash
