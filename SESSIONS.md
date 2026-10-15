@@ -68,6 +68,27 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-15 (2.) — PDF Műhely: MD → DOCX konvertáló
+
+**Cél:** „a PDF Műhelybe építs egy konvertálót .md-ről .docx-re”.
+**Változás:** csak a Műhely (`pdf-muhely v1.37`); ebben a repóban csak ez a
+bejegyzés (`v10.80`). Új **Eszközök → MD → DOCX** alfül. Átkerül: címsor,
+bekezdés, félkövér/dőlt/áthúzott, kód, beágyazott lista, táblázat, idézet,
+vonal, link. A Word saját stílusait kapja, A4-es lapon, magyar nyelvvel.
+**Miért / döntés:** a felhasználó választása: vegyes Markdown kép nélkül, alfül,
+**jöhet a python-docx**. A Markdownt saját elemző olvassa (nem kell második
+függőség). Részletek: `pdf-muhely/szerkeszto-terv.md` 24.
+**Tesztek:** Műhely `run-all` — csak az ismert linuxos bukások (Calibri,
+`windll`); új önteszt- és GUI-ellenőrzések zöldek. A két repó 18 `.md`
+fájlja átalakul, a kimenet az OOXML-sémán átmegy.
+
+**Nyitott / következő:**
+- A céges gépen: `pip install python-docx` (nélküle az alfül szól, a többi megy),
+  majd a Műhely frissítése.
+- **A Wordben megnyitott eredményt még senki nem nézte meg** (a VPS-en nincs
+  Word/LibreOffice): az első konvertálásnál a listák behúzását, a táblázatot és a
+  kódblokkot szemrevételezni.
+
 ## 2026-10-15 — Átállás VPS-es fejlesztésre
 
 **Cél:** a fejlesztés ma a VPS-en (`root@62.171.147.97`, `/root/DocGen`)
