@@ -18,11 +18,13 @@ const TAB_NEEDS = {
 };
 
 /** A látható fülek a mostani szinttel. A Beállítások csak akkor, ha van benne
- *  valami: séma (admin) vagy EH elérhetőség (ügyintéző). */
+ *  valami: séma (admin), EH elérhetőség (ügyintéző) vagy vezetői kapcsolatok
+ *  (HRBP). */
 function visibleTabs() {
   return TABS.filter(id => {
     if (id === 'settings') {
-      return Auth.can('settings.schema') || Auth.can('settings.ehcontact');
+      return Auth.can('settings.schema') || Auth.can('settings.ehcontact')
+          || Auth.can('leaders.manage');
     }
     const need = TAB_NEEDS[id];
     return !need || Auth.can(need);

@@ -23,6 +23,8 @@ const EmployeeHistory = (() => {
     urlap:  'űrlap',
     import: 'import',
     ugy:    'ügy',
+    tomeges: 'tömeges művelet',
+    fiok:   'fiók átnevezése',
   };
 
   function huDatum(iso) {

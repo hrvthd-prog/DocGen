@@ -85,6 +85,7 @@ const MATRIX = {
     'cases.read.own': true, 'cases.write': true, 'transfers.use': true,
     'settings.schema': true, 'settings.ehcontact': true,
     'accounts.manage': true, 'log.all': true,
+    'leaders.manage': true,
   },
   ugyintezo: {
     'registry.read': true,  'registry.read.own': false, 'registry.write': true,
@@ -92,6 +93,7 @@ const MATRIX = {
     'cases.read.own': false, 'cases.write': true, 'transfers.use': true,
     'settings.schema': false, 'settings.ehcontact': true,
     'accounts.manage': false, 'log.all': false,
+    'leaders.manage': false,
   },
   hrbp: {
     'registry.read': true,  'registry.read.own': false, 'registry.write': false,
@@ -99,6 +101,7 @@ const MATRIX = {
     'cases.read.own': false, 'cases.write': false, 'transfers.use': false,
     'settings.schema': false, 'settings.ehcontact': false,
     'accounts.manage': false, 'log.all': false,
+    'leaders.manage': true,
   },
   megtekinto: {
     'registry.read': false, 'registry.read.own': true,  'registry.write': false,
@@ -106,6 +109,7 @@ const MATRIX = {
     'cases.read.own': true, 'cases.write': false, 'transfers.use': false,
     'settings.schema': false, 'settings.ehcontact': false,
     'accounts.manage': false, 'log.all': false,
+    'leaders.manage': false,
   },
 };
 
@@ -340,6 +344,104 @@ async function main() {
     await test('ügyintéző mindenkit lát, a vezető mezőtől függetlenül', async () => {
       assertEq(A.ownsEmployee(masnak), true);
       assertEq(A.ownsEmployee(senkie), true);
+    });
+  }
+
+  section('Vezetői kapcsolatok: felettes és helyettes');
+  {
+    const { A, fajlok } = ujAuth();
+    await A.load();
+    await A.create({ name: 'Admin A', role: 'admin', pin: '1111' });
+    await A.create({ name: 'Terulet Tamas', role: 'megtekinto', pin: '2222' });
+    await A.create({ name: 'Csoport Cecil', role: 'megtekinto', pin: '3333' });
+    await A.create({ name: 'Muszak Miki', role: 'megtekinto', pin: '4444' });
+    await A.create({ name: 'Masik Mari', role: 'megtekinto', pin: '5555' });
+    await A.create({ name: 'Ugy Ugo', role: 'ugyintezo', pin: '6666' });
+    const id = n => A.byName(n).id;
+    const dolg = v => ({ fields: { hr_direct_leader: v } });
+
+    await A.login('Admin A', '1111');
+    await A.setSupervisor(id('Csoport Cecil'), id('Terulet Tamas'));
+    await A.setSupervisor(id('Muszak Miki'), id('Csoport Cecil'));
+
+    await test('a felettes a teljes ágát látja (többszintű)', async () => {
+      const v = A.visibleLeaderNames('Terulet Tamas');
+      for (const n of ['terulet tamas', 'csoport cecil', 'muszak miki']) assert(v.has(n), n);
+      assert(!v.has('masik mari'), 'idegen ágat is lát');
+    });
+    await test('a beosztott nem látja a felettese dolgozóit', async () => {
+      const v = A.visibleLeaderNames('Muszak Miki');
+      assertEq(v.size, 1);
+    });
+    await test('körkörös felettes-lánc nem menthető', async () => {
+      await throws(() => A.setSupervisor(id('Terulet Tamas'), id('Muszak Miki')), /Körkörös/);
+      await throws(() => A.setSupervisor(id('Terulet Tamas'), id('Terulet Tamas')), /saját felettese/);
+    });
+    await test('nem vezetői fiók nem lehet felettes vagy helyettes', async () => {
+      await throws(() => A.setSupervisor(id('Masik Mari'), id('Ugy Ugo')), /nem vezetői fiók/);
+      await throws(() => A.addDeputy(id('Masik Mari'), { deputyId: id('Ugy Ugo') }), /nem vezetői fiók/);
+    });
+    await test('a helyettesítés csak az időszakában ad látást', async () => {
+      await A.addDeputy(id('Masik Mari'), { deputyId: id('Muszak Miki'),
+        from: '2026-07-01', to: '2026-07-14' });
+      assert(A.visibleLeaderNames('Muszak Miki', '2026-07-05').has('masik mari'), 'közben nem látja');
+      assert(!A.visibleLeaderNames('Muszak Miki', '2026-06-30').has('masik mari'), 'előtte látja');
+      assert(!A.visibleLeaderNames('Muszak Miki', '2026-07-15').has('masik mari'), 'utána látja');
+      // A helyettes felettese NEM örökli a helyettesítést — az személyes.
+      assert(!A.visibleLeaderNames('Terulet Tamas', '2026-07-05').has('masik mari'));
+    });
+    await test('üres záró nap = visszavonásig; rossz sorrend tilos', async () => {
+      const r = await A.addDeputy(id('Csoport Cecil'), { deputyId: id('Masik Mari'), from: '2026-01-01' });
+      assert(A.visibleLeaderNames('Masik Mari', '2030-01-01').has('csoport cecil'));
+      assert(A.visibleLeaderNames('Masik Mari', '2030-01-01').has('muszak miki'),
+        'a helyettesített ágát nem látja');
+      await A.removeDeputy(id('Csoport Cecil'), r.id);
+      await throws(() => A.addDeputy(id('Csoport Cecil'), { deputyId: id('Masik Mari'),
+        from: '2026-05-10', to: '2026-05-01' }), /vége/);
+    });
+    await test('a kapcsolatok naplózódnak', async () => {
+      const akciok = A.auditLog().map(x => x.action);
+      for (const k of ['VEZETO_FELETTES', 'VEZETO_HELYETTES', 'VEZETO_HELYETTES_TORLES']) {
+        assert(akciok.includes(k), k);
+      }
+    });
+    await test('átnevezés után a kapcsolat megmarad (azonosítóval tárolva)', async () => {
+      await A.rename(id('Csoport Cecil'), 'Csoport Cecilia');
+      assert(A.visibleLeaderNames('Terulet Tamas').has('csoport cecilia'));
+    });
+
+    A.logout();
+    await A.login('Muszak Miki', '4444');
+    await test('a megtekintő a SAJÁT helyettesét beállíthatja', async () => {
+      await A.addDeputy(id('Muszak Miki'), { deputyId: id('Masik Mari'), from: '2026-08-01' });
+      assertEq(A.byName('Muszak Miki').deputies.length, 1);
+    });
+    await test('… de másét és a felettest nem', async () => {
+      await throws(() => A.addDeputy(id('Masik Mari'), { deputyId: id('Muszak Miki') }), /saját helyettesedet/);
+      await throws(() => A.setSupervisor(id('Muszak Miki'), null), /nincs jogod/);
+    });
+    await test('helyettesítés: a dolgozó láthatósága ownsEmployee-n át', async () => {
+      // Masik Mari Miki helyettese 08-01-től — fordítva NEM: Miki nem látja Mari dolgozóit.
+      assertEq(A.ownsEmployee(dolg('Masik Mari')), false);
+      assertEq(A.ownsEmployee(dolg('muszak miki')), true);
+    });
+
+    A.logout();
+    await A.login('Admin A', '1111');
+    await test('fiók törlésekor a rá mutató kapcsolatok kitisztulnak', async () => {
+      await A.remove(id('Terulet Tamas'));
+      assertEq(A.byName('Csoport Cecilia').supervisorId, null);
+      await A.remove(id('Masik Mari'));
+      assertEq(A.byName('Muszak Miki').deputies.length, 0);
+    });
+    await test('a kapcsolatok a fájlba mentődnek, és a régi fiók is betölthető', async () => {
+      const raw = JSON.parse(fajlok['docgen-accounts.json']);
+      assert(raw.accounts.every(x => 'supervisorId' in x && Array.isArray(x.deputies)));
+      const { A: B } = ujAuth({ 'docgen-accounts.json': JSON.stringify({ version: 1,
+        accounts: [{ id: 'r1', name: 'Regi Rezso', role: 'megtekinto' }] }) });
+      await B.load();
+      assertEq(B.get('r1').supervisorId, null);
+      assertEq(B.get('r1').deputies.length, 0);
     });
   }
 

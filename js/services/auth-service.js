@@ -202,6 +202,10 @@ const Auth = (() => {
     o.pinHash   = o.pinHash || '';
     o.createdAt = o.createdAt || nowIso();
     o.createdBy = o.createdBy || '';
+    // Vezetői kapcsolatok (TERV-fiokok.md 10.3 V3) — AZONOSÍTÓVAL, nem névvel,
+    // hogy egy átnevezés ne tépje el őket.
+    o.supervisorId = o.supervisorId || null;
+    o.deputies     = Array.isArray(o.deputies) ? o.deputies.filter(d => d && d.deputyId) : [];
     return o;
   }
 
@@ -235,6 +239,7 @@ const Auth = (() => {
       id: newId(), name: n, role,
       pinSalt: salt, pinHash: await hashPin(pin, salt),
       createdAt: nowIso(), createdBy: (session && session.name) || '',
+      supervisorId: null, deputies: [],
     });
     audit('FIOK_UJ', { target: n, role });
     await save();
@@ -299,9 +304,137 @@ const Auth = (() => {
       throw new Error('Ez az utolsó admin — nem törölhető.');
     }
     cache.accounts = cache.accounts.filter(x => x.id !== id);
+    // A rá mutató vezetői kapcsolatok se maradjanak lógva.
+    for (const x of cache.accounts) {
+      if (x.supervisorId === id) x.supervisorId = null;
+      x.deputies = (x.deputies || []).filter(d => d.deputyId !== id);
+    }
     audit('FIOK_TORLES', { target: a.name, role: a.role });
     await save();
     return true;
+  }
+
+  // ── Vezetői kapcsolatok: felettes és helyettes (TERV-fiokok.md 10.3) ────────
+  //
+  // A dolgozó a „Közvetlen vezető" mezőben a vezető NEVÉT hordozza (az iratokra
+  // is az megy ki); a vezetők egymás közti kapcsolata viszont itt, a fiókfájlban
+  // él, azonosítóval.
+
+  const OWN_ACTION = 'cases.read.own';
+
+  /**
+   * Vezetői fiók-e: a szintje a SAJÁT dolgozók ügyeit látja, a mindenkiét nem.
+   * Az admin minden jogot megkap (a `cases.read.own`-t is) — ő nem vezető,
+   * hanem kezelő, ezért kell a második feltétel.
+   */
+  function isLeader(a) {
+    return !!a && Roles.can(a.role, OWN_ACTION) && !Roles.can(a.role, 'cases.read');
+  }
+
+  function today() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-`
+         + `${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  function isActiveDeputy(d, nap) {
+    return !!d && d.from <= nap && (!d.to || nap <= d.to);
+  }
+
+  /** A mostani fiók szerkesztheti-e ennek a vezetőnek a kapcsolatait. */
+  function _canEditLeader(a, { self = false } = {}) {
+    if (can('leaders.manage')) return true;
+    return self && !!session && fold(session.name) === fold(a.name);
+  }
+
+  function _needAccount(id) {
+    const a = get(id);
+    if (!a) throw new Error('Nincs ilyen fiók.');
+    return a;
+  }
+
+  async function setSupervisor(id, supervisorId) {
+    const a = _needAccount(id);
+    if (!_canEditLeader(a)) throw new Error('Ehhez nincs jogod (vezetői kapcsolatok kezelése).');
+    const regi = a.supervisorId ? (get(a.supervisorId) || {}).name || '' : '';
+    if (!supervisorId) {
+      a.supervisorId = null;
+    } else {
+      const sup = _needAccount(supervisorId);
+      if (sup.id === a.id) throw new Error('Senki nem lehet a saját felettese.');
+      if (!isLeader(sup)) throw new Error(`${sup.name} nem vezetői fiók — felettes nem lehet.`);
+      // Körkörös lánc: a leendő felettes felettesei között nem lehet ő maga.
+      for (let x = sup, lepes = 0; x && lepes <= cache.accounts.length; lepes++) {
+        if (x.id === a.id) {
+          throw new Error(`Körkörös lenne: ${sup.name} már ${a.name} alá tartozik.`);
+        }
+        x = x.supervisorId ? get(x.supervisorId) : null;
+      }
+      a.supervisorId = sup.id;
+    }
+    audit('VEZETO_FELETTES', { target: a.name, from: regi,
+      to: a.supervisorId ? get(a.supervisorId).name : '' });
+    await save();
+    return a;
+  }
+
+  async function addDeputy(id, { deputyId, from = null, to = null } = {}) {
+    const a = _needAccount(id);
+    if (!_canEditLeader(a, { self: true })) {
+      throw new Error('Csak a saját helyettesedet állíthatod be.');
+    }
+    const dep = _needAccount(deputyId);
+    if (dep.id === a.id) throw new Error('Senki nem lehet a saját helyettese.');
+    if (!isLeader(dep)) throw new Error(`${dep.name} nem vezetői fiók — helyettes nem lehet.`);
+    const tol = String(from || today()).slice(0, 10);
+    const ig  = to ? String(to).slice(0, 10) : null;
+    const nap = /^\d{4}-\d{2}-\d{2}$/;
+    if (!nap.test(tol) || (ig && !nap.test(ig))) throw new Error('A dátum éééé-hh-nn alakban kell.');
+    if (ig && ig < tol) throw new Error('A helyettesítés vége nem lehet a kezdete előtt.');
+    const rec = { id: newId(), deputyId: dep.id, from: tol, to: ig,
+                  by: (session && session.name) || '', at: nowIso() };
+    a.deputies.push(rec);
+    audit('VEZETO_HELYETTES', { target: a.name, deputy: dep.name, from: tol, to: ig || '' });
+    await save();
+    return rec;
+  }
+
+  async function removeDeputy(id, entryId) {
+    const a = _needAccount(id);
+    if (!_canEditLeader(a, { self: true })) {
+      throw new Error('Csak a saját helyettesedet állíthatod be.');
+    }
+    const d = a.deputies.find(x => x.id === entryId);
+    if (!d) return false;
+    a.deputies = a.deputies.filter(x => x.id !== entryId);
+    audit('VEZETO_HELYETTES_TORLES', { target: a.name,
+      deputy: (get(d.deputyId) || {}).name || '', from: d.from, to: d.to || '' });
+    await save();
+    return true;
+  }
+
+  /**
+   * Kiknek a dolgozóit látja ez a fiók: önmaga, akiket MA helyettesít, és
+   * mindezek teljes alárendelt ága (többszintű). -> Set(fold(név))
+   */
+  function visibleLeaderNames(name = currentUser(), nap = today()) {
+    const out = new Set();
+    const sajat = fold(name);
+    if (!sajat) return out;
+    out.add(sajat);
+    const me = byName(name);
+    if (!me || !cache) return out;
+    const sor = [me, ...cache.accounts.filter(x =>
+      (x.deputies || []).some(d => d.deputyId === me.id && isActiveDeputy(d, nap)))];
+    const latott = new Set();
+    while (sor.length) {
+      const x = sor.shift();
+      if (latott.has(x.id)) continue;
+      latott.add(x.id);
+      out.add(fold(x.name));
+      sor.push(...cache.accounts.filter(y => y.supervisorId === x.id));
+    }
+    return out;
   }
 
   // ── Belépés ───────────────────────────────────────────────────────────────
@@ -369,13 +502,14 @@ const Auth = (() => {
 
   /**
    * A megtekintő a hozzá tartozó dolgozókat látja: a séma `hr_direct_leader`
-   * mezője („Közvetlen vezető”) a kapocs. Nem kellett új mezőt felvenni.
+   * mezője („Közvetlen vezető”) a kapocs. A sajátjain túl a beosztott vezetők
+   * (többszintű) és a ma helyettesített vezetők dolgozóit is (10.3 V2).
    */
   function ownsEmployee(emp) {
     if (can('registry.read')) return true;
     if (!can('registry.read.own')) return false;
-    const f = (emp && emp.fields) || {};
-    return fold(f.hr_direct_leader) === fold(currentUser()) && fold(currentUser()) !== '';
+    const vez = fold(((emp && emp.fields) || {}).hr_direct_leader);
+    return vez !== '' && visibleLeaderNames().has(vez);
   }
 
   return {
@@ -383,6 +517,7 @@ const Auth = (() => {
     roleLabel, roleHint,
     useBackend, createFileBackend, load, loaded, accounts, isEmpty, save,
     create, get, byName, setRole, rename, setPin, remove, adminCount,
+    isLeader, setSupervisor, addDeputy, removeDeputy, isActiveDeputy, visibleLeaderNames, today,
     login, logout, restoreSession, currentUser, currentRole,
     can, canWriteGroup, ownsEmployee, setProba, isProba,
     audit, auditLog,

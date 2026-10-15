@@ -518,6 +518,8 @@ const RegistryModule = (() => {
               title="Egy kijelölt rekord szerkesztése">Szerkesztés</button>
       <button class="btn btn-ghost btn-sm" data-bulk="exit" ${n ? '' : 'disabled'}>${
         mind ? 'Visszavétel' : 'Kilépettnek jelölés'}</button>
+      ${vezetotIrhat() ? `<button class="btn btn-ghost btn-sm" data-bulk="leader" ${n ? '' : 'disabled'}
+              title="A kijelölt dolgozók közvetlen vezetője — a vezetői fiókok közül">Közvetlen vezető…</button>` : ''}
       <button class="btn btn-ghost btn-sm" data-bulk="export" ${n ? '' : 'disabled'}>Export xlsx-be</button>
       <button class="btn btn-ghost btn-sm rg-del" data-bulk="destroy" ${n ? '' : 'disabled'}
               title="Végleges törlés – téves felvitel javítására">Törlés</button>
@@ -570,6 +572,7 @@ const RegistryModule = (() => {
         case 'history': EmployeeHistory.open(emps[0]); break;
         case 'edit':    openForm(emps[0].id); break;
         case 'export':  RegistryXlsxIO.exportData(emps); break;
+        case 'leader':  openLeaderDialog(emps); break;
         case 'destroy': confirmDestroy(emps.map(e => e.id)); break;
         case 'exit':
           // Csupa kilépett kijelölés → visszavétel; különben a még aktívak jelölése
@@ -581,6 +584,60 @@ const RegistryModule = (() => {
             openExitDialog(emps.filter(e => !e.exited));
           }
           break;
+      }
+    });
+  }
+
+  /**
+   * Írhatja-e a mostani szint a „Közvetlen vezető" mezőt. A mező AKTUÁLIS
+   * csoportját nézzük, nem a `hr_belso` konstanst: a séma szerkeszthető, a mező
+   * áttehető másik csoportba (TERV-fiokok.md 10.4).
+   */
+  function vezetotIrhat() {
+    let f = null;
+    try { f = SchemaStore.field(Leaders.FIELD); } catch { f = null; }
+    return !!f && Auth.canWriteGroup(f.group);
+  }
+
+  /** Közvetlen vezető több dolgozóra egyszerre (TERV-fiokok.md 10.3 V5). */
+  function openLeaderDialog(emps) {
+    const nevek = Leaders.candidates();
+    if (!nevek.length) {
+      toast('Nincs vezetői fiók. Előbb a Beállítások → Fiókok alatt vegyél fel egyet '
+        + '(„Csak megtekintő” szinttel).', 'warn');
+      return;
+    }
+    const tobb = emps.length > 1;
+    showDialog({
+      title: 'Közvetlen vezető',
+      body: `
+        <p style="font-size:13px;margin-bottom:10px">
+          ${tobb ? `<b>${emps.length} dolgozó</b>` : `<b>${escHtml(nevOf(emps[0]))}</b>`}
+          közvetlen vezetője:
+        </p>
+        <select class="field-select" id="rg-leader-sel" style="max-width:320px">
+          ${nevek.map(n => `<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('')}
+          <option value="">(vezető törlése)</option>
+        </select>
+        <p class="ef-hint" style="margin-top:10px">
+          A lista a vezetői fiókokat mutatja. A vezető az Ügyállás fülön ezeknek a
+          dolgozóknak az ügyeit látja. A változás a dolgozók előzményeiben is megjelenik.
+        </p>`,
+      footer: `
+        <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Mégse</button>
+        <button class="btn btn-primary btn-sm" id="rg-leader-save">Beállítás</button>`,
+    });
+    document.getElementById('rg-leader-save').addEventListener('click', () => {
+      const nev = document.getElementById('rg-leader-sel').value;
+      try {
+        const r = Leaders.assign(emps.map(e => e.id), nev);
+        closeDialog();
+        toast(r.hibak.length
+          ? `${r.valtozott} dolgozónál beállítva, ${r.hibak.length} rekord hibás: ${r.hibak[0].uzenet}`
+          : `✓ ${r.valtozott} dolgozónál beállítva`, r.hibak.length ? 'warn' : 'success');
+        renderList();
+      } catch (e) {
+        toast(e.message, 'error');
       }
     });
   }

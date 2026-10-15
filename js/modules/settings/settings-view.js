@@ -20,6 +20,18 @@ const SettingsModule = (() => {
       renderFieldList();
       renderDictionary();
     });
+    // A csapatok a Nyilvántartásban is változnak: fülváltáskor csak ez a kártya
+    // rajzolódik újra — az egész fül a mentetlen szótár-szerkesztést is vinné.
+    window.addEventListener('docgenTabActivated', e => {
+      if (e.detail === 'settings') frissitVezetoKartya();
+    });
+  }
+
+  function frissitVezetoKartya() {
+    const box = document.getElementById('sv-leaders');
+    if (!box || !Auth.can('leaders.manage')) return;
+    box.innerHTML = vezetoKartya();
+    bindVezetoKartya();
   }
 
   // ── Váz ────────────────────────────────────────────────────────────────────
@@ -33,6 +45,7 @@ const SettingsModule = (() => {
         <div class="workspace-col">
           ${sema ? szintKartya() : ''}
           ${sema ? fiokKartya() : ''}
+          ${Auth.can('leaders.manage') ? `<div id="sv-leaders">${vezetoKartya()}</div>` : ''}
           ${sema ? naploKartya() : ''}
           ${!sema ? '' : `
           <div class="ws-card">
@@ -115,6 +128,7 @@ const SettingsModule = (() => {
     on('sv-eh-save', 'click', mentEhKapcsolat);
     // A kurzor helye kattintásra és nyilazásra is változik, nem csak gépelésre
     ['input', 'click', 'keyup'].forEach(ev => on('sv-dict', ev, renderDictPreview));
+    if (Auth.can('leaders.manage')) bindVezetoKartya();
     if (sema) {
       renderFieldList();
       renderDictionary();
@@ -305,13 +319,12 @@ const SettingsModule = (() => {
               + `${escHtml(r.label)}</option>`)
       .join('');
 
-    // Figyelmeztetés: a megtekintő szűrése a „Közvetlen vezető" mező szövegére
-    // illeszkedik. Ha nincs egyetlen találat sem, a fiók egy üres listát látna —
+    // Figyelmeztetés: a vezetői fiók a „Közvetlen vezető" mezőn át kapja a
+    // dolgozóit. Ha nincs egyetlen találat sem, a fiók egy üres listát látna —
     // ezt jobb itt megmutatni, mint a műszakvezetővel felderíttetni.
     let emps = [];
     try { emps = EmployeeRepo.all(); } catch {}
-    const nincsDolgozo = (a) => a.role === 'megtekinto' && emps.length &&
-      !emps.some(e => Auth.fold((e.fields || {}).hr_direct_leader) === Auth.fold(a.name));
+    const nincsDolgozo = (a) => Auth.isLeader(a) && emps.length && !csapatMeret(a.name);
 
     return `
       <div class="ws-card">
@@ -385,13 +398,39 @@ const SettingsModule = (() => {
     };
 
     document.querySelectorAll('.fk-role').forEach(sel => {
-      sel.addEventListener('change', () => fut(() => Auth.setRole(sel.dataset.id, sel.value)));
+      sel.addEventListener('change', () => {
+        const a = Auth.get(sel.dataset.id);
+        const n = a && Auth.isLeader(a) && !Auth.isLeader({ role: sel.value })
+          ? csapatMeret(a.name) : 0;
+        if (!n) { fut(() => Auth.setRole(sel.dataset.id, sel.value)); return; }
+        // Árva dolgozók (10.3 V7): a nem vezetői szint nem látja a csapatát.
+        megerosit('Szintváltás',
+          `<b>${escHtml(a.name)}</b> új szintje nem vezetői: <b>${n} dolgozó</b>
+           ügyállását többé nem látja. A dolgozók mezőjében a neve megmarad, de
+           vezetőként nem lesz választható.`,
+          'Szintváltás', () => fut(() => Auth.setRole(sel.dataset.id, sel.value)), ujra);
+      });
     });
     document.querySelectorAll('.fk-ren').forEach(b => {
       b.addEventListener('click', () => {
         const a = Auth.get(b.dataset.id);
-        promptDialog('A fiók új neve:', a ? a.name : '', (v) =>
-          fut(() => Auth.rename(b.dataset.id, v)));
+        if (!a) return;
+        promptDialog('A fiók új neve:', a.name, (v) => {
+          const regi = a.name;
+          const n = csapatMeret(regi, true);
+          // A dolgozók mezője a vezető NEVÉT hordozza: átnevezéskor követi (10.2).
+          const atnevez = () => fut(async () => {
+            const r = await Auth.rename(b.dataset.id, v);
+            const c = Leaders.renameCascade(regi, r.name);
+            if (c.hibak.length) toast(`${c.hibak.length} dolgozónál nem sikerült: ${c.hibak[0].uzenet}`, 'warn');
+          });
+          if (!n || Auth.fold(regi) === Auth.fold(v)) { atnevez(); return; }
+          megerosit('Átnevezés',
+            `<b>${n} dolgozó</b> „Közvetlen vezető” mezője is átíródik
+             <b>${escHtml(regi)}</b> → <b>${escHtml(v)}</b> (a kilépetteké is). A
+             változás a dolgozók előzményeiben megjelenik.`,
+            'Átnevezés', atnevez);
+        });
       });
     });
     document.querySelectorAll('.fk-pin').forEach(b => {
@@ -404,9 +443,13 @@ const SettingsModule = (() => {
       b.addEventListener('click', () => {
         const a = Auth.get(b.dataset.id);
         if (!a) return;
+        const n = Auth.isLeader(a) ? csapatMeret(a.name) : 0;
         showDialog({
           title: 'Fiók törlése',
           body: `<p>Törlöd ezt a fiókot: <b>${escHtml(a.name)}</b>?</p>
+                 ${n ? `<p class="sv-problems">⚠ <b>${n} dolgozó</b> vezető nélkül marad:
+                   a mezőjükben a név megmarad, de már nem fiók. A felettesi és
+                   helyettesi kapcsolatai is megszűnnek.</p>` : ''}
                  <p class="login-note">A fiók naplóbejegyzései megmaradnak.</p>`,
           footer: `<button class="btn" id="fk-no">Mégse</button>
                    <button class="btn btn-danger" id="fk-yes">Törlés</button>`,
@@ -425,6 +468,100 @@ const SettingsModule = (() => {
       const pin  = document.getElementById('fk-new-pin').value;
       fut(() => Auth.create({ name, role, pin }));
     });
+  }
+
+  /** Hány dolgozó tartozik ehhez a vezetőnévhez (aktív, vagy a kilépettekkel). */
+  function csapatMeret(nev, includeExited = false) {
+    try { return Leaders.teamOf(nev, { includeExited }).length; } catch { return 0; }
+  }
+
+  function megerosit(cim, torzs, gomb, onOk, onCancel = null) {
+    showDialog({
+      title: cim,
+      body: `<p style="font-size:13px">${torzs}</p>`,
+      footer: `<button class="btn" id="mg-no">Mégse</button>
+               <button class="btn btn-primary" id="mg-yes">${escHtml(gomb)}</button>`,
+    });
+    document.getElementById('mg-no').addEventListener('click', () => {
+      closeDialog();
+      if (onCancel) onCancel();
+    });
+    document.getElementById('mg-yes').addEventListener('click', () => { closeDialog(); onOk(); });
+  }
+
+  // ── Vezetők és csapatok (TERV-fiokok.md 10.3) ─────────────────────────────
+  /**
+   * A vezetői kapcsolatok egy helyen: ki kinek a felettese, ki helyettesít, és
+   * a csapat összeállítása a vezető felől. A dolgozó felől ugyanez a
+   * Nyilvántartás tömeges „Közvetlen vezető…" műveletével megy.
+   */
+  function vezetoKartya() {
+    const vezetok = Auth.accounts().filter(Auth.isLeader)
+      .sort((a, b) => a.name.localeCompare(b.name, 'hu'));
+    let mezoIrhato = false;
+    try { mezoIrhato = Auth.canWriteGroup(SchemaStore.field(Leaders.FIELD).group); } catch {}
+    let arvak = 0;
+    try { arvak = Leaders.orphans().length; } catch {}
+
+    const felettesOpts = (a) => `<option value="">—</option>` + vezetok
+      .filter(x => x.id !== a.id)
+      .map(x => `<option value="${escHtml(x.id)}"${x.id === a.supervisorId ? ' selected' : ''}>`
+              + `${escHtml(x.name)}</option>`).join('');
+
+    return `
+      <div class="ws-card">
+        <div class="ws-card-header">
+          <span class="ws-card-title">Vezetők és csapatok</span>
+          <span class="rg-count">${vezetok.length} vezető${arvak ? ` · ${arvak} dolgozó vezető nélkül` : ''}</span>
+        </div>
+        <div class="ws-card-body">
+          <p class="sv-intro">
+            Vezetői fiók az, amelyik csak a saját dolgozói ügyállását látja (pl. „Csak
+            megtekintő”). A <b>felettes</b> a beosztott vezetők teljes ágát is látja; a
+            <b>helyettes</b> a megadott időszakban a helyettesített vezetőét. A dolgozók
+            felől ugyanez: Nyilvántartás → sorok kijelölése → <b>Közvetlen vezető…</b>
+          </p>
+          ${vezetok.length ? `
+          <table class="data-table ld-table">
+            <thead><tr><th>Vezető</th><th>Dolgozók</th><th>Felettes</th><th>Helyettesítés</th><th></th></tr></thead>
+            <tbody>
+              ${vezetok.map(a => `
+                <tr>
+                  <td>${escHtml(a.name)}</td>
+                  <td>${csapatMeret(a.name)}</td>
+                  <td><select class="field-input ld-sup" data-id="${escHtml(a.id)}">${felettesOpts(a)}</select></td>
+                  <td>${LeadersUI.deputyListHtml(a)}</td>
+                  <td style="white-space:nowrap">
+                    <button class="btn btn-ghost btn-sm ld-team" data-id="${escHtml(a.id)}"
+                      ${mezoIrhato ? '' : 'disabled title="A „Közvetlen vezető” mezőt a mostani szinttel nem írhatod."'}>Dolgozók…</button>
+                    <button class="btn btn-ghost btn-sm ld-dep" data-id="${escHtml(a.id)}">Helyettes…</button>
+                  </td>
+                </tr>`).join('')}
+            </tbody>
+          </table>` : `<p class="sv-intro">Még nincs vezetői fiók.</p>`}
+          <span id="ld-state" class="sv-problems"></span>
+        </div>
+      </div>`;
+  }
+
+  function bindVezetoKartya() {
+    const ujra = () => frissitVezetoKartya();
+    const box = document.getElementById('sv-leaders');
+    if (!box) return;
+    box.querySelectorAll('.ld-sup').forEach(sel => sel.addEventListener('change', async () => {
+      try {
+        await Auth.setSupervisor(sel.dataset.id, sel.value || null);
+        toast('✓ Mentve', 'success');
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+      ujra();
+    }));
+    box.querySelectorAll('.ld-team').forEach(b => b.addEventListener('click',
+      () => LeadersUI.openTeamPicker(b.dataset.id, ujra)));
+    box.querySelectorAll('.ld-dep').forEach(b => b.addEventListener('click',
+      () => LeadersUI.openDeputyDialog(b.dataset.id, ujra)));
+    LeadersUI.bindDeputyDelete(box, ujra);
   }
 
   /** Egyszerű beviteli párbeszéd — a fiókkezelés átnevezéséhez és PIN-jéhez. */
@@ -468,6 +605,9 @@ const SettingsModule = (() => {
     FIOK_ATNEVEZES:   'fiók átnevezve',
     FIOK_PIN:         'PIN csere',
     FIOK_TORLES:      'fiók törölve',
+    VEZETO_FELETTES:  'felettes módosult',
+    VEZETO_HELYETTES: 'helyettesítés felvéve',
+    VEZETO_HELYETTES_TORLES: 'helyettesítés törölve',
   };
 
   function naploKartya() {
@@ -485,6 +625,7 @@ const SettingsModule = (() => {
         </div>`;
     }
     const cel = (r) => [r.target, r.role && Roles.label(r.role), r.muvelet, r.muveletek,
+                        r.deputy && `helyettes: ${r.deputy}`,
                         r.from && `← ${r.from}`, r.to && `→ ${r.to}`]
       .filter(Boolean).join(' · ');
     return `

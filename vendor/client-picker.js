@@ -171,6 +171,17 @@
     return [...this.state.selected].map(i => this.rowKeys[i]);
   };
 
+  /**
+   * Amit a felhasználó épp lát: a szűrt, rendezett sorok és a látható oszlopok
+   * (inline használathoz — nyomtatás, export „ahogy a képernyőn").
+   */
+  Picker.prototype.view = function () {
+    return {
+      columns: this.state.visibleCols.slice(),
+      rows: this._filteredIndexes().map(i => this.rows[i]),
+    };
+  };
+
   Picker.prototype.clearSelection = function () {
     this.state.selected = new Set();
     this._render();

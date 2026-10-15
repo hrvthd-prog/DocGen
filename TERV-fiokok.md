@@ -335,3 +335,175 @@ Ami hátra van, az nem kód:
 - **Az NTFS-mátrix átadása az IT-nak** (4. fejezet).
 - **Kódba égetett adatkönyvtár** — a felhasználó jelezte, hogy később jön; azzal
   a próba mód nagyrészt feleslegessé válik.
+
+## 10. Megtekintő felület, vezetői kapcsolatok (2026-10-15)
+
+> *„A csak megtekintő fiókok ne lássák azokat a menüpontokat, amikhez nincs
+> joguk, csak az ügyállást — ott client picker-szerű keresés, szűrés, kijelölés.
+> Kell egy metodika a közvetlen vezetők rögzítéséhez, a fiókok alapján
+> választéklistával. Mire nem gondoltam még?"*
+
+### 10.1 Amit a kód feltárt (a tervezés előtt)
+
+- **A fülek elrejtése megvan, de NEM LÁTSZIK.** Az `applyRole()` a
+  fülgombokra `hidden`-t tesz, a `css/app.css` viszont `.tab-btn { display:
+  inline-flex }`-et ad — a szerzői CSS felülírja a böngésző `[hidden] {
+  display: none }` szabályát. A megtekintő ezért **minden** fület látja; kattintásra
+  a `switchTab()` visszadobja az Ügyállásra. Ez a panasz oka, nem a jogrendszer.
+- **A vezető–dolgozó kapcsolat NÉV szerinti szöveg** (`hr_direct_leader` ↔ a fiók
+  neve, `Auth.fold`). A fiók átnevezésével a vezető némán elveszítené a dolgozóit.
+- A mező az iratokra is kimegy (`export-profiles.js`: „Direct leader:"), tehát a
+  tárolt értéknek **a vezető neve** kell maradjon, nem egy belső azonosító.
+- Az Ügyállás csak az `EmployeeRepo.onChange`-re rajzol újra, a
+  `CaseRepo`-ra nem; és csak a nyitott ügyeket mutatja.
+
+### 10.2 A felhasználó döntései (kérdés–válasz)
+
+| Kérdés | Döntés |
+|---|---|
+| Kijelölés az Ügyállásban | **részletek** (idővonal, csak olvasás) + **nyomtatás / xlsx** |
+| Részletek tartalma | lépések, határidők **+ megjegyzések + EH szám / iktatószám** |
+| Rögzítés módja | **mindkét irányból**: Nyilvántartás tömeges művelet + fiók felőli „Dolgozók…" |
+| Választéklista | **csak fiókok, szigorúan** — a „saját dolgozói" jogú (`cases.read.own`) fiókok |
+| Fiók átnevezése | **a dolgozók mezője is frissül**, megerősítéssel, naplózva |
+| Régi, fiókkal nem egyező név | nincs ilyen az éles adatban → csak jelzés az űrlapon, javítólista nem kell |
+| xlsx-import nem fiók névvel | **betölti, de jelzi** (a szigorúság a kézi rögzítésre vonatkozik) |
+| Bővítések | **helyettesítés, vezető vezetője, nemrég lezárt ügyek, árva dolgozók** — mind |
+| Helyettesítés | **időszakos** (kezdő–záró nap, a záró üres = visszavonásig); beállítja a kezelő **és a vezető maga** is (a saját helyettesét) |
+| Hierarchia | **többszintű**, körkörös beállítás nem menthető |
+| Ki kezeli | **új jog: „Vezetői kapcsolatok kezelése"** (`leaders.manage`), alapból admin + HRBP |
+
+### 10.3 A terv
+
+**V1 — Menüpontok.** Globális `[hidden] { display: none !important; }` az
+`app.css`-ben. Ez minden `hidden` attribútumot érvényre juttat (nem csak a
+fülekét) — előtte végig kell nézni, hol van `hidden` olyan elemen, amit a CSS
+eddig mégis megjelenített (10.4).
+
+**V2 — Láthatóság: `js/services/leaders.js` (`Leaders`).** Egy modul, amely az
+`Auth` (fiókok) és az `EmployeeRepo` (dolgozók) között közvetít:
+- `candidates()` — a választéklista: azok a fiókok, amelyek szintjén van
+  `cases.read.own`, név szerint rendezve.
+- `visibleLeaderNames(fiók)` — a saját név + a teljes alárendelt ág
+  (`supervisorId` lefelé, többszintű) + akiket **ma** helyettesít (és azok ága).
+- `Auth.ownsEmployee()` ezt használja (eddig: egyetlen név egyezése).
+- `assign(empIds, név)`, `renameCascade(régi, új)`, `orphans()`,
+  `nonAccountLeaders()`.
+
+**V3 — Fiókadat** (`docgen-accounts.json`, visszafelé kompatibilis, a
+`migrate()` pótolja): `supervisorId` (fiók id vagy null), `deputies: [{ id,
+deputyId, from, to, by, at }]`. Azonosítóval, nem névvel: így az átnevezés
+nem tépi el. Ellenőrzés: önmaga nem lehet felettese/helyettese; körkörös
+felettes-lánc tilos; `from ≤ to`; csak `cases.read.own` jogú fiók lehet
+helyettes vagy felettes. Minden változás az `audit` naplóba.
+- `Auth.setSupervisor(id, supId)`, `Auth.addDeputy(id, {deputyId, from, to})`,
+  `Auth.removeDeputy(id, depId)` — `leaders.manage` jog, VAGY a saját fiók
+  helyettese (a megtekintő önkiszolgálása).
+- Fiók törlésekor a rá mutató `supervisorId`/`deputies` hivatkozás kitisztul.
+
+**V4 — Új jog:** `leaders.manage` a `ROLE_ACTIONS`-ben; seed: admin (mindent
+kap) + HRBP. A beépített szintek a `knownActions`-mechanizmussal frissítéskor
+megkapják (8.4), a saját szintek nem. A Beállítások fül akkor is látszik, ha
+csak ez a jog van.
+
+**V5 — Rögzítés.**
+- *Űrlap:* a `hr_direct_leader` szöveges mező helyett lenyíló lista
+  (`Leaders.candidates()`); ha a tárolt érték nem fiók, „⚠ … (nincs ilyen
+  fiók)" opcióként megmarad, nem vész el. A mező kulcsa egy helyen
+  (`Leaders.FIELD`).
+- *Nyilvántartás, tömeges:* új gomb „Közvetlen vezető…" a kijelölésre (írási
+  kapu: a mező csoportjára `Auth.canWriteGroup`), lenyíló listával +
+  „(vezető törlése)"; dolgozónként `EmployeeRepo.update(..., { source:
+  'tomeges' })` → előzmény.
+- *Fiók felől:* Beállítások → új kártya **„Vezetők és csapatok"**
+  (`leaders.manage`): vezetőnként dolgozószám, felettes (lenyíló), helyettesek
+  (dátummal), „Dolgozók…" → `ClientPicker.open` az aktív dolgozókkal, a mostani
+  csapat előre kijelölve. Mentéskor: az újonnan jelölt dolgozók ide kerülnek (ha
+  másik vezetőjük volt, a megerősítés kiírja, hányan), a kivett jelölésűek
+  vezetője törlődik.
+- *Átnevezés:* a Fiókok kártyán az átnevezés megerősítést kér („N dolgozó
+  vezetője is átíródik"), és a `Leaders.renameCascade` írja át, `source:
+  'fiok'` előzménnyel.
+- *Import:* az xlsx-import terv-párbeszéde jelzi, hány sorban jön fiókkal nem
+  egyező vezetőnév; az érték bekerül.
+
+**V6 — Ügyállás (megtekintő).** `ClientPicker.inline` táblázat, saját
+`storageKey`-jel: Dolgozó · Közvetlen vezető · Ügy · Állás · Határidő ·
+Következő lépés · Lezárva/eredmény. Keresés, oszlopszűrés, rendezés, oszlopok,
+kijelölés — a komponensből. Műveletsáv a kijelölésre:
+- **Részletek** (egy kijelölt): párbeszéd a `CaseTimeline.render`-rel — csak
+  olvasás (a `cases.write` hiánya miatt szerkesztőgomb nincs benne).
+- **Xlsx** és **Nyomtatás**: a kijelölt sorok, kijelölés nélkül a szűrt lista;
+  pontosan a látható oszlopok.
+- **Nemrég lezárt:** az elmúlt **30 napban** lezárt ügyek is sorok, kimenettel.
+- **Helyettesítés…**: a vezető kijelöli a saját helyettesét, dátummal.
+- Újrarajzolás a `CaseRepo` és az `Auth` változására is.
+
+**V7 — Árva dolgozók.**
+- Fiók törlésekor és olyan szintre állításkor, ahol nincs `cases.read.own`,
+  a megerősítés kiírja, hány dolgozó marad vezető nélkül.
+- Ügyek → Áttekintés: „Vezető nélkül" blokk az aktív dolgozókra, akiknek nincs
+  vezetője vagy a vezetőjük nem fiók. **Tájékoztató**, nem „teendő" (a „Nincs
+  teendő" megmarad), és csak akkor jelenik meg, ha van legalább egy vezetői
+  fiók — különben egy vezetőket nem használó telepítésen zaj lenne.
+
+### 10.4 A terv ellenőrzése a kód ellen
+
+- **[hidden] globálisan:** végig kell nézni a `hidden`-t használó elemeket
+  (`grep -rn "hidden" index.html js/`), hogy egyik se számítson arra, hogy a CSS
+  „felülírja" — ilyen esetben a globális szabály eltüntetne valamit. → V1-ben
+  ellenőrizve, eredmény a 10.6-ban.
+- **`ownsEmployee` hívói:** `allapot.js` és a `kivonatSorok()` (állapot-kivonat).
+  A kivonat **vezetőnként egy fájl** marad a közvetlen vezető szerint — a
+  felettes a saját fájljában nem kapja meg az ágát (az NTFS-szűkítés
+  fájlonként megy; egy összevont fájl ezt rontaná). → nyitott pont.
+- **A megtekintő önkiszolgáló helyettesítése a fiókfájlt ÍRJA.** Az NTFS-terv
+  (4. fejezet) a megtekintőnek csak olvasást adna a kivonatra — ha a 2. fázisban
+  a megtekintő a `docgen-accounts.json`-t nem írhatja, ez a gomb hibát fog adni.
+  → a mentési hiba üzenetben jelenjen meg, és a 4. fejezet mátrixába be kell írni.
+- **A „Közvetlen vezető" mező csoportja áthelyezhető** (a séma szerkeszthető):
+  a tömeges művelet kapuja ezért a mező AKTUÁLIS csoportját nézi, nem a
+  `hr_belso` konstansot.
+- **`Roles` új művelet:** a `knownActions` miatt a HRBP frissítéskor megkapja,
+  egy saját szint nem — teszt kell rá (8.4 mintája).
+- **Felület:** a Node-tesztek a DOM-ot nem fedik; a VPS-en böngésző nincs.
+  A felületi lépések az éles gépen próbálandók (SESSIONS „Nyitott").
+
+### 10.5 Mire nem gondoltál (és hova került)
+
+| Téma | Hova |
+|---|---|
+| A menüpontok a CSS miatt látszottak | V1 — ez volt a panasz oka |
+| Átnevezéskor a név szerinti kapcsolat elszakad | V5 átnevezés, V3 azonosítós hivatkozás |
+| Helyettesítés szabadság idejére | V3, V6 |
+| Vezető vezetője | V2, V3 |
+| Lezárt ügyek eredménye | V6 (30 nap) |
+| Fiók törlésekor árván maradó dolgozók | V7 |
+| A megtekintő a teljes adatfájlt olvassa (csak felületi szűkítés) | **nyitott** — az NTFS 2. fázis (7.4) |
+| Az önkiszolgáló helyettesítéshez írási jog kell a fiókfájlra | **nyitott** — 4. fejezet |
+| A felettes nem kap ág-szintű állapot-kivonatot | **nyitott** — 10.4 |
+
+### 10.6 Megvalósítva (`v10.83`) — és amit közben eldöntöttünk
+
+- **[hidden] — az ellenőrzés eredménye:** a `hidden` attribútum hat helyen él
+  (fülgombok, Kilépés gomb, próba-sáv, két fájlválasztó, ExcelJS-sor). Mind
+  elrejtést szán; kettő a CSS miatt eddig látszott: a **fülgombok** és a
+  **Kilépés gomb próba módban** (`.btn { display: inline-flex }`). A globális
+  szabály tehát csak javít.
+- **„Vezetői fiók” = `cases.read.own`, de `cases.read` NÉLKÜL.** Az admin minden
+  jogot megkap, a `cases.read.own`-t is — enélkül ő is a választéklistába
+  került volna. Aki mindent lát, annak nincs szüksége a hozzárendelésre.
+- **A helyettesítés személyes:** a helyettes a helyettesített vezető teljes
+  ágát látja, de a helyettes FELETTESE nem örökli. Az egyidejű láncolt
+  helyettesítést (A helyettesíti B-t, aki C-t) nem követjük.
+- **A `client-picker` kapott egy `view()` metódust** (szűrt, rendezett sorok + a
+  látható oszlopok): a nyomtatás és az xlsx így pontosan azt adja, amit a
+  képernyő mutat.
+- **A Vezetők kártya fülváltáskor frissül, a Beállítások többi része nem:** az
+  egész fül újrarajzolása a mentetlen szótár-szerkesztést is vinné.
+- **Tesztek:** `leaders.test.js` (új, 12), `auth.test.js` +13 (felettes,
+  körkörösség, helyettes időszaka, önkiszolgálás, törlés utáni takarítás,
+  átnevezés, régi fiók betöltése), a mátrix-teszt az új joggal.
+- **Nincs felületi próba:** a VPS-en nincs böngésző. A kézi lépések a
+  SESSIONS.md „Nyitott” pontjában.
+

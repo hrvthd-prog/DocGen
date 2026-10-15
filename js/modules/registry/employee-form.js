@@ -95,6 +95,17 @@ const EmployeeForm = (() => {
           ${opts.map(o => `<option value="${escHtml(o.id)}"${o.id === val ? ' selected' : ''}>${escHtml(o.label)}</option>`).join('')}
           ${unknown ? `<option value="${escHtml(val)}" selected>${escHtml(val)} (ismeretlen)</option>` : ''}
         </select>`;
+    } else if (typeof Leaders !== 'undefined' && f.key === Leaders.FIELD) {
+      // Közvetlen vezető: csak vezetői fiók választható (TERV-fiokok.md 10.3 V5).
+      // A fiókkal nem egyező régi/importált érték nem vész el: jelölve megmarad.
+      const nevek = Leaders.candidates();
+      const egyezik = Leaders.canonical(val);
+      input = `
+        <select class="field-select" id="${id}" data-key="${escHtml(f.key)}">
+          <option value=""${val ? '' : ' selected'}>—</option>
+          ${nevek.map(n => `<option value="${escHtml(n)}"${n === egyezik ? ' selected' : ''}>${escHtml(n)}</option>`).join('')}
+          ${val && !egyezik ? `<option value="${escHtml(val)}" selected>⚠ ${escHtml(val)} (nincs ilyen fiók)</option>` : ''}
+        </select>`;
     } else if (f.type === 'date') {
       input = dateFieldHtml({ id, key: f.key, value: val });
     } else if (f.type === 'number') {

@@ -164,6 +164,13 @@ const CasesDashboard = (() => {
     let utkozes = [];
     try { utkozes = CaseRepo.numberConflicts(); } catch { utkozes = []; }
 
+    // 7. Vezető nélküli aktív dolgozók (TERV-fiokok.md 10.3 V7). Tájékoztató, nem
+    //    teendő; és csak ha van egyáltalán vezetői fiók — vezetőket nem használó
+    //    telepítésen ez minden dolgozót felsorolna.
+    let vezetoNelkul = [];
+    try { if (Leaders.candidates().length) vezetoNelkul = Leaders.orphans(); }
+    catch { vezetoNelkul = []; }
+
     let szamok = { lejart: 0, surgos: 0, nyitott: 0 };
     try { szamok = CaseRepo.summary(ma); } catch { /* marad a nulla */ }
 
@@ -177,6 +184,7 @@ const CasesDashboard = (() => {
       csuszas,
       azonositoHiany,
       utkozes,
+      vezetoNelkul,
       ugyekSzama: ugyek.length,
       // Van-e egyáltalán teendő? Ebből lesz a „minden rendben" állapot.
       vanTeendo: !!(szamok.lejart || hianyzo.length || csuszas.length || utkozes.length ||
@@ -215,6 +223,7 @@ const CasesDashboard = (() => {
         ${ablakHtml(d)}
         ${azonositoHtml(d)}
         ${hataridoNelkulHtml(d)}
+        ${vezetoNelkulHtml(d)}
       </div>`;
   }
 
@@ -300,6 +309,26 @@ const CasesDashboard = (() => {
             </button>`).join('')}
         </div>`).join(''),
       'dash-block--red');
+  }
+
+  function vezetoNelkulHtml(d) {
+    if (!d.vezetoNelkul.length) return '';
+    const MAX = 40;
+    const sor = e => {
+      const vez = Leaders.leaderOf(e);
+      return `<div class="dash-row dash-row--static">
+        <span class="dash-row__main">${escHtml(nev(e.id))}</span>
+        <span class="dash-row__meta">${vez ? `„${escHtml(vez)}” — nem vezetői fiók` : 'nincs megadva'}</span>
+      </div>`;
+    };
+    return blokk(
+      `Vezető nélkül — ${d.vezetoNelkul.length}`,
+      `Ezeknek az aktív dolgozóknak az ügyállását egyetlen vezető sem látja.
+       Beállítás: Nyilvántartás → sorok kijelölése → <b>Közvetlen vezető…</b>,
+       vagy Beállítások → Vezetők és csapatok.`,
+      `<div class="dash-list">${d.vezetoNelkul.slice(0, MAX).map(sor).join('')}</div>
+       ${d.vezetoNelkul.length > MAX ? `<div class="dash-block__sub">… és még
+         ${d.vezetoNelkul.length - MAX}</div>` : ''}`);
   }
 
   function hianyzoHtml(d) {

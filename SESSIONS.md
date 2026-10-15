@@ -68,6 +68,43 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-15 (5.) — Megtekintő felület, vezetői kapcsolatok
+
+**Cél:** a megtekintő csak az Ügyállást lássa, ott client picker-szerű tábla
+legyen; a közvetlen vezetők rögzítése választéklistával; „mire nem gondoltam?"
+**Változás (`v10.83`):** terv és döntések: `TERV-fiokok.md` 10. (a kérdés–válasz
+táblával és a kód elleni ellenőrzéssel).
+- **A panasz oka CSS volt:** `.tab-btn { display: inline-flex }` felülírta a
+  `hidden`-t — a megtekintő minden fület látott. Globális `[hidden]` szabály.
+- `Auth`: `supervisorId`, `deputies[]` (azonosítóval), `setSupervisor` (körkörös
+  tilos), `addDeputy`/`removeDeputy` (időszakos; a vezető a SAJÁTJÁT is),
+  `visibleLeaderNames` (önmaga + ma helyettesítettek + többszintű ág) →
+  `ownsEmployee`. Új jog: `leaders.manage` (admin + HRBP).
+- Új `js/services/leaders.js` (választék, tömeges hozzárendelés, átnevezés-
+  kaszkád, árvák) és `js/modules/leaders-ui.js` (helyettes-párbeszéd, csapat-
+  választó `ClientPicker.open`-nel).
+- Felület: űrlapon lenyíló lista; Nyilvántartás tömeges „Közvetlen vezető…";
+  Beállítások „Vezetők és csapatok" kártya; átnevezés/törlés/szintváltás
+  megerősítéssel; import-jelzés; Áttekintés „Vezető nélkül" (tájékoztató).
+- Ügyállás: `ClientPicker.inline` (keresés, szűrés, rendezés, oszlopok),
+  Részletek (csak olvasható idővonal), Xlsx, Nyomtatás, 30 napon belül lezártak,
+  Helyettesítés kártya. `client-picker.js` új `view()` metódus.
+**Miért / döntés:** a 10.2 táblája; „vezetői fiók" = `cases.read.own` és NEM
+`cases.read` (különben az admin is a listában lenne).
+**Tesztek:** `node test/run-all.js` zöld; új `leaders.test.js` (12),
+`auth.test.js` +13.
+
+**Nyitott / következő:**
+- **Kézi próba az éles gépen** (a VPS-en nincs böngésző): megtekintő fiókkal csak
+  az Ügyállás fül látszik; a tábla szűrése, Részletek, Xlsx, Nyomtatás;
+  helyettes kijelölése a megtekintő saját fülén; Nyilvántartás → Közvetlen
+  vezető…; Beállítások → Vezetők és csapatok (HRBP-vel is: neki ott csak ez a
+  kártya); fiók átnevezése → a dolgozók mezője követi.
+- A megtekintő önkiszolgáló helyettesítése a fiókfájlt **írja** — ha az NTFS
+  2. fázisa ezt tiltja, a gomb hibát ad (TERV-fiokok.md 10.4).
+- Az állapot-kivonat továbbra is a KÖZVETLEN vezető szerint készül; a felettes
+  ágat nem kap.
+
 ## 2026-10-15 (4.) — Az EH szám és az iktatószám egyedisége
 
 **Cél:** „az iktatószámok és az EH számok mind egyediek — van-e ellenőrző

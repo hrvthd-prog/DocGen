@@ -2,6 +2,12 @@
 
 html, body { overflow: auto; }
 
+/* A `hidden` attribútum mindig rejtsen. A böngésző saját `[hidden]` szabályát
+   bármely szerzői `display` felülírja (pl. `.tab-btn { display: inline-flex }`):
+   így látszott a megtekintőnek minden fül, és próba módban a Kilépés gomb is
+   (TERV-fiokok.md 10.1). */
+[hidden] { display: none !important; }
+
 /* ── Layout ───────────────────────────────────────────── */
 .app-root {
   display: flex;

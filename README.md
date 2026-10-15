@@ -361,6 +361,40 @@ rendeli: a fiók nevére illeszkedő dolgozók látszanak (ékezet- és
 kisbetű-függetlenül). Ha egy megtekintő fiók egyetlen dolgozóra sem illeszkedik,
 az admin figyelmeztetést lát a Beállításokban.
 
+### Ügyállás és vezetők
+
+**Az Ügyállás fül** (a megtekintő egyetlen füle — a többit nem is látja) kereshető,
+oszloponként szűrhető és rendezhető táblázat: dolgozó, közvetlen vezető, ügy,
+állás, határidő, következő lépés, és a **30 napon belül lezárt** ügyek
+eredménye. A kijelölt sorokra:
+
+- **Részletek** — az ügy idővonala csak olvasásra (megjegyzésekkel, EH számmal,
+  iktatószámmal);
+- **Xlsx** és **Nyomtatás** — a kijelölt sorok, kijelölés nélkül a szűrt lista, a
+  látható oszlopokkal.
+
+A vezető a **saját helyettesét** is itt jelöli ki, időszakra (pl. szabadság).
+
+**Vezetői fiók** az, amelyik csak a saját dolgozói ügyállását látja (pl. „Csak
+megtekintő”). A **„Közvetlen vezető”** mezőbe csak ilyen fiók választható,
+lenyíló listából — három úton:
+
+- **Dolgozói űrlap** — a mező lenyíló lista.
+- **Nyilvántartás** — sorok kijelölése → **Közvetlen vezető…** (sok dolgozóra
+  egyszerre).
+- **Beállítások → Vezetők és csapatok** — vezetőnként **Dolgozók…** (kereshető
+  táblában pipálod a csapatot), **felettes** (a felettes a beosztott vezetők
+  teljes ágát látja, többszintűen) és **helyettes** (kezdő–záró nappal; a záró
+  üresen = visszavonásig).
+
+Ezt a kártyát a **„Vezetői kapcsolatok kezelése”** jog nyitja (alapból admin és
+HRBP). A fiók **átnevezésekor** a dolgozók mezője is az új nevet kapja
+(megerősítés után, az előzményekben naplózva); törléskor és nem vezetői szintre
+állításkor a program szól, hány dolgozó marad vezető nélkül. Az xlsx-import a
+fiókkal nem egyező vezetőnevet betölti, de jelzi. Az **Ügyek → Áttekintés**
+„Vezető nélkül” blokkja listázza az aktív dolgozókat, akiknek az ügyállását senki
+nem látja.
+
 Fiókot **csak belépett admin** vehet fel, nevezhet át és törölhet, a
 Beállítások fülön. Kivétel az első indulás: ha az adatmappában még nincs fiók, a
 belépőképernyő létrehozza az első admint — enélkül a rendszer kizárná magát.

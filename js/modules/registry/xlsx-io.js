@@ -88,6 +88,12 @@ const RegistryXlsxIO = (() => {
     const db = t => terv.filter(x => x.action === t).length;
     const hibas = terv.filter(t => t.validation.length).length;
     const ertekGond = terv.filter(t => t.row.problems.length).length;
+    // Közvetlen vezető, ami nem vezetői fiók: bekerül, de jelezzük (TERV-fiokok.md 10.2)
+    const nemFiok = t => {
+      const v = String(t.row.fields[Leaders.FIELD] || '').trim();
+      return v && !Leaders.isAccountName(v) ? v : '';
+    };
+    const nemFiokNevek = [...new Set(terv.map(nemFiok).filter(Boolean))];
 
     const sorok = terv.map(t => {
       const nev = [t.row.fields.surname, t.row.fields.forename].filter(Boolean).join(' ') || '(névtelen)';
@@ -100,7 +106,8 @@ const RegistryXlsxIO = (() => {
 
       const gondok = []
         .concat(t.validation.map(v => v.message))
-        .concat(t.row.problems);
+        .concat(t.row.problems)
+        .concat(nemFiok(t) ? [`a közvetlen vezető („${nemFiok(t)}”) nem fiók`] : []);
 
       return `
         <tr class="${t.validation.length ? 'xio-invalid' : ''}">
@@ -127,7 +134,14 @@ const RegistryXlsxIO = (() => {
             <span><b>${db('duplicate')}</b> duplikátum</span>
             ${hibas ? `<span class="xio-warn"><b>${hibas}</b> hiányos</span>` : ''}
             ${ertekGond ? `<span class="xio-warn"><b>${ertekGond}</b> ismeretlen érték</span>` : ''}
+            ${nemFiokNevek.length ? `<span class="xio-warn" title="${escHtml(nemFiokNevek.join(', '))}">
+              <b>${nemFiokNevek.length}</b> vezetőnév nem fiók</span>` : ''}
           </div>
+          ${nemFiokNevek.length ? `<p class="ef-hint">
+            Ezek a vezetőnevek nem egyeznek egyetlen vezetői fiókkal sem:
+            <b>${escHtml(nemFiokNevek.join(', '))}</b>. Az érték bekerül, de amíg nincs
+            ilyen nevű fiók, a vezető nem látja a dolgozóit (Beállítások → Fiókok, vagy
+            utólag: Nyilvántartás → Közvetlen vezető…).</p>` : ''}
           <div class="data-table-wrap xio-table">
             <table class="data-table">
               <thead><tr><th>Sor</th><th>Név</th><th>Művelet</th><th>Megjegyzés</th></tr></thead>

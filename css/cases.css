@@ -546,6 +546,9 @@
 }
 .dash-row:last-child { border-bottom: none; }
 .dash-row:hover { background: var(--c-card); }
+/* Nem kattintható sor (tájékoztató lista, pl. vezető nélküli dolgozók) */
+.dash-row--static { cursor: default; }
+.dash-row--static:hover { background: transparent; }
 
 .dash-row__main {
   flex: 1 1 auto; min-width: 0; font-size: 12.5px; color: var(--c-text);

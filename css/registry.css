@@ -398,3 +398,11 @@
 .eh-diff-from  { color: var(--c-muted); text-decoration: line-through; text-decoration-color: var(--c-red); }
 .eh-diff-arrow { color: var(--c-muted); padding: 0 4px; }
 .eh-diff-to    { color: var(--c-text); font-weight: 500; }
+
+/* ── Vezetők és csapatok, Ügyállás (TERV-fiokok.md 10.) ── */
+.ld-dep { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+.ld-dep.is-past { opacity: .55; }
+.ld-dep .btn { padding: 0 6px; }
+.ld-table td { vertical-align: top; }
+#al-table .cp-table-wrap { max-height: calc(100vh - 380px); }
+.al-detail { min-width: 560px; }
