@@ -177,6 +177,12 @@ Ugyanaz több néven is írható, hogy egy kötőjel ne csússzon el:
 `{{eh_number}}` — mind ugyanaz. Az iktatószámnál: `{{Iktatószám}}`,
 `{{Iktatoszam}}`, `{{fileNumber}}`, `{{file_number}}`.
 
+**Egy szám — egy ügy.** Minden EH szám és iktatószám egyedi: ha a beírt szám
+már egy másik ügyé (a lezártaké is), a mentés nem megy át, és az üzenet
+megmondja, kinek melyik ügyén áll. A kis-/nagybetű, a szóköz és a gondolatjel
+nem számít (`eh 1626 2629` = `EH16262629`). A régi adatban maradt ütközéseket az
+**Ügyek → Áttekintés** „Ütköző számok” blokkja listázza, ügyenként megnyithatóan.
+
 **Melyik ügyé, ha több van?** A legutóbb megnyitott **nyitott** ügyé,
 amelyiknek már van száma. Az EH szám és az iktatószám mindig **ugyanabból** az
 ügyből jön — a hatóság a kettő párosából azonosítja az ügyet.

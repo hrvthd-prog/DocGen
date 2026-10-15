@@ -664,6 +664,105 @@ atest('a korábban felvitt iktatószámok betöltéskor visszamenőleg kapnak ha
 });
 
 // ════════════════════════════════════════════════════════════════════════════
+asection('Az EH szám és az iktatószám egyedi');
+
+atest('másik ügy EH számával nem nyitható ügy — a hiba megnevezi a gazdáját', async () => {
+  await tisztaAllapot();
+  const a = ujDolgozo();
+  const b = ujDolgozo({ surname: 'Kiss', forename: 'Anna' });
+  CaseRepo.create({ employeeId: a.id, type: 'rp_elso', ehNumber: 'EH16262629' });
+  await assertThrows(() => CaseRepo.create({ employeeId: b.id, type: 'rp_elso',
+    ehNumber: 'EH16262629' }), /EH szám már egy másik ügyé: EH16262629 — Nagy Béla/);
+  assertEq(CaseRepo.all().length, 1, 'a hibás ügy mégis létrejött');
+});
+
+atest('az összevetés nem nézi a kis-/nagybetűt, a szóközt és a gondolatjelet', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', ehNumber: 'EH16262629',
+    fileNumber: '106-2-12545/2025-T' });
+  await assertThrows(() => CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas',
+    ehNumber: 'eh 1626 2629' }), /EH szám/);
+  await assertThrows(() => CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas',
+    fileNumber: '106–2–12545/2025-t' }), /iktatószám/);
+});
+
+atest('mind a négy írási út ellenőriz, és hiba esetén semmit nem ír', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', ehNumber: 'EH11111111',
+    fileNumber: '106-2-1/2026-T' });
+  const masik = CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas' });
+  const esemenyek = masik.events.length;
+
+  await assertThrows(() => CaseRepo.update(masik.id, { ehNumber: 'EH11111111' }), /EH szám/);
+  await assertThrows(() => CaseRepo.setStatus(masik.id, 'beadva',
+    { fileNumber: '106-2-1/2026-T' }), /iktatószám/);
+  await assertThrows(() => CaseRepo.addEvent(masik.id,
+    { ehNumber: 'EH11111111', note: 'x' }), /EH szám/);
+
+  const u = CaseRepo.get(masik.id);
+  assertEq(u.ehNumber, '');
+  assertEq(u.fileNumber, '');
+  assertEq(u.status, CaseTypes.firstStatus('rp_hosszabbitas'), 'a státusz mégis átállt');
+  assertEq(u.events.length, esemenyek, 'félig írt bejegyzés maradt');
+});
+
+atest('a lezárt ügy száma is foglalt', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const regi = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', ehNumber: 'EH22222222' });
+  CaseRepo.setStatus(regi.id, 'lezarva', { outcome: 'megadva' });
+  assert(CaseRepo.get(regi.id).closedAt, 'a próbaügy nem zárult le');
+  await assertThrows(() => CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas',
+    ehNumber: 'EH22222222' }), /\(lezárt\)/);
+});
+
+atest('a saját szám megtartása, cseréje és törlése szabad; az üres sosem ütközik', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const u = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', ehNumber: 'EH33333333' });
+  CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas' });       // üres + üres
+  CaseRepo.update(u.id, { ehNumber: 'EH33333333', note: 'csak megjegyzés' });
+  CaseRepo.setStatus(u.id, 'beadva', { ehNumber: 'eh33333333' });
+  CaseRepo.update(u.id, { ehNumber: 'EH44444444' });
+  CaseRepo.create({ employeeId: emp.id, type: 'szallashely_valtozas', ehNumber: 'EH33333333' });
+  CaseRepo.update(u.id, { ehNumber: '' });
+  assertEq(CaseRepo.all().length, 3);
+});
+
+atest('régi ütköző adat nem akasztja meg a nem számot érintő mentést', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = id => ({ id, employeeId: emp.id, type: 'rp_elso', openedAt: '2026-01-10',
+    status: 'elokeszites', ehNumber: 'EH55555555', events: [] });
+  CaseRepo.useBackend(CaseRepo.createMemoryBackend({ version: 1, cases: [ugy('u1'), ugy('u2')] }));
+  await CaseRepo.load();
+  // Az űrlapok a számot is visszaküldik — változatlanul.
+  CaseRepo.update('u1', { ehNumber: 'EH55555555', note: 'javított megjegyzés' });
+  CaseRepo.setStatus('u1', 'beadva', { ehNumber: 'EH55555555', note: 'beadva' });
+  assertEq(CaseRepo.get('u1').note, 'javított megjegyzés');
+});
+
+atest('a meglévő adat ütközéseit csoportosítva adja', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const ugy = (id, eh, ikt) => ({ id, employeeId: emp.id, type: 'rp_elso', openedAt: '2026-01-10',
+    status: 'elokeszites', ehNumber: eh, fileNumber: ikt, events: [] });
+  CaseRepo.useBackend(CaseRepo.createMemoryBackend({ version: 1, cases: [
+    ugy('u1', 'EH1', '106-2-1/2026-T'), ugy('u2', 'eh 1', ''), ugy('u3', 'EH2', '106-2-1/2026-t'),
+    ugy('u4', 'EH3', '')] }));
+  await CaseRepo.load();
+  const ut = CaseRepo.numberConflicts();
+  assertEq(ut.length, 2, 'nem két csoport');
+  const eh = ut.find(x => x.field === 'ehNumber');
+  assertEq(eh.cases.map(c => c.id).join(','), 'u1,u2');
+  assertEq(ut.find(x => x.field === 'fileNumber').cases.length, 2);
+  assertEq(CaseRepo.numberOwner('ehNumber', 'EH3', 'u1').id, 'u4');
+  assertEq(CaseRepo.numberOwner('ehNumber', 'EH3', 'u4'), null, 'saját magát ütközőnek látta');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
 asection('Ügy törlése');
 
 atest('a törölt ügy eltűnik, a dolgozó visszakerül a lejárók közé', async () => {
@@ -1112,13 +1211,16 @@ atest('több nyitott ügyből a legutóbb megnyitott nyer, és jelzi a többit',
   assertEq(a.ehNumbers.length, 2);
 });
 
-atest('egy szám két nyitott ügyön nem kétértelmű', async () => {
+// Ugyanaz a szám két ügyön az egyediség-ellenőrzés (10.) óta csak RÉGI adatból
+// jöhet — ezért betöltéssel áll elő, nem `create`-tel.
+atest('egy szám két nyitott ügyön nem kétértelmű (régi adat)', async () => {
   await tisztaAllapot();
   const emp = ujDolgozo();
-  CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', openedAt: '2026-01-10',
-    ehNumber: 'EH-AZONOS' });
-  CaseRepo.create({ employeeId: emp.id, type: 'szallashely_valtozas', openedAt: '2026-05-20',
-    ehNumber: 'EH-AZONOS' });
+  const ugy = (id, type, openedAt) => ({ id, employeeId: emp.id, type, openedAt,
+    status: CaseTypes.firstStatus(type), ehNumber: 'EH-AZONOS', events: [] });
+  CaseRepo.useBackend(CaseRepo.createMemoryBackend({ version: 1, cases: [
+    ugy('u1', 'rp_elso', '2026-01-10'), ugy('u2', 'szallashely_valtozas', '2026-05-20')] }));
+  await CaseRepo.load();
   assert(!CaseRepo.docIdentifiers(emp.id).ambiguous, 'ugyanarra a számra figyelmeztetett');
 });
 

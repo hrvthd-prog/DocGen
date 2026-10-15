@@ -68,6 +68,31 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-15 (4.) — Az EH szám és az iktatószám egyedisége
+
+**Cél:** „az iktatószámok és az EH számok mind egyediek — van-e ellenőrző
+szkript? Ha nincs: terv, ellenőrzés, implementáció."
+**Változás (`v10.82`):** nem volt semmilyen ellenőrzés. Terv:
+`TERV-esemenyek.md` 10. (a kód elleni ellenőrzéssel együtt). `case-repo.js`:
+`numberOwner()`, `numberConflicts()`, és a négy írási út (`create`, `update`,
+`setStatus`, `addEvent`) írás ELŐTT ütközést keres — hibát dob, ami megnevezi a
+másik ügyet. `cases-dashboard.js`: „Ütköző számok” piros blokk az Áttekintésen
+(a régi adatra), és ilyenkor nincs „Nincs teendő”. README: „Egy szám — egy ügy”.
+**Miért / döntés:** normalizált összevetés (betű, szóköz, gondolatjel); a lezárt
+ügy száma is foglalt; csak a VÁLTOZÁS ellenőrződik, hogy a régi ütközés ne
+akassza meg a megjegyzés/státusz mentését (az űrlapok a számot mindig
+visszaküldik). A régi „egy szám két nyitott ügyön” teszt (a `docIdentifiers`
+kétértelműség-jelzése) betöltött régi adattal áll elő, mert `create`-tel már nem
+lehet.
+**Tesztek:** `node test/run-all.js` zöld; `cases.test.js` +7, `cases-dashboard`
++2.
+
+**Nyitott / következő:**
+- Az éles gépen: **Ügyek → Áttekintés** — ha megjelenik az „Ütköző számok”
+  blokk, a régi adatban van kettőzött szám; a sorokból megnyitva javítható.
+- A felület (blokk, hibaüzenet) csak ott nézhető meg; Node csak az adatréteget
+  fedi.
+
 ## 2026-10-15 (3.) — Díj a kötegbe: PDF-es kötegbe nem gyűjt
 
 **Cél:** „egy már legenerált PDF-fel rendelkező kötegbe ne dobja bele az ügyet,

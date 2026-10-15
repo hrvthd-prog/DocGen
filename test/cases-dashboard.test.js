@@ -402,6 +402,32 @@ function d(extra = {}) { return CasesDashboard.adatok(Object.assign({ ma: MA }, 
     assertEq(a.vanTeendo, false, 'teendőt jelzett, pedig minden rendben van');
   });
 
+  section('Ütköző EH szám / iktatószám');
+
+  await test('a régi adat ütközése teendő, a lezárt ügyé is', async () => {
+    await tisztaAllapot();
+    const e = ujDolgozo({ expiration_of_rp: nap(200) });
+    const ugy = (id, extra) => Object.assign({ id, employeeId: e.id, type: 'rp_hosszabbitas',
+      openedAt: nap(-30), dueAt: nap(150), status: 'elokeszites', events: [] }, extra);
+    CaseRepo.useBackend(CaseRepo.createMemoryBackend({ version: 1, cases: [
+      ugy('u1', { ehNumber: 'EH12345678' }),
+      ugy('u2', { ehNumber: 'EH12345678', status: 'lezarva', outcome: 'megadva',
+                  closedAt: nap(-5) })] }));
+    await CaseRepo.load();
+    const a = d();
+    assertEq(a.utkozes.length, 1);
+    assertEq(a.utkozes[0].cases.length, 2, 'a lezárt ügy kimaradt');
+    assertEq(a.vanTeendo, true, 'az ütközés nem számított teendőnek');
+  });
+
+  await test('ütközés nélkül nincs blokk', async () => {
+    await tisztaAllapot();
+    const e = ujDolgozo();
+    CaseRepo.create({ employeeId: e.id, type: 'rp_elso', ehNumber: 'EH1' });
+    CaseRepo.create({ employeeId: e.id, type: 'rp_hosszabbitas', ehNumber: 'EH2' });
+    assertEq(d().utkozes.length, 0);
+  });
+
   // ── Összegzés ─────────────────────────────────────────────────────────────
   console.log(`\n${'─'.repeat(60)}`);
   console.log(`${passed} sikeres, ${failed} hibás`);

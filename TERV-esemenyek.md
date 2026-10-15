@@ -382,3 +382,54 @@ láncolás, napi összefoglaló).
    (WebCrypto, külső könyvtár nélkül megoldható).
 5. **Kell-e csatolmány-nyilvántartás** (melyik irat mikor ment be)? Ha igen, az
    csak fájlnév-hivatkozás legyen, nem maga a fájl — az adatbázist felfújná.
+
+## 10. Az EH szám és az iktatószám egyedisége (2026-10-15)
+
+**Kiindulás:** a felhasználó szerint minden EH szám és minden iktatószám
+egyedi — egy szám pontosan egy ügyé. Ellenőrzés eddig nem volt: a `validate()`
+csak a dolgozót, a típust és a státuszt nézi, és az `Átutalások` dupla-fizetés
+jelzése is csak a kötegek tételeit vizsgálja, az ügyeket nem. Egy elgépelt vagy
+rossz ügyhöz felvitt szám így némán két ügyhöz tartozhatott — a dokumentumokra
+(`docIdentifiers`) és a díjkötegbe is rossz szám mehetett.
+
+### 10.1 Terv
+
+1. **Egy szabály, a tárolóban.** `CaseRepo.numberOwner(mezo, ertek, kiveveId)`
+   megmondja, melyik MÁSIK ügyé már a szám. Mind a négy írási út
+   (`create`, `update`, `setStatus`, `addEvent`) ezt hívja, és ütközéskor
+   **hibát dob, írás előtt** — az űrlapok a hibát üzenetként mutatják (mindhárom
+   `try/catch` + `toast`). Az `updateEvent` nem ír számot, a `registry-view`
+   kilépési ügye szám nélkül nyílik: nincs ötödik út.
+2. **Összevetés normalizálva:** kis-/nagybetű, szóköz és a gondolatjel/
+   kötőjel nem számít (`eh 1234 5678` = `EH12345678`, `106–2–…` = `106-2-…`).
+   Kézzel gépelt számoknál pont ezek a „majdnem ugyanaz" eltérések fordulnak elő.
+3. **Minden ügy számít, a lezárt is.** A szám a hatóság ügyét azonosítja; egy
+   lezárt ügy száma egy új ügyön ugyanúgy téves. Az események régi
+   pillanatképei (javítás előtti értékek) nem számítanak: az történet, nem
+   hozzárendelés.
+4. **Csak a VÁLTOZÁS ellenőrződik.** Ha egy ügyön már (a régi adatban) ütköző
+   szám áll, és a felhasználó csak a megjegyzést vagy a státuszt írja át — a
+   státusz- és az ügyűrlap a számot is visszaküldi —, a mentés nem akadhat el
+   egy olyan hibán, amit nem most okozott. Az üres érték sosem ütközik.
+5. **A meglévő adat ellenőrzése:** `CaseRepo.numberConflicts()` az összes
+   ütközést csoportosítva adja (`{ field, value, cases[] }`). Az **Áttekintés**
+   nézet piros blokkban listázza, ügyenként megnyitható sorral, és ilyenkor
+   „Nincs teendő" nem jelenhet meg. Így az éles gépen a meglévő adat is
+   átvizsgálódik, külön konzolos szkript nélkül.
+6. **A hibaüzenet megnevezi a másik ügyet:** szám, dolgozó, ügytípus, és ha
+   lezárt, az is — enélkül a felhasználó nem tudná, melyik oldalon a hiba.
+
+### 10.2 A terv ellenőrzése a kód ellen
+
+- Írási utak: `grep "CaseRepo.(create|update|setStatus|addEvent|updateEvent)("`
+  → `case-form.js` (3 + `updateEvent`), `registry-view.js` (szám nélkül),
+  `tools/ui-proba.html` (különböző számok). Más modul nem ír számot. ✓
+- Az `update`/`setStatus`/`addEvent` a számot **mindig** megkapja az űrlapról
+  (előtöltve) — ezért kell a 4. pont, különben a régi ütközés minden mentést
+  blokkolna. ✓
+- A `setStatus`/`addEvent` a számot a validáció ELŐTT, közvetlenül írja a
+  `c`-re — az ellenőrzésnek az írás elé kell kerülnie, különben félig írt
+  állapot maradna. ✓ (beépítve)
+- A tesztkörnyezet (`cases.test.js`) nem tölti a `SchemaStore`-t: a névkiírás
+  ennek hiányában a nyers `surname`/`forename`-re esik vissza. ✓
+- Migráció nem kell: az adat nem változik, csak az ellenőrzés új.

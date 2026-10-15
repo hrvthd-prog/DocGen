@@ -159,6 +159,11 @@ const CasesDashboard = (() => {
                    c.fileNumber ? `ikt. ${c.fileNumber}` : ''].filter(Boolean),
       }));
 
+    // 6. Ütköző EH szám / iktatószám (TERV-esemenyek.md 10.). Íráskor a tároló
+    //    már tilt; ez a régi adatban maradtakat mutatja — a lezárt ügyekét is.
+    let utkozes = [];
+    try { utkozes = CaseRepo.numberConflicts(); } catch { utkozes = []; }
+
     let szamok = { lejart: 0, surgos: 0, nyitott: 0 };
     try { szamok = CaseRepo.summary(ma); } catch { /* marad a nulla */ }
 
@@ -171,9 +176,10 @@ const CasesDashboard = (() => {
       hataridoNelkul,
       csuszas,
       azonositoHiany,
+      utkozes,
       ugyekSzama: ugyek.length,
       // Van-e egyáltalán teendő? Ebből lesz a „minden rendben" állapot.
-      vanTeendo: !!(szamok.lejart || hianyzo.length || csuszas.length ||
+      vanTeendo: !!(szamok.lejart || hianyzo.length || csuszas.length || utkozes.length ||
                     SURGETO_FAZIS.some(f => ablak[f].length) || hataridoNelkul.length),
     };
   }
@@ -203,6 +209,7 @@ const CasesDashboard = (() => {
         ${szamlalokHtml(d)}
         ${allapotHtml(d)}
         ${d.vanTeendo ? '' : rendbenHtml(d)}
+        ${utkozesHtml(d)}
         ${hianyzoHtml(d)}
         ${csuszasHtml(d)}
         ${ablakHtml(d)}
@@ -274,6 +281,25 @@ const CasesDashboard = (() => {
         ${leiras ? `<div class="dash-block__sub">${leiras}</div>` : ''}
         ${tartalom}
       </section>`;
+  }
+
+  function utkozesHtml(d) {
+    if (!d.utkozes.length) return '';
+    return blokk(
+      `Ütköző számok — ${d.utkozes.length}`,
+      `Minden EH szám és iktatószám csak egy ügyé lehet. Ezek közül legalább az
+       egyik elírás vagy rossz ügyhöz került — nyisd meg, és javítsd.`,
+      d.utkozes.map(u => `
+        <div class="dash-block__sub"><strong>${escHtml(u.label)}: ${escHtml(u.value)}</strong></div>
+        <div class="dash-list">
+          ${u.cases.map(c => `
+            <button class="dash-row" data-open-case="${escHtml(c.id)}" type="button">
+              <span class="dash-row__main">${escHtml(nev(c.employeeId))}</span>
+              <span class="dash-row__meta">${escHtml(CaseTypes.label(c.type) || c.type)}${c.closedAt ? ' · lezárt' : ''}</span>
+              <span class="dash-row__go">Megnyitás</span>
+            </button>`).join('')}
+        </div>`).join(''),
+      'dash-block--red');
   }
 
   function hianyzoHtml(d) {

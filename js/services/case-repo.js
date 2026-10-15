@@ -557,6 +557,75 @@ const CaseRepo = (() => {
     return gondok;
   }
 
+  // ── Az EH szám és az iktatószám egyedisége (TERV-esemenyek.md 10.) ─────────
+
+  const SZAM_NEV = { ehNumber: 'EH szám', fileNumber: 'iktatószám' };
+
+  /**
+   * Összevetési alak: kis-/nagybetű, szóköz és a gondolatjel/kötőjel nem
+   * számít. Kézzel gépelt számoknál épp ezek a „majdnem ugyanaz" eltérések.
+   */
+  function szamKulcs(v) {
+    return String(v == null ? '' : v).toUpperCase().replace(/\s+/g, '').replace(/[\u2010-\u2015\u2212]/g, '-');
+  }
+
+  /** Melyik MÁSIK ügyé már ez a szám (a lezártak is számítanak)? */
+  function numberOwner(mezo, ertek, kiveveId = null) {
+    ensureLoaded();
+    const k = szamKulcs(ertek);
+    if (!k) return null;
+    return cache.cases.find(c => c.id !== kiveveId && szamKulcs(c[mezo]) === k) || null;
+  }
+
+  function ugyLeiras(c) {
+    let nev = '';
+    try {
+      const f = (EmployeeRepo.get(c.employeeId) || {}).fields || {};
+      let v = f;
+      if (typeof SchemaStore !== 'undefined') {
+        try { v = SchemaStore.resolveValues(f, 'hu'); } catch { v = f; }
+      }
+      nev = [v.surname, v.forename].filter(Boolean).join(' ');
+    } catch { nev = ''; }
+    return [nev || '(ismeretlen dolgozó)', CaseTypes.label(c.type) || c.type]
+      .join(', ') + (c.closedAt ? ' (lezárt)' : '');
+  }
+
+  /**
+   * Írás ELŐTT hívandó. Csak a változás ellenőrződik: a régi adatban már
+   * ütköző szám ne akassza meg a megjegyzés vagy a státusz mentését (az
+   * űrlapok a számot is mindig visszaküldik).
+   */
+  function szamokEllenor(c, { ehNumber, fileNumber } = {}) {
+    for (const [mezo, uj] of [['ehNumber', ehNumber], ['fileNumber', fileNumber]]) {
+      if (uj === undefined || szamKulcs(uj) === szamKulcs(c && c[mezo])) continue;
+      const masik = numberOwner(mezo, uj, c && c.id);
+      if (masik) {
+        throw new Error(`Ez a(z) ${SZAM_NEV[mezo]} már egy másik ügyé: ${String(uj).trim()} — ` +
+                        `${ugyLeiras(masik)}. Minden ${SZAM_NEV[mezo]} csak egy ügyhöz tartozhat.`);
+      }
+    }
+  }
+
+  /** A meglévő adat ütközései: `[{ field, value, cases: [ügy, …] }]`. */
+  function numberConflicts() {
+    ensureLoaded();
+    const out = [];
+    for (const mezo of Object.keys(SZAM_NEV)) {
+      const csoport = new Map();
+      for (const c of cache.cases) {
+        const k = szamKulcs(c[mezo]);
+        if (!k) continue;
+        if (!csoport.has(k)) csoport.set(k, []);
+        csoport.get(k).push(c);
+      }
+      for (const lista of csoport.values()) {
+        if (lista.length > 1) out.push({ field: mezo, label: SZAM_NEV[mezo], value: lista[0][mezo], cases: lista });
+      }
+    }
+    return out;
+  }
+
   /**
    * Új ügy. A határidő javaslata a típusból és a dolgozó adataiból jön
    * (kérelmeknél alapból 70 nap), de a hívó felülírhatja.
@@ -590,6 +659,7 @@ const CaseRepo = (() => {
 
     const gondok = validate(c);
     if (gondok.length) throw new Error(gondok.join(' '));
+    szamokEllenor(null, c);
 
     c.events.push(normalizeEvent({
       at: nowIso(), occurredAt: indul, status: c.status, note: 'Ügy megnyitva',
@@ -648,6 +718,7 @@ const CaseRepo = (() => {
 
     const gondok = validate(next);
     if (gondok.length) throw new Error(gondok.join(' '));
+    szamokEllenor(c, { ehNumber, fileNumber });
 
     Object.assign(c, next, { updatedAt: nowIso(), updatedBy: currentUserName() });
     javitEsemenyeken(c, 'ehNumber',   regiEh,  c.ehNumber);
@@ -740,6 +811,7 @@ const CaseRepo = (() => {
     if (outcome && !CaseTypes.outcomes().some(o => o.key === outcome)) {
       throw new Error(`Ismeretlen kimenetel: ${outcome}.`);
     }
+    szamokEllenor(c, { ehNumber, fileNumber });
 
     if (ehNumber !== undefined)   c.ehNumber = String(ehNumber || '').trim();
     if (fileNumber !== undefined) c.fileNumber = String(fileNumber || '').trim();
@@ -774,6 +846,7 @@ const CaseRepo = (() => {
     if (occurredAt && occurredAt > today()) {
       throw new Error('A történés napja nem lehet a jövőben.');
     }
+    szamokEllenor(c, { ehNumber, fileNumber });
     if (ehNumber !== undefined)   c.ehNumber = String(ehNumber || '').trim();
     if (fileNumber !== undefined) c.fileNumber = String(fileNumber || '').trim();
 
@@ -1046,7 +1119,7 @@ const CaseRepo = (() => {
     onSaveError: (fn) => { saveErrorListeners.add(fn); return () => saveErrorListeners.delete(fn); },
     load, save, scheduleSave, flush,
     all, get, forEmployee, isOpen, daysLeft, urgency, isAdvisory, deadlineText, openCases, search,
-    docIdentifiers, docTags, DOC_TAGS,
+    docIdentifiers, docTags, DOC_TAGS, numberOwner, numberConflicts,
     timeline, submissionStatus, authorityDelay,
     create, update, setStatus, addEvent, updateEvent, recordProducedIdentifier,
     openNextCase, hasOpenCaseOfType, isBackdated, summary, EXPIRY_FIELD_MAP,
