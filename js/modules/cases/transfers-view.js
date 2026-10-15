@@ -80,7 +80,7 @@ const TransfersView = (() => {
           <span class="tv-row__label">${escHtml(b.label)}</span>
           <span class="tv-row__meta">${b.rows.length} tétel · ${escHtml(ft(TransferRepo.total(b)))}</span>
         </span>
-        <span class="tv-row__status">${kifizetve ? 'kifizetve' : 'előkészítés'}</span>
+        <span class="tv-row__status">${kifizetve ? 'kifizetve' : b.pdfAt ? 'PDF kész' : 'előkészítés'}</span>
       </button>`;
   }
 
@@ -96,6 +96,9 @@ const TransfersView = (() => {
           <span class="tv-chip tv-chip--${kifizetve ? 'paid' : 'open'}">
             ${kifizetve ? 'kifizetve — ' + escHtml(b.paidOn) : 'előkészítés alatt'}
           </span>
+          ${!kifizetve && b.pdfAt
+            ? `<span class="tv-chip tv-chip--open" title="Az ügylista „Díj a kötegbe” gombja új köteget kezd; ide a lenti „Ügy hozzáadása” tesz.">PDF kész — ${escHtml(new Date(b.pdfAt).toLocaleDateString('hu-HU'))}</span>`
+            : ''}
         </div>
         <div class="tv-bar__sum">${b.rows.length} tétel · <strong>${escHtml(ft(TransferRepo.total(b)))}</strong></div>
       </div>
@@ -426,6 +429,8 @@ const TransfersView = (() => {
       if (kimenet && !(await FsService.queryPermissionOnly(kimenet, true))) kimenet = null;
 
       const { nev, hova } = await TransferPdf.save(b, kimenet);
+      TransferRepo.markPdf(b.id);
+      render(gyoker);
       toast(hova ? `✓ ${nev} — ${hova}` : `✓ ${nev} letöltve`, 'success');
       BevLogger.info('TRANSFER_PDF', `Díjátutalási lap: ${nev}`,
         `koteg=${b.label}, tetel=${b.rows.length}`, '');
@@ -448,9 +453,10 @@ const TransfersView = (() => {
   }
 
   /**
-   * Az ügylistából hívott gyors út: a nyitott kötegbe teszi az ügyet.
-   * Ha nincs nyitott köteg, létrehoz egyet — a felhasználó egy kattintással
-   * végezhessen, ne kelljen előbb „kosarat" nyitnia.
+   * Az ügylistából hívott gyors út: a gyűjtő kötegbe teszi az ügyet.
+   * Ha nincs ilyen, létrehoz egyet — a felhasználó egy kattintással
+   * végezhessen, ne kelljen előbb „kosarat" nyitnia. A már PDF-es (utalásra
+   * kiadott) köteg nem gyűjtő: oda csak a köteg saját gombjával kerül ügy.
    */
   function addFromCase(caseObj) {
     const megvan = TransferRepo.caseInAnyBatch(caseObj.id);
@@ -458,10 +464,14 @@ const TransfersView = (() => {
       toast(`Ez az ügy már a(z) ${megvan.label} kötegben van`, 'warn');
       return null;
     }
+    const pdfes = TransferRepo.all().find(x => TransferRepo.isOpen(x) && x.pdfAt);
+    const db = TransferRepo.all().length;
     const b = TransferRepo.openBatch();
     TransferRepo.addRow(b.id, TransferRepo.rowFromCase(caseObj, EmployeeRepo.get(caseObj.employeeId)));
     state.kivalasztott = b.id;
-    toast(`✓ Hozzáadva a(z) ${b.label} köteghez`, 'success');
+    toast(pdfes && TransferRepo.all().length > db
+      ? `✓ Új köteg: ${b.label} — a(z) ${pdfes.label} kötegből már PDF készült`
+      : `✓ Hozzáadva a(z) ${b.label} köteghez`, 'success');
     return b;
   }
 

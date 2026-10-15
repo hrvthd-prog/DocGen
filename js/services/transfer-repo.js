@@ -14,6 +14,7 @@
  *     id, label            belső azonosító és emberi címke („2026-09-18/1")
  *     status               'elokeszites' | 'kifizetve'
  *     paidOn               a tényleges utalás napja (ISO), amíg nincs: null
+ *     pdfAt                az utolsó díjátutalási PDF ideje (ISO), amíg nincs: null
  *     createdAt / createdBy
  *     rows[]               a tételek
  *   }
@@ -127,6 +128,7 @@ const TransferRepo = (() => {
     o.label     = o.label || today();
     o.status    = o.status === STATUS.KIFIZETVE ? STATUS.KIFIZETVE : STATUS.ELOKESZITES;
     o.paidOn    = o.paidOn || null;
+    o.pdfAt     = o.pdfAt || null;
     o.createdAt = o.createdAt || nowIso();
     o.createdBy = o.createdBy || '';
     o.rows      = Array.isArray(o.rows) ? o.rows.map(migrateRow) : [];
@@ -218,13 +220,18 @@ const TransferRepo = (() => {
   }
 
   /**
-   * A nyitott (előkészítés alatti) köteg — ha nincs, létrehozzuk.
-   * Egyszerre egy köteg készül: két párhuzamos „bevásárlókosár" csak
-   * tévesztésre adna alkalmat.
+   * A gyűjtő köteg: a nyitott (előkészítés alatti), amelyből még NEM készült
+   * PDF — ha nincs ilyen, létrehozzuk.
+   *
+   * Egyszerre egy köteg gyűlik: két párhuzamos „bevásárlókosár" csak
+   * tévesztésre adna alkalmat. A PDF-es köteg viszont már úton van (a lap az
+   * utaláshoz ment), csak még nincs kifizetettnek jelölve — abba a gyors út nem
+   * tehet újabb ügyet, mert az a kiadott lapról hiányozna. Ha mégis oda kell,
+   * a köteg saját „Ügy hozzáadása" gombja tudatosan megteszi.
    */
   function openBatch() {
     ensureLoaded();
-    const megvan = cache.batches.find(isOpen);
+    const megvan = cache.batches.find(b => isOpen(b) && !b.pdfAt);
     return megvan || createBatch();
   }
 
@@ -237,6 +244,7 @@ const TransferRepo = (() => {
       label: `${nap}/${aznap + 1}`,
       status: STATUS.ELOKESZITES,
       paidOn: null,
+      pdfAt: null,
       createdAt: nowIso(),
       createdBy: currentUserName(),
       rows: [],
@@ -356,6 +364,17 @@ const TransferRepo = (() => {
     logAudit('batch.paid', { batchId, before: b.status, after: paidOn });
     b.status = STATUS.KIFIZETVE;
     b.paidOn = paidOn;
+    scheduleSave(); emit();
+    return b;
+  }
+
+  /** Elkészült a köteg díjátutalási PDF-je: innentől a gyors út nem ide gyűjt. */
+  function markPdf(batchId) {
+    ensureLoaded();
+    const b = get(batchId);
+    if (!b) throw new Error('Nincs ilyen köteg.');
+    b.pdfAt = nowIso();
+    logAudit('pdf.export', { batchId, after: `${b.rows.length} tétel · ${total(b)} Ft` });
     scheduleSave(); emit();
     return b;
   }
@@ -507,7 +526,7 @@ const TransferRepo = (() => {
     load, save, scheduleSave, flush,
     all, get, getRow, isOpen, total, openBatch, createBatch, destroyBatch,
     rowFromCase, addRow, updateRow, removeRow, refreshRow,
-    markPaid, reopen,
+    markPaid, markPdf, reopen,
     reference, rowIssues, batchIssues, alreadyPaid, caseInAnyBatch,
     audit,
   };

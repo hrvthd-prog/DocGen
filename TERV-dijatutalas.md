@@ -158,6 +158,18 @@ szerkezeti a különbség, hanem annyi, hogy a pénz elindult-e. Egy mező, nem 
 adatszerkezet — így nem is térhet el egymástól ugyanaz a sor két helyen, és a
 makró „archiválás + beviteli lap kiürítése" lépése egy állapotváltás lesz.
 
+**A PDF után a gyors út új köteget kezd (2026-10-15).** A PDF elkészülte és a
+„kifizetett" jelölés között napok telhetnek el; a köteg addig `elokeszites`. A
+„Díj a kötegbe" gomb régen ilyenkor is ebbe gyűjtött — az új tétel így olyan
+kötegbe került, amelynek lapja már az utaláshoz ment, és arról hiányzott. Most a
+köteg `pdfAt` mezőt kap (a `TransferRepo.markPdf()` írja, `pdf.export`
+naplósorral), és az `openBatch()` csak PDF nélküli nyitott köteget választ; ha
+nincs, újat nyit. Ezért lehet egyszerre két nyitott köteg: egy kiadott és egy
+gyűjtő — a „csak egy kosár" elv a gyűjtőre vonatkozik. A PDF-es kötegbe a köteg
+saját „Ügy hozzáadása" gombja továbbra is tesz ügyet: az tudatos döntés, nem
+véletlen. A visszanyitott (kifizetett, majd visszanyitott) köteg is PDF-es, tehát
+nem lesz gyűjtő.
+
 ### A tétel pillanatkép, nem hivatkozás
 
 A makró archívuma szándékosan a feloldott *értéket* másolta: *„the archive must

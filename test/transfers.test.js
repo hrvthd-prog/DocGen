@@ -91,6 +91,40 @@ async function frissRepo() {
     assertEq(a.status, Repo.STATUS.ELOKESZITES);
   });
 
+  await test('PDF után a gyűjtő köteg új köteg lesz; a PDF-es nyitott marad', async () => {
+    await frissRepo();
+    const a = Repo.openBatch();
+    Repo.addRow(a.id, jóSor());
+    Repo.markPdf(a.id);
+    assert(Repo.get(a.id).pdfAt, 'a PDF ideje nem rögzült');
+    assertEq(Repo.isOpen(Repo.get(a.id)), true, 'a PDF lezárta a köteget');
+    const b = Repo.openBatch();
+    assert(b.id !== a.id, 'a PDF-es kötegbe gyűjtött tovább');
+    assertEq(Repo.openBatch().id, b.id, 'az új gyűjtő köteg sem marad meg');
+    assertEq(Repo.audit({ batchId: a.id })[0].action, 'pdf.export');
+  });
+
+  await test('A PDF ideje mentés–betöltés után is megmarad', async () => {
+    const tar = Repo.createMemoryBackend();
+    Repo.useBackend(tar);
+    await Repo.load();
+    const a = Repo.openBatch();
+    Repo.markPdf(a.id);
+    await Repo.flush();
+    Repo.useBackend(tar);
+    await Repo.load();
+    assert(Repo.get(a.id).pdfAt, 'betöltéskor elveszett a pdfAt');
+    assert(Repo.openBatch().id !== a.id, 'betöltés után a PDF-es kötegbe gyűjtött');
+  });
+
+  await test('Régi (pdfAt nélküli) köteg betöltve gyűjtő marad', async () => {
+    Repo.useBackend(Repo.createMemoryBackend({ version: 1, batches: [
+      { id: 'k1', label: '2026-09-01/1', status: 'elokeszites', rows: [] }], audit: [] }));
+    await Repo.load();
+    assertEq(Repo.get('k1').pdfAt, null);
+    assertEq(Repo.openBatch().id, 'k1');
+  });
+
   await test('A címke naponta újraszámozódik', async () => {
     await frissRepo();
     const a = Repo.createBatch();

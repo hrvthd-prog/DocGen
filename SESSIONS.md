@@ -68,6 +68,29 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-15 (3.) — Díj a kötegbe: PDF-es kötegbe nem gyűjt
+
+**Cél:** „egy már legenerált PDF-fel rendelkező kötegbe ne dobja bele az ügyet,
+hanem automatikusan új köteget kezdjen; ha mégis oda kell, kézzel adom hozzá".
+**Változás (`v10.81`):** `transfer-repo.js` — új `pdfAt` mező (betöltéskor
+`null`-ra pótolva), `markPdf()` (`pdf.export` naplósor; a címke eddig is megvolt,
+de semmi nem írta), az `openBatch()` csak PDF nélküli nyitott köteget választ.
+`transfers-view.js` — sikeres PDF után `markPdf` + újrarajzolás; „PDF kész —
+dátum" címke a köteg fejlécén, „PDF kész" a listasorban; a gyors út üzenete
+megmondja, ha a PDF miatt kezdett új köteget.
+**Miért / döntés:** `TERV-dijatutalas.md` 3. — a „csak egy kosár" a gyűjtő
+kötegre vonatkozik; a PDF-es köteg az utalásig nyitott, de nem gyűjt.
+**Tesztek:** `node test/run-all.js` zöld; `transfers.test.js` +3 (PDF után új
+gyűjtő, `pdfAt` mentés–betöltés után, régi rekord gyűjtő marad).
+
+**Nyitott / következő:**
+- **A frissítés előtt készült PDF-eket a program nem ismeri** (akkor nem
+  rögzült). Ha az éles gépen van nyitott köteg, amelyből már PDF ment ki, abból
+  nyomd meg egyszer újra a PDF gombot — onnantól „PDF kész", és nem gyűjt.
+- A felületet (címke, üzenet) csak az éles gépen lehet megnézni: Ügyek → egy
+  ügynél „Díj a kötegbe" egy PDF-es nyitott köteg mellett → új köteg jön létre,
+  és a toast ezt mondja.
+
 ## 2026-10-15 (2.) — PDF Műhely: MD → DOCX konvertáló
 
 **Cél:** „a PDF Műhelybe építs egy konvertálót .md-ről .docx-re”.
