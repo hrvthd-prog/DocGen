@@ -68,6 +68,26 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-15 — Átállás VPS-es fejlesztésre
+
+**Cél:** a fejlesztés ma a VPS-en (`root@62.171.147.97`, `/root/DocGen`)
+folytatódik, a Windows-gép fájljai nélkül — legyen zökkenőmentes a váltás.
+**Változás (`v10.78`, `v10.79`):** `CLAUDE.md` új „Hol fut?” szakasza (éles
+gép vs. fejlesztőgépek, Linux-klón beállítása). Repón kívül, a VPS-en: a
+`/root/DocGen` augusztus 11-i, elágazott klón volt (8 előre / 55 hátra; a 8
+commit patch-id szerint mind megvolt az originen) → `reset --hard
+origin/main`; beállítva `core.hooksPath tools/hooks`, `push.followTags`,
+`user.name`/`user.email`. Új `/root/.claude/CLAUDE.md`: a globális
+utasítások gépfüggetlen része (magyar válasz, kódolási elvek).
+**Miért / döntés:** hookok nélkül a VPS-commitok verzióléptetés és tag
+nélkül, „root” szerzővel mentek volna (augusztusban így történt).
+**Tesztek:** `node test/run-all.js` zöld helyben és a VPS-en (Node 22; a
+Windows-only készletek kihagyják magukat). Hookpróba eldobható VPS-klónban:
+verzió lép, tag létrejön.
+
+**Nyitott / következő:** — (a korábbi nyitott szálak változatlanok, lásd
+lejjebb). Visszatérve a Windows-gépen: `git pull`.
+
 ## 2026-10-13 — Nyilvántartás: rögzített táblázatfejléc
 
 **Cél:** „a táblázat fejléce nincs rögzítve, csak a # marad meg".
