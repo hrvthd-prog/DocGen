@@ -137,7 +137,7 @@
     const p = new URLSearchParams(location.search);
     // A nézet a `Settings`-ből indul; a próbalap mindig az áttekintővel kezd,
     // hogy a képernyőkép kiszámítható legyen.
-    Settings.set('cases_view', 'attekintes');
+    Settings.setUser('cases_view', 'attekintes');
 
     CasesModule.init(document.getElementById('tab-cases'));
 

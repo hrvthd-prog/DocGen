@@ -68,6 +68,67 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-21 — Felület-csomag: client picker, összesítő, EH fókusz, kártyák
+
+**Cél:** tizenegy pontos kérés: Azonosító ezres tagolás nélkül; kijelölhető
+cellák; „nem hosszabbítjuk” jelölés (ki az Áttekintés piros blokkjából);
+dolgozói összesítő → szerkesztő a kért mezőn; tördelő, szűkíthető fejléc;
+feltűnőbb nézetváltó és Idővonal/EH fülek; EH nagyítva kitakart → pop-over;
+EH görgetés ne ugorjon; Dolgozók nézetre javaslat; sidebar-fogantyú törlése;
+működő kártya-áthelyezés + felhasználónkénti UI-mentés.
+**Változás (`v10.84`):**
+- `vendor/client-picker.js/.css`: csak valódi `number` kap tagolást (a
+  számjegy-SZÖVEG azonosító); cella `user-select: text`, kijelölés/dupla
+  kattintás nem vált sort, Shift+katt nem jelöl szöveget; `onRowOpen`
+  (dupla katt); fejléc tördel, az ikonok a címke alá kerülnek, a szűkített
+  oszlop cellái `max-width`-et kapnak; a MENTETT oszlopválasztás nyer a
+  paraméter felett (eddig minden hívó felülírta); a szélesség, rendezés, szűrők
+  minden rajzoláskor mentődnek; `ns@fiók` kulcs, a régi kulcs a tartalék.
+- `Settings.userKey/getUser/setUser` — fiókonkénti UI-kulcsok, régi közös
+  kulcs tartalékként. Átállítva: utolsó fül, Ügyek nézet/rendezés, EH kézi
+  mezők + fókusz, Nyilvántartás-tábla, Dokumentumok elrendezés.
+- `EmployeeRepo.setNoRenewal` + `noRenewal` jelző (napló: `nem_hosszabbit` /
+  `hosszabbit`); Nyilvántartás: „Nem hosszabbítjuk / Mégis hosszabbítjuk”
+  tömeges gomb, „Hosszabbítás” oszlop, borostyán csík; `CasesDashboard`
+  `hianyzo` kihagyja; Dolgozók nézet „nem hosszabbítjuk”.
+- Új `js/modules/registry/employee-summary.js` (csak olvasható, üres mezők
+  kapcsolóval); `EmployeeForm.open({ focus })` görget, kiemel, fókuszál (tükrözött
+  mező / azonosító → az azonosító-blokk, típussal).
+- `cases-view.js`: görgetés-megőrzés ugyanazon nézeten (`GORGETOK`); Esc
+  fókuszban előbb csak abból lép ki; **meglévő hiba javítva**: a szűrő-kötés
+  `.cv-filter` szelektora az EH „Kézi mezők” gombját is elkapta → `undefined`
+  szűrő, kidobott az ügyből és kivételt dobott.
+- `case-eh.js` + `cases.css`: **Fókusz nézet** (`.eh-wrap.is-fokusz`, `:has()`-
+  szal rejti a fejlécet, fülsort, nézetváltót, `cv-dhead`-et, `cv-tabs`-ot; a név
+  a panel fejlécébe kerül). Nézetváltó: kitöltött gombsor (#21474f); EH/Idővonal:
+  mappa-fülek színes felső csíkkal.
+- `docgen.js`: sidebar-fogantyú + JS + CSS törölve, `.sidebar` `max-height` =
+  látható magasság. Kártyák: mind az öt, oszlopon belül/közt élő beszúrással,
+  csak a fogantyútól húzható (eddig a kártya `draggable="true"` volt: a mezőkben
+  kijelölni és a magasságot állítani sem lehetett); sorrend + magasság +
+  oszloparány mentve (`docgen_layout`, `docgen_ws_split`), az arány %-ban áll
+  vissza (rejtett fülön a régi px-es számítás 0 szélességet kapott).
+**Miért / döntés:** a „nem hosszabbítjuk” rekordjelző (mint a kilépés), nem
+sémamező — nem kell az adatbekérőbe/sablonba. A Dolgozók nézethez csak javaslat
+készült (lásd lent), kód nem.
+**Tesztek:** `node test/run-all.js` zöld; `employee-repo` +1, `cases-dashboard`
++1. Headless Chrome + CDP (eldobható, nincs a repóban): tábla (tagolás, 60 px-es
+oszlop, kijelölés, mentés/visszatöltés, régi kulcs), Ügyek (piros blokk,
+görgetés jogcímváltás és mentés után 700 → 700, fókusz rejt/Esc), teljes app
+próba módban (tömeges jelölés, összesítő → `ef-f-email` fókusz, kártya áthúzás →
+mentés → újrarajzolás után is ott).
+
+**Nyitott / következő:**
+- **Kézi próba az éles gépen:** kártya húzása a fogantyúnál; kártya magasság
+  állítása, újraindítás után megmarad-e; EH fókusz 150–175%-os nagyításon; a
+  Nyilvántartás oszlopszélessége újraindítás után.
+- **Dolgozók nézet — javaslat (döntésre vár):** (1) `max-width` + rögzített
+  oszlopszélességek, mint az ügylistán; (2) új oszlopok: állampolgárság,
+  munkakör/egység, közvetlen vezető, legutóbbi ügy + állapot, a dolgozó EH száma;
+  (3) a „nincs lejárat” félrevezető annál, akinek nyitott meghosszabbítása van
+  (a `suggestRenewals` kihagyja, a sor `expiresAt: null`-lal kerül vissza) —
+  a lejárat akkor is látsszon; (4) dupla katt a néven → Összesítő.
+
 ## 2026-10-15 (5.) — Megtekintő felület, vezetői kapcsolatok
 
 **Cél:** a megtekintő csak az Ügyállást lássa, ott client picker-szerű tábla

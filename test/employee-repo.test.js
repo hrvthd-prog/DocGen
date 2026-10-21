@@ -128,6 +128,23 @@ atest('visszavételkor a kilépés dátuma törlődik', async () => {
   assertEq(Repo.count(), 1, 'a visszavett dolgozó nem került vissza az aktív listába');
 });
 
+atest('„nem hosszabbítjuk": jelölés, napló, mentés után is megmarad', async () => {
+  const mem = Repo.createMemoryBackend();
+  Repo.useBackend(mem);
+  await Repo.load();
+  const e = Repo.create({ fields: { surname: 'Kovács' } });
+  assertEq(Repo.get(e.id).noRenewal, false, 'új rekord alapból jelölt');
+  Repo.setNoRenewal(e.id, true);
+  assertEq(Repo.get(e.id).history.slice(-1)[0].action, 'nem_hosszabbit', 'nincs naplóbejegyzés');
+  const db = Repo.get(e.id).history.length;
+  Repo.setNoRenewal(e.id, true);
+  assertEq(Repo.get(e.id).history.length, db, 'változás nélkül is naplózott');
+  await Repo.flush();
+  Repo.useBackend(mem);
+  await Repo.load();
+  assertEq(Repo.get(e.id).noRenewal, true, 'a jelölés elveszett mentés–betöltés után');
+});
+
 atest('a régi `archived` kulcs kilépéssé alakul betöltéskor', async () => {
   Repo.useBackend(Repo.createMemoryBackend({
     version: 1,

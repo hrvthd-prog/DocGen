@@ -193,38 +193,16 @@ html, body { overflow: auto; }
   top: calc(var(--header-h) + var(--tabnav-h));
   align-self: flex-start;
   min-height: 200px;
-  /* max-height CSS-ből törölve — JS resize kezeli */
+  /* A teljes látható magasság: a tartalma így egészében látszik, és csak ha
+     ennél is hosszabb, akkor görget magában. (A kézi magasság-fogantyú
+     megszűnt: egy kisebbre húzott sáv csak elrejtette a gombokat.) */
+  max-height: calc(100vh - var(--header-h) - var(--tabnav-h));
 }
 
 .sidebar-section {
   padding: 14px var(--sp-4);
   border-bottom: 1px solid var(--c-border);
 }
-
-/* ── Sidebar resize fogantyú ──────────────────────────── */
-.sidebar-resize-handle {
-  height: 6px;
-  flex-shrink: 0;
-  cursor: ns-resize;
-  background: transparent;
-  transition: background .15s;
-  position: relative;
-}
-.sidebar-resize-handle::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 28px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--c-muted);
-  opacity: .3;
-  transition: opacity .15s;
-}
-.sidebar-resize-handle:hover { background: rgba(33,112,93,.08); }
-.sidebar-resize-handle:hover::after { opacity: .7; }
 
 .sidebar-section-title {
   font-size: 9px;
@@ -521,7 +499,6 @@ html, body { overflow: auto; }
   flex-shrink: 0;
 }
 .ws-card-drag-handle:hover { opacity: 1; }
-.ws-card[draggable="true"] { cursor: default; }
 .ws-card.ws-dragging { opacity: .45; }
 .ws-card.ws-drag-over { outline: 2px solid var(--c-green); outline-offset: -2px; }
 

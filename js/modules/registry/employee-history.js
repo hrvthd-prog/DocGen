@@ -17,6 +17,8 @@ const EmployeeHistory = (() => {
     azonosito_torles: 'Azonosító törölve',
     kilepes:          'Kilépettnek jelölve',
     visszavetel:      'Visszavéve',
+    nem_hosszabbit:   'Nem hosszabbítjuk',
+    hosszabbit:       'Hosszabbítás visszaállítva',
   };
 
   const SOURCE_LABEL = {

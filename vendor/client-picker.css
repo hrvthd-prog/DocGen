@@ -170,7 +170,7 @@
   font-weight: 600; color: var(--cp-text);
   font-size: 11px; text-align: left;
   padding: 0; height: 36px;
-  white-space: nowrap; user-select: none;
+  user-select: none; vertical-align: middle;
 }
 .cp-table thead th.cp-col-check {
   width: 38px; text-align: center; padding: 0 6px;
@@ -182,14 +182,16 @@
   background: var(--cp-bg); color: var(--cp-muted);
   font-weight: 500; border-right: 1px solid var(--cp-border);
 }
+/* A fejléc szűkíthető: a címke ilyenkor több sorba tördel (nem csonkul), a
+   rendező/szűrő ikon pedig a címke alá kerül, hogy ne vegye el a helyét */
 .cp-th-inner {
-  display: flex; align-items: center; gap: 4px;
-  padding: 0 10px; height: 100%;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 2px 4px;
+  padding: 4px 8px; min-height: 36px; box-sizing: border-box;
   cursor: pointer; user-select: none;
 }
 .cp-th-inner:hover { background: var(--cp-bg); }
 .cp-th-inner.cp-has-filter { background: rgba(61,166,140,.06); }
-.cp-th-label { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.cp-th-label { flex: 1 1 auto; min-width: 0; line-height: 1.25; overflow-wrap: anywhere; }
 .cp-th-sort, .cp-th-filter {
   color: var(--cp-muted); display: inline-flex; align-items: center; flex-shrink: 0;
 }
@@ -205,9 +207,12 @@
   padding: 6px 10px;
   border-bottom: 1px solid #EDF4F3;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  user-select: none;
+  /* Kijelölhető, másolható: a sorváltás a kattintásé, a húzás a szövegé */
+  user-select: text; cursor: text;
   transition: background .12s ease;
 }
+.cp-table tbody td.cp-col-check,
+.cp-table tbody td.cp-col-num { user-select: none; cursor: pointer; }
 .cp-table tbody td.cp-col-check {
   text-align: center; padding: 0 6px;
   background: var(--cp-bg);

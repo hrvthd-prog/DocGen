@@ -15,6 +15,9 @@ const RegistryModule = (() => {
   // adja, nem itteni konstans, mert a Beállításokban átírható.
   const KILEPES_UGYTIPUS = 'munkaviszony_kijelentes';
 
+  // A „nem kerül meghosszabbításra" jelölés oszlopa a táblában
+  const HOSSZABBITAS = 'Hosszabbítás';
+
   let container = null;
   let picker    = null;   // a beágyazott ClientPicker-tábla példánya
   let byId      = new Map();
@@ -437,6 +440,7 @@ const RegistryModule = (() => {
     for (const [key, nev] of labels) row[nev] = v[key] || '';
     row['Azonosító'] = idf ? idf.value : '';
     row['Állapot']   = emp.exited ? 'kilépett' : 'aktív';
+    row[HOSSZABBITAS] = emp.noRenewal ? 'nem hosszabbítjuk' : '';
     return row;
   }
 
@@ -468,13 +472,16 @@ const RegistryModule = (() => {
     }
 
     const labels   = columnLabels();
-    const oszlopok = [...labels.values()].concat(['Azonosító', 'Állapot']);
+    const oszlopok = [...labels.values()].concat(['Azonosító', 'Állapot', HOSSZABBITAS]);
     byId = new Map(rows.map(e => [e.id, e]));
     const tRows = rows.map(e => tableRow(e, labels));
 
     // A tábla életben marad két rajzolás között: a rendezés, a szűrők, az
     // oszlopbeállítás és a kijelölés csak így éli túl egy mentést vagy importot.
-    if (picker && picker._oszlopok === oszlopok.join('|')) {
+    // A fiók is része a kulcsnak: a tábla a belépés ELŐTT készül, a mentett
+    // oszlopbeállítás viszont felhasználónkénti.
+    const alairas = oszlopok.join('|') + '#' + Settings.currentUser();
+    if (picker && picker._oszlopok === alairas) {
       picker.setRows(tRows);
       return;
     }
@@ -483,14 +490,20 @@ const RegistryModule = (() => {
       container:  box,
       rows:       tRows,
       columns:    oszlopok,
-      visibleColumns: LIST_COLUMNS.map(k => labels.get(k)).filter(Boolean).concat(['Azonosító']),
+      visibleColumns: LIST_COLUMNS.map(k => labels.get(k)).filter(Boolean)
+                        .concat(['Azonosító', HOSSZABBITAS]),
       rowKey:     r => r.__id,
-      storageKey: 'docgen-registry',
+      storageKey: Settings.userKey('docgen-registry'),
       search:     false,          // a fenti rg-search a tárolóban keres, ez csak zavarna
-      rowClass:   r => (byId.get(r.__id) && byId.get(r.__id).exited ? 'rg-exited' : ''),
+      rowClass:   r => {
+        const e = byId.get(r.__id);
+        return !e ? '' : [e.exited ? 'rg-exited' : '', e.noRenewal ? 'rg-norenewal' : '']
+          .filter(Boolean).join(' ');
+      },
       onSelectionChange: keys => { state.selectedIds = keys; renderBulkBar(); },
+      onRowOpen:  r => openSummary(r.__id),
     });
-    picker._oszlopok = oszlopok.join('|');
+    picker._oszlopok = alairas;
   }
 
   /**
@@ -508,16 +521,24 @@ const RegistryModule = (() => {
     const n    = emps.length;
     const egy  = n === 1;
     const mind = n > 0 && emps.every(e => e.exited);
+    const nemHossz = n > 0 && emps.every(e => e.noRenewal);
 
     bar.innerHTML = `
       <span class="rg-bulk-count">${
         n ? `<b>${n}</b> kijelölve` : 'Jelölj ki sorokat a művelethez'}</span>
+      <button class="btn btn-ghost btn-sm" data-bulk="summary" ${egy ? '' : 'disabled'}
+              title="Egy kijelölt dolgozó adatai egy lapon (dupla kattintás a soron)">Összesítő</button>
       <button class="btn btn-ghost btn-sm" data-bulk="history" ${egy ? '' : 'disabled'}
               title="Egy kijelölt rekord előzményei">Előzmények</button>
       <button class="btn btn-ghost btn-sm" data-bulk="edit" ${egy ? '' : 'disabled'}
               title="Egy kijelölt rekord szerkesztése">Szerkesztés</button>
       <button class="btn btn-ghost btn-sm" data-bulk="exit" ${n ? '' : 'disabled'}>${
         mind ? 'Visszavétel' : 'Kilépettnek jelölés'}</button>
+      <button class="btn btn-ghost btn-sm" data-bulk="norenewal" ${n ? '' : 'disabled'}
+              title="${nemHossz
+                ? 'A jelölés törlése: a lejáró engedély újra teendőként jelenik meg'
+                : 'Az engedélye nem kerül meghosszabbításra — kimarad a „Nincs még ügye” listából'}">${
+        nemHossz ? 'Mégis hosszabbítjuk' : 'Nem hosszabbítjuk'}</button>
       ${vezetotIrhat() ? `<button class="btn btn-ghost btn-sm" data-bulk="leader" ${n ? '' : 'disabled'}
               title="A kijelölt dolgozók közvetlen vezetője — a vezetői fiókok közül">Közvetlen vezető…</button>` : ''}
       <button class="btn btn-ghost btn-sm" data-bulk="export" ${n ? '' : 'disabled'}>Export xlsx-be</button>
@@ -569,7 +590,15 @@ const RegistryModule = (() => {
       const emps = selectedEmployees();
       if (!emps.length) { toast('Nincs kijelölt rekord.', 'warn'); return; }
       switch (b.dataset.bulk) {
+        case 'summary': openSummary(emps[0].id); break;
         case 'history': EmployeeHistory.open(emps[0]); break;
+        case 'norenewal': {
+          const ertek = !emps.every(e => e.noRenewal);
+          emps.forEach(e => EmployeeRepo.setNoRenewal(e.id, ertek, { source: 'tomeges' }));
+          toast(ertek ? `${emps.length} dolgozó: az engedélye nem kerül meghosszabbításra`
+                      : `${emps.length} dolgozó: a jelölés törölve`, 'success');
+          break;
+        }
         case 'edit':    openForm(emps[0].id); break;
         case 'export':  RegistryXlsxIO.exportData(emps); break;
         case 'leader':  openLeaderDialog(emps); break;
@@ -645,6 +674,11 @@ const RegistryModule = (() => {
   function openForm(id) {
     if (!state.ready) { toast('A nyilvántartás még nem töltődött be.', 'error'); return; }
     EmployeeForm.open({ id, onSave: renderList });
+  }
+
+  function openSummary(id) {
+    if (!state.ready) { toast('A nyilvántartás még nem töltődött be.', 'error'); return; }
+    EmployeeSummary.open(id);
   }
 
   /**

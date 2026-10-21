@@ -43,6 +43,22 @@ const Settings = (() => {
     return get('current_user', LOCAL_USER) || LOCAL_USER;
   }
 
+  // ── Felhasználónkénti felület-beállítások ────────────────────────────────
+  // A felület utolsó állapota (nézet, rendezés, kártyák helye) a belépett
+  // fiókhoz kötődik: egy gépen többen is dolgozhatnak. Amíg a fióknak nincs
+  // saját értéke, a régi, fiók nélküli kulcsé az indulóérték.
+  function userKey(key) {
+    return key + '@' + safe(currentUser());
+  }
+
+  function getUser(key, fallback = null) {
+    return get(userKey(key), get(key, fallback));
+  }
+
+  function setUser(key, value) {
+    try { set(userKey(key), value); } catch { /* tele/tiltott tároló: nem hiba */ }
+  }
+
   // ── Per-fiók csoport kezelés ─────────────────────────────────────────────
   function getAccountGroups(account) {
     return get('groups_' + safe(account), []);
@@ -87,6 +103,7 @@ const Settings = (() => {
 
   return {
     get, set, remove,
+    userKey, getUser, setUser,
     currentUser,
     getAccountGroups,
     setAccountGroups,

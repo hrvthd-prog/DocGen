@@ -106,10 +106,13 @@ const CasesDashboard = (() => {
     let dolgozok = [];
     try { dolgozok = EmployeeRepo.all(); } catch { dolgozok = []; }
 
-    // 1. Hiányzó ügyek: lejáró engedély nyitott meghosszabbítás nélkül.
+    // 1. Hiányzó ügyek: lejáró engedély nyitott meghosszabbítás nélkül. Akinél
+    //    jelölve van, hogy NEM hosszabbítjuk (Nyilvántartás), az nem teendő.
     let hianyzo = [];
-    try { hianyzo = CaseRepo.suggestRenewals(dolgozok, { belul: HORIZONT, ma }); }
-    catch { hianyzo = []; }
+    try {
+      hianyzo = CaseRepo.suggestRenewals(dolgozok.filter(e => !e.noRenewal),
+                                         { belul: HORIZONT, ma });
+    } catch { hianyzo = []; }
 
     // 2. Benyújtási ablak a nyitott ügyeken.
     const ablak = { korai: [], idealis: [], siess: [], lekesve: [] };

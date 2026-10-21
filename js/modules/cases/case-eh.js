@@ -27,8 +27,18 @@ const CaseEh = (() => {
     // A kézi sorok elrejthetők. Ezekre a panel semmit nem tud adni (nincs
     // mögöttük adat), a ~180 sorból viszont 77 ilyen — ennyi zaj elfedi a
     // munkát. Ez megjegyződik: aki elrejti, annak holnap is rejtve induljon.
-    keziRejtve: Settings.get('eh_hide_manual', false),
+    // (a belépés előtt töltődik be a modul, ezért az első rajzoláskor olvassuk)
+    keziRejtve: null,
   };
+
+  /**
+   * Fókusz nézet: az app fejléce, a fülsor, a nézetváltó, az ügy fejléce és a
+   * részletező fülei eltűnnek, a panel kapja a teljes ablakot. Nagyítva ezek a
+   * sávok a magasság felét vitték el. Az elrejtést a CSS végzi (`.is-fokusz`,
+   * cases.css); a választás felhasználónként megmarad.
+   */
+  function fokuszban() { return !!Settings.getUser('eh_focus', false); }
+  function setFokusz(v) { Settings.setUser('eh_focus', !!v); }
 
   // ── Értékfeloldás ──────────────────────────────────────────────────────────
 
@@ -97,6 +107,7 @@ const CaseEh = (() => {
   }
 
   function render(ugy, emp) {
+    if (state.keziRejtve === null) state.keziRejtve = !!Settings.getUser('eh_hide_manual', false);
     const jogcim = state.jogcim[ugy.id] || '';
     const mind   = EhForms.rows(jogcim);
     const sorok  = state.keziRejtve ? lathatoSorok(mind) : mind;
@@ -120,9 +131,12 @@ const CaseEh = (() => {
     const masolhato = sorok.filter(r =>
       r.eh && !r.list && !r.manual && (r.key || r.employer || r.const || r.fromCase || r.setting)).length;
 
+    const fokusz = fokuszban();
     return `
-      <div class="eh-wrap" id="eh-wrap">
+      <div class="eh-wrap${fokusz ? ' is-fokusz' : ''}" id="eh-wrap">
         <div class="eh-head">
+          <span class="eh-who">${escHtml(
+            [feloldott.surname, feloldott.forename].filter(Boolean).join(' '))}</span>
           ${valaszto}
           <span class="eh-hint" title="Tab: következő másolható mező · Enter: másol és továbblép · F2: szerkesztés · Esc: elvet">
             ${masolhato} másolható mező · Tab / Enter</span>
@@ -130,6 +144,11 @@ const CaseEh = (() => {
                   id="eh-kezi" aria-pressed="${state.keziRejtve}"
                   title="A kézzel töltendő sorok mögött nincs adat — a panel nem tud rájuk semmit adni">
             ${state.keziRejtve ? `${rejtve} kézi mező rejtve` : 'Kézi mezők elrejtése'}</button>
+          <button class="cv-filter eh-fokusz-btn${fokusz ? ' is-active' : ''}" type="button"
+                  id="eh-fokusz" aria-pressed="${fokusz}"
+                  title="${fokusz ? 'Vissza a teljes felülethez (Esc)'
+                                  : 'Csak a panel látsszon — fejléc és fülsorok nélkül'}">
+            ${fokusz ? '⤡ Kilépés a fókuszból' : '⤢ Fókusz nézet'}</button>
         </div>
         <div class="eh-rows">${torzs}</div>
       </div>`;
@@ -212,7 +231,13 @@ const CaseEh = (() => {
     const keziGomb = gyoker.querySelector('#eh-kezi');
     if (keziGomb) keziGomb.addEventListener('click', () => {
       state.keziRejtve = !state.keziRejtve;
-      Settings.set('eh_hide_manual', state.keziRejtve);
+      Settings.setUser('eh_hide_manual', state.keziRejtve);
+      ujra();
+    });
+
+    const fokuszGomb = gyoker.querySelector('#eh-fokusz');
+    if (fokuszGomb) fokuszGomb.addEventListener('click', () => {
+      setFokusz(!fokuszban());
       ujra();
     });
 
@@ -337,5 +362,5 @@ const CaseEh = (() => {
     });
   }
 
-  return { render, bind, _state: state, _lathatoSorok: lathatoSorok };
+  return { render, bind, fokuszban, setFokusz, _state: state, _lathatoSorok: lathatoSorok };
 })();

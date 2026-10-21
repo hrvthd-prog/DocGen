@@ -48,8 +48,10 @@ const CasesModule = (() => {
     { key: 'mind',    label: 'Mind' },
   ];
 
+  // A mentett nézet és rendezés felhasználónkénti — az `init()` tölti be,
+  // mert a modul a belépés előtt töltődik, akkor még nincs fiók.
   const state = {
-    nezet:   Settings.get('cases_view', 'attekintes'),
+    nezet:   'attekintes',
     szuro:   'nyitott',
     kereses: '',
     // Ha van kiválasztott ügy, a részletező a NÉZET FÖLÉ kerül (bármelyikről
@@ -58,14 +60,23 @@ const CasesModule = (() => {
     kivalasztott: null,
     lap:     'idovonal',   // idovonal | eh – ügyváltáskor NEM áll vissza:
                            // aki EH-t tölt, sorra veszi a dolgozókat
-    rend:    Settings.get('cases_sort', 'hatarido'),   // hatarido | nev | allapot
-    irany:   Settings.get('cases_sort_dir', 1),
-    dRend:   Settings.get('cases_emp_sort', 'nap'),    // nap | nev
-    dIrany:  Settings.get('cases_emp_sort_dir', 1),
+    rend:    'hatarido',   // hatarido | nev | allapot
+    irany:   1,
+    dRend:   'nap',        // nap | nev
+    dIrany:  1,
   };
+
+  /** A görgető dobozok — újrarajzoláskor ezek helyzete marad meg. */
+  const GORGETOK = '.cv-dbody, .cv-table-wrap, .cv-page--scroll';
+  let utolsoNezet = null;
 
   function init(el) {
     container = el;
+    state.nezet  = Settings.getUser('cases_view', 'attekintes');
+    state.rend   = Settings.getUser('cases_sort', 'hatarido');
+    state.irany  = Settings.getUser('cases_sort_dir', 1);
+    state.dRend  = Settings.getUser('cases_emp_sort', 'nap');
+    state.dIrany = Settings.getUser('cases_emp_sort_dir', 1);
     CasesDashboard.init({ dolgozoNeve });
     render();
     frissitJelzo();
@@ -83,7 +94,9 @@ const CasesModule = (() => {
       const a = document.activeElement;
       if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
       e.preventDefault();
-      state.kivalasztott = null;
+      // Fókusz nézetből az Esc előbb csak a fókuszból lép ki
+      if (state.lap === 'eh' && CaseEh.fokuszban()) CaseEh.setFokusz(false);
+      else state.kivalasztott = null;
       render();
     });
 
@@ -430,7 +443,8 @@ const CasesModule = (() => {
         <td class="cv-td--date">${escHtml(j.expiresAt || '—')}</td>
         <td class="cv-td--due ${lejart ? 'is-late' : ''}">${escHtml(napSzoveg(j.daysLeft))}</td>
         <td>${j.nyitottUgy ? escHtml(ugyAllapot(j.nyitottUgy))
-                           : '<span class="cv-id is-none">nincs nyitott ügy</span>'}</td>
+             : j.employee.noRenewal ? '<span class="cv-id">nem hosszabbítjuk</span>'
+             : '<span class="cv-id is-none">nincs nyitott ügy</span>'}</td>
         <td class="cv-td--go">${j.nyitottUgy ? 'Megnyitás' : (irhat() ? 'Ügy nyitása' : '')}</td>
       </tr>`;
   }
@@ -648,7 +662,7 @@ const CasesModule = (() => {
   function valt(nezet) {
     state.nezet = nezet;
     state.kivalasztott = null;
-    Settings.set('cases_view', nezet);
+    Settings.setUser('cases_view', nezet);
     render();
   }
 
@@ -668,6 +682,13 @@ const CasesModule = (() => {
         </div>`;
       return;
     }
+
+    // Ugyanazon a nézeten (pl. mentés vagy jogcímváltás után) a görgetés a
+    // helyén marad — a teljes újrarajzolás eddig a lap tetejére dobott.
+    const nezetKulcs = `${state.nezet}|${state.kivalasztott}|${state.lap}`;
+    const gorgetes = nezetKulcs === utolsoNezet
+      ? [...container.querySelectorAll(GORGETOK)].map(g => g.scrollTop) : null;
+    utolsoNezet = nezetKulcs;
 
     container.innerHTML = `${navHtml()}<div class="cv-view" id="cv-view"></div>`;
 
@@ -692,6 +713,11 @@ const CasesModule = (() => {
     else                                   el.innerHTML = ugyekHtml();
 
     bind();
+    if (gorgetes) {
+      container.querySelectorAll(GORGETOK).forEach((g, i) => {
+        if (gorgetes[i]) g.scrollTop = gorgetes[i];
+      });
+    }
   }
 
   // ── Események ──────────────────────────────────────────────────────────────
@@ -712,7 +738,9 @@ const CasesModule = (() => {
     // Az áttekintő számláló-csempéi ugyanazt csinálják, mint a szűrőgombok —
     // de át is visznek az Ügyek nézetre: enélkül egy olyan listát szűrnének,
     // ami épp nem látszik.
-    container.querySelectorAll('.cv-filter, .dash-stat').forEach(b => {
+    // Csak a valódi szűrőgombok: az EH-panel gombjai is `.cv-filter` stílusúak
+    // (kézi mezők, fókusz), és a szűrő nélküli kattintás kivitt az ügyből.
+    container.querySelectorAll('.cv-filter[data-filter], .dash-stat[data-filter]').forEach(b => {
       b.addEventListener('click', () => {
         state.szuro = b.dataset.filter;
         if (state.nezet === 'ugyek') { state.kivalasztott = null; render(); }
@@ -724,8 +752,8 @@ const CasesModule = (() => {
       th.addEventListener('click', () => {
         if (state.rend === th.dataset.sort) state.irany = -state.irany;
         else { state.rend = th.dataset.sort; state.irany = 1; }
-        Settings.set('cases_sort', state.rend);
-        Settings.set('cases_sort_dir', state.irany);
+        Settings.setUser('cases_sort', state.rend);
+        Settings.setUser('cases_sort_dir', state.irany);
         render();
       });
     });
@@ -733,8 +761,8 @@ const CasesModule = (() => {
       th.addEventListener('click', () => {
         if (state.dRend === th.dataset.dsort) state.dIrany = -state.dIrany;
         else { state.dRend = th.dataset.dsort; state.dIrany = 1; }
-        Settings.set('cases_emp_sort', state.dRend);
-        Settings.set('cases_emp_sort_dir', state.dIrany);
+        Settings.setUser('cases_emp_sort', state.dRend);
+        Settings.setUser('cases_emp_sort_dir', state.dIrany);
         render();
       });
     });

@@ -10,7 +10,8 @@
        visibleColumns: [...],            // opc. — alapból első 6
        selected:       [rowKey, ...],    // előre kijelölt rowKey-k
        rowKey:         row => '...',     // opc. — egyedi azonosító (alapból JSON)
-       storageKey:     'beva-docgen',    // mentett nézetek + oszlopok ns
+       storageKey:     'beva-docgen',    // mentett nézetek + oszlopok ns ('ns@fiók': fiókonként)
+       onRowOpen:      row => {...},     // opc. — dupla kattintás a soron
        title:          'Ügyfelek kiválasztása',
        onSave:         (selectedRows, selectedKeys) => {...},
        onCancel:       () => {...},
@@ -70,10 +71,12 @@
     // Persistalt user-beállítások betöltése
     const ui = loadUI(this.storageKey);
 
-    // Visible columns prioritás: paraméter > localStorage > első 6
+    // Visible columns prioritás: localStorage > paraméter > első 6. A paraméter
+    // csak az ALAPÉRTELMEZÉS: minden hívó átadja, és ha ez nyerne, a
+    // felhasználó oszlopválasztása a következő megnyitáskor elveszne.
     const initialVisible =
-      (this.opts.visibleColumns && this.opts.visibleColumns.filter(c => columns.includes(c))) ||
       (ui.visibleColumns && ui.visibleColumns.filter(c => columns.includes(c))) ||
+      (this.opts.visibleColumns && this.opts.visibleColumns.filter(c => columns.includes(c))) ||
       columns.slice(0, 6);
 
     // Initial selection: rowKey-kbál index-Set
@@ -87,8 +90,11 @@
     this.state = {
       visibleCols: initialVisible,
       selected:    initialSelected,
-      sort:        { col: null, dir: 'asc' },
-      filters:     {},
+      // A rendezés és a szűrők is megmaradnak: az aktív szűrő a chip-sávban
+      // mindig látszik, tehát nem rejt el némán sorokat.
+      sort:        (ui.sort && columns.includes(ui.sort.col)) ? ui.sort : { col: null, dir: 'asc' },
+      filters:     deserializeFilters(Object.fromEntries(
+                     Object.entries(ui.filters || {}).filter(([c]) => columns.includes(c)))),
       quickSearch: '',
       showOnlySelected: false,
       cursorIdx:   null,
@@ -226,6 +232,12 @@
 
     // Tábla
     e.tbody.addEventListener('click', this._onBodyClick.bind(this));
+    // Shift+kattintás tartomány-kijelölés, nem szövegkijelölés
+    e.tbody.addEventListener('mousedown', ev => { if (ev.shiftKey) ev.preventDefault(); });
+    e.tbody.addEventListener('dblclick', ev => {
+      const tr = ev.target.closest('tr[data-i]');
+      if (tr && this.opts.onRowOpen) this.opts.onRowOpen(this.rows[Number(tr.dataset.i)]);
+    });
     e.thead.addEventListener('click', this._onHeadClick.bind(this));
     e.thead.addEventListener('mousedown', this._onHeadMouseDown.bind(this));
     e.filterbar.addEventListener('click', this._onFilterbarClick.bind(this));
@@ -255,6 +267,8 @@
     saveUI(this.storageKey, {
       visibleColumns: this.state.visibleCols,
       colWidths: this.colWidths,
+      sort: this.state.sort,
+      filters: serializeFilters(this.state.filters),
     });
   };
 
@@ -308,6 +322,9 @@
 
   // ── Render ────────────────────────────────────────────────
   Picker.prototype._render = function () {
+    // Minden rajzolás egy felhasználói lépés után jön (rendezés, szűrő,
+    // oszlop) — itt mentve egyik út sem maradhat ki.
+    this._persistUI();
     this._lastFiltered = this._filteredIndexes();
     this._renderHead();
     this._renderBody(this._lastFiltered);
@@ -377,7 +394,10 @@
       for (const col of cols) {
         const raw = row[col];
         const fmted = fmtVal(raw, types[col]);
-        cells += `<td title="${esc(fmted)}">${esc(fmted)}</td>`;
+        // A kézzel szűkített oszlop cellái is szűkülnek (auto layoutban a
+        // th szélessége csak minimum, a nowrap cella szétfeszítené)
+        const w = this.colWidths[col];
+        cells += `<td title="${esc(fmted)}"${w ? ` style="max-width:${w}px"` : ''}>${esc(fmted)}</td>`;
       }
       html += `<tr data-i="${i}" class="${sel ? 'cp-selected ' : ''}${cur ? 'cp-cursor' : ''}${
           this.opts.rowClass ? ' ' + this.opts.rowClass(row) : ''}">
@@ -446,6 +466,10 @@
   Picker.prototype._onBodyClick = function (e) {
     const tr = e.target.closest('tr[data-i]');
     if (!tr) return;
+    // Szövegkijelölés (húzás, dupla kattintás) nem sorkijelölés: a cella
+    // tartalma így másolható, a sor nem vált állapotot alatta.
+    const sel = window.getSelection && window.getSelection();
+    if (!e.target.closest('.cp-col-check') && (e.detail > 1 || (sel && String(sel).trim()))) return;
     const i = Number(tr.dataset.i);
     if (e.shiftKey && this.state.cursorIdx != null) {
       this._rangeSelect(this.state.cursorIdx, i, true);
@@ -490,7 +514,7 @@
 
   Picker.prototype._onMouseMove = function (e) {
     if (!this._resizing) return;
-    const w = Math.max(50, this._resizing.startW + (e.clientX - this._resizing.startX));
+    const w = Math.max(40, this._resizing.startW + (e.clientX - this._resizing.startX));
     this._resizing.th.style.width = w + 'px';
     this.colWidths[this._resizing.col] = w;
   };
@@ -499,6 +523,7 @@
     if (this._resizing) {
       this._resizing.handle.classList.remove('cp-dragging');
       this._resizing = null;
+      this._render();   // a cellák is felveszik az új szélességet, és mentődik
     }
   };
 
@@ -955,9 +980,10 @@
       const d = String(v.getDate()).padStart(2, '0');
       return `${y}.${m}.${d}`;
     }
-    if (type === 'number') {
-      const n = Number(v);
-      return Number.isFinite(n) ? n.toLocaleString('hu-HU') : String(v);
+    // Csak a valódi szám kap tagolást. A számjegyekből álló SZÖVEG (SAP-szám,
+    // útlevélszám) azonosító: „12 345 678"-ként félrevezető és nem másolható.
+    if (type === 'number' && typeof v === 'number') {
+      return Number.isFinite(v) ? v.toLocaleString('hu-HU') : String(v);
     }
     return String(v);
   }
@@ -1002,19 +1028,25 @@
     }
     return out;
   }
+  // A `nevter@fiok` alakú kulcs felhasználónkénti; ha annak még nincs mentése,
+  // a fiók nélküli régi kulcsé az indulóérték, hogy semmi ne vesszen el.
+  function getItem(prefix, ns) {
+    const sajat = localStorage.getItem(prefix + ns);
+    return sajat !== null ? sajat : localStorage.getItem(prefix + String(ns).split('@')[0]);
+  }
   function loadViews(ns) {
-    try { return JSON.parse(localStorage.getItem('cp_views_' + ns) || '[]'); }
+    try { return JSON.parse(getItem('cp_views_', ns) || '[]'); }
     catch { return []; }
   }
   function saveViews(ns, views) {
     localStorage.setItem('cp_views_' + ns, JSON.stringify(views));
   }
   function loadUI(ns) {
-    try { return JSON.parse(localStorage.getItem('cp_ui_' + ns) || '{}'); }
+    try { return JSON.parse(getItem('cp_ui_', ns) || '{}'); }
     catch { return {}; }
   }
   function saveUI(ns, ui) {
-    localStorage.setItem('cp_ui_' + ns, JSON.stringify(ui));
+    try { localStorage.setItem('cp_ui_' + ns, JSON.stringify(ui)); } catch { /* tele/tiltva */ }
   }
   function serializeFilters(f) {
     const out = {};
@@ -1023,7 +1055,7 @@
   }
   function deserializeFilters(f) {
     const out = {};
-    for (const k in f) { out[k] = { ...f[k] }; if (f[k].values) out[k].values = new Set(f[k].values); }
+    for (const k in f || {}) { out[k] = { ...f[k] }; if (f[k].values) out[k].values = new Set(f[k].values); }
     return out;
   }
 

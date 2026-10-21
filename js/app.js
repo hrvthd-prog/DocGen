@@ -43,7 +43,7 @@ function switchTab(id) {
   if (!vis.includes(id)) id = vis[0] || TABS[0];
   tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === id));
   tabContents.forEach(c => c.classList.toggle('active', c.id === 'tab-' + id));
-  Settings.set('last_tab', id);
+  Settings.setUser('last_tab', id);
   window.dispatchEvent(new CustomEvent('docgenTabActivated', { detail: id }));
 }
 
@@ -208,5 +208,5 @@ function applyRole() {
   AllapotModule.init(document.getElementById('tab-allapot'));
 
   applyRole();
-  switchTab(Settings.get('last_tab', 'docgen'));
+  switchTab(Settings.getUser('last_tab', 'docgen'));
 })();

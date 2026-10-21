@@ -132,6 +132,18 @@ function d(extra = {}) { return CasesDashboard.adatok(Object.assign({ ma: MA }, 
     assertEq(d().hianyzo.length, 0);
   });
 
+  await test('„Nem hosszabbítjuk" jelölésű dolgozó nem teendő', async () => {
+    await tisztaAllapot();
+    const e = ujDolgozo({ expiration_of_rp: nap(20) });
+    ujDolgozo({ forename: 'Anna', expiration_of_rp: nap(30) });
+    EmployeeRepo.setNoRenewal(e.id, true);
+    const a = d();
+    assertEq(a.hianyzo.length, 1, 'a jelölt dolgozó is a listán maradt');
+    assert(a.hianyzo[0].employee.id !== e.id, 'épp a jelölt maradt bent');
+    EmployeeRepo.setNoRenewal(e.id, false);
+    assertEq(d().hianyzo.length, 2, 'a jelölés törlése után nem jött vissza');
+  });
+
   section('Határidő nélküli ügyek — a csendes lyuk');
 
   await test('A határidő nélküli nyitott ügy külön megjelenik', async () => {

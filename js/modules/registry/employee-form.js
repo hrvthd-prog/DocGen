@@ -15,7 +15,11 @@ const EmployeeForm = (() => {
 
   // ── Megnyitás ──────────────────────────────────────────────────────────────
 
-  function open({ id = null, onSave } = {}) {
+  /**
+   * @param focus  opcionális mezőkulcs: az űrlap ott nyílik (az összesítő lapról
+   *               érkezve). `EmployeeSummary.AZONOSITO`: az azonosító-blokk.
+   */
+  function open({ id = null, onSave, focus = null } = {}) {
     editingId = id;
     onSaved   = onSave;
     const emp = id ? EmployeeRepo.get(id) : null;
@@ -32,6 +36,25 @@ const EmployeeForm = (() => {
       `,
     });
     bind();
+    if (focus) fokuszal(focus);
+  }
+
+  /** A kért mezőhöz görget, kiemeli és bele is teszi a kurzort. */
+  function fokuszal(kulcs) {
+    let el = document.getElementById('ef-f-' + kulcs);
+    // Az azonosítóból tükrözött mező nem írható: annak a forrása az
+    // azonosító-blokk, ott a típus is előre kiválasztva.
+    const tukor = el && el.dataset.mirror;
+    if (!el || tukor) {
+      el = document.getElementById('ef-id-value');
+      const tipus = document.getElementById('ef-id-type');
+      if (tukor && tipus) tipus.value = tukor;
+    }
+    if (!el) return;
+    const doboz = el.closest('.ef-field') || el.closest('.ef-id-add') || el;
+    doboz.scrollIntoView({ block: 'center' });
+    doboz.classList.add('ef-focus');
+    if (!el.disabled) { el.focus(); if (el.select) el.select(); }
   }
 
   // ── Megjelenítés ───────────────────────────────────────────────────────────

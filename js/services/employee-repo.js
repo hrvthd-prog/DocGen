@@ -10,6 +10,7 @@
  *     fields:      { <sémakulcs>: érték }   ← a séma értelmezi, a tároló átlátszatlanul kezeli
  *     exited:      kilépett dolgozó (puha törlés) – korábban `archived`
  *     exitDate:    a munkaviszony megszűnésének napja (ÉÉÉÉ-HH-NN)
+ *     noRenewal:   az engedélye nem kerül meghosszabbításra (nem kell rá ügy)
  *     createdAt / updatedAt / updatedBy / schemaVersion
  *   }
  *
@@ -297,6 +298,7 @@ const EmployeeRepo = (() => {
     e.exited        = e.exited !== undefined ? !!e.exited : !!e.archived;
     delete e.archived;
     e.exitDate      = e.exitDate || null;
+    e.noRenewal     = !!e.noRenewal;
     if (!Array.isArray(e.history)) e.history = [];
     e.createdAt     = e.createdAt || nowIso();
     e.updatedAt     = e.updatedAt || e.createdAt;
@@ -429,6 +431,7 @@ const EmployeeRepo = (() => {
       fields: Object.assign({}, fields),
       exited: false,
       exitDate: null,
+      noRenewal: false,
       history: [],
       createdAt: nowIso(),
       updatedAt: nowIso(),
@@ -565,6 +568,25 @@ const EmployeeRepo = (() => {
       emp.exitDate = null;
       logChange(emp, 'visszavetel', before, { source, always: true });
     }
+    emp.updatedAt = nowIso();
+    emp.updatedBy = currentUserName();
+    scheduleSave();
+    emit();
+    return emp;
+  }
+
+  /**
+   * Az engedély NEM kerül meghosszabbításra (pl. a munkaviszony a lejárattal
+   * véget ér). Nem mező, hanem jelölés, mint a kilépés: a lejáró engedélyek
+   * teendőlistája ebből tudja, hogy erre a dolgozóra nem kell ügyet nyitni.
+   */
+  function setNoRenewal(id, value, { source = 'urlap' } = {}) {
+    ensureLoaded();
+    const emp = get(id);
+    if (!emp) throw new Error('Nincs ilyen azonosítójú személy.');
+    if (emp.noRenewal === !!value) return emp;
+    emp.noRenewal = !!value;
+    logChange(emp, value ? 'nem_hosszabbit' : 'hosszabbit', emp.fields, { source, always: true });
     emp.updatedAt = nowIso();
     emp.updatedBy = currentUserName();
     scheduleSave();
@@ -839,7 +861,7 @@ const EmployeeRepo = (() => {
     all, get, count, search, findByIdentifier, findByNaturalKey, matchIncoming,
     currentIdentifier, idTypeLabel, naturalKeyOf,
     // módosítás
-    create, update, addIdentifier, removeIdentifier, setExited, destroy,
+    create, update, addIdentifier, removeIdentifier, setExited, setNoRenewal, destroy,
     // belső, teszteléshez
     _validate: validate, _normText: normText,
   };

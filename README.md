@@ -31,6 +31,13 @@ Az **Ügyek** fül címkéjén piros pötty jelzi, hány ügy határideje járt 
 Csak a lejártak kapnak jelzést — ha minden szám ott lenne, pár nap alatt
 megszoknánk, és a jelzés semmit nem jelentene.
 
+**A felület megjegyzi magát — fiókonként.** Az utolsó fül, az Ügyek nézete és
+rendezése, a táblák oszlopai/szélességei/rendezése/szűrői, az EH-panel
+kapcsolói, a Dokumentumok kártyáinak helye (a `⠿` fogantyúval húzhatók,
+oszlopon belül és oszlopok között), magassága és az oszlopok aránya a belépett
+fiókhoz mentődik (a böngésző tárolójában). Amíg egy fióknak nincs saját
+beállítása, a korábbi, közös érték az induló.
+
 ### Első használat
 
 1. **Nyilvántartás** → *Adatmappa kiválasztása* — ide kerül a `docgen-employees.json`.
@@ -495,6 +502,25 @@ bejegyzés** — egy változatlan adatokkal újramentett sor nem zajosítja a
 naplót; a létrehozás, a kilépés és a visszavétel viszont önmagában is
 esemény, mezőváltozás nélkül is bekerül.
 
+## Összesítő lap
+
+Egy dolgozó adatai egy csak olvasható lapon: Nyilvántartás → **dupla kattintás
+a soron**, vagy egy kijelölt sor → **Összesítő**. A szöveg kijelölhető és
+másolható; egy adatra kattintva a szerkesztő **pont annál a mezőnél** nyílik
+meg (azonosítónál az azonosító-blokknál), mentés után vissza az összesítőre.
+Az üres mezők alapból rejtve (*Üres mezők is*).
+
+A Nyilvántartás táblájában a cellák szövege is kijelölhető: húzás vagy dupla
+kattintás nem vált sort, csak a sima kattintás.
+
+## „Nem hosszabbítjuk”
+
+Ha egy dolgozó engedélye nem kerül meghosszabbításra: sor(ok) kijelölése →
+**Nem hosszabbítjuk**. A jelölés a *Hosszabbítás* oszlopban és a sor elején egy
+borostyán csíkkal látszik, az Előzményekbe is bekerül, és a dolgozó **kimarad az
+Ügyek → Áttekintés „Nincs még ügye” listájából**. Visszavonás ugyanott:
+**Mégis hosszabbítjuk**.
+
 ## Kilépés és törlés
 
 **Kilépettnek jelölés** a normál út: az adat megmarad, csak kikerül a listákból
@@ -696,6 +722,18 @@ ablak pontosan ennyivel a lejárat előtt nyílik.
 
 Egy ügy megnyitása után a felső sáv **„⌂ Áttekintés"** gombja (vagy az
 **Esc**) hozza vissza ezt a nézetet.
+
+A „Nincs még ügye” listából kimarad, akinél a Nyilvántartásban jelölve van:
+**Nem hosszabbítjuk**.
+
+### Enter Hungary panel: fókusz nézet
+
+Az ügy **Enter Hungary** fülén a **⤢ Fókusz nézet** gomb elrejti az app
+fejlécét, a fülsort, a nézetváltót, az ügy fejlécét és az Idővonal/EH füleket —
+nagyítva ezek a magasság felét vitték el. A dolgozó neve ilyenkor a panel saját
+fejlécében áll. Kilépés: ugyanaz a gomb, vagy **Esc** (mezőn kívül). A választás
+felhasználónként megmarad. Mentés és jogcímváltás után a nézet ott marad, ahol
+volt — nem ugrik a lap tetejére.
 
 
 Az idegenrendészeti ügyintézés nem állapot, hanem folyamat: a kérelmek egymás

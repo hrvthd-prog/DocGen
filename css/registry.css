@@ -406,3 +406,46 @@
 .ld-table td { vertical-align: top; }
 #al-table .cp-table-wrap { max-height: calc(100vh - 380px); }
 .al-detail { min-width: 560px; }
+
+/* „Nem hosszabbítjuk" jelölésű sor: borostyán csík az első adatoszlopon, hogy
+   oszlop nélkül is látsszon */
+.rg-norenewal td:nth-child(3) { box-shadow: inset 3px 0 0 var(--c-amber); }
+
+/* ── Dolgozói összesítő (EmployeeSummary) ─────────────────── */
+.es-wrap { min-width: min(720px, 80vw); }
+.es-chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.es-chip {
+  font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 10px;
+  border: 1px solid var(--c-border);
+}
+.es-chip.is-on   { background: #E3F3E7; color: #1F6B36; border-color: #BFE3C8; }
+.es-chip.is-off  { background: var(--c-bg); color: var(--c-muted); }
+.es-chip.is-warn { background: #FDF3DD; color: #8A6410; border-color: #F0D9A6; }
+.es-empty-toggle { margin-left: auto; font-size: 12px; }
+.es-group { margin-top: 14px; }
+.es-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0 18px;
+}
+.es-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 8px;
+  padding: 5px 6px; border-bottom: 1px solid var(--c-bg); border-radius: 4px;
+  cursor: pointer; font-size: 12.5px;
+}
+.es-row:hover { background: rgba(61,166,140,.08); }
+.es-row:hover .es-value::after { content: ' ✎'; color: var(--c-teal); }
+.es-label { color: var(--c-muted); font-size: 11.5px; overflow-wrap: anywhere; }
+.es-value { color: var(--c-text); overflow-wrap: anywhere; user-select: text; }
+.es-none  { color: var(--c-muted); font-style: italic; }
+.es-case {
+  display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline;
+  padding: 5px 6px; font-size: 12.5px; border-bottom: 1px solid var(--c-bg);
+}
+.es-case.is-closed { opacity: .6; }
+
+/* A szerkesztő ennél a mezőnél nyílt meg (az összesítőről) */
+.ef-focus {
+  outline: 2px solid var(--c-teal); outline-offset: 3px; border-radius: 4px;
+  animation: ef-focus-pulse 1.4s ease-out 1;
+}
+@keyframes ef-focus-pulse { from { background: rgba(43,170,170,.18); } to { background: transparent; } }

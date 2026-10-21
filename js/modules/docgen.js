@@ -312,19 +312,45 @@ const DocgenModule = (() => {
     if (srch) srch.value = '';
     updateGenButtons();
     updateGenSummary();
-    requestAnimationFrame(() => {
-      try {
-        const saved = parseFloat(localStorage.getItem('docgen-ws-split'));
-        if (saved > 0.1 && saved < 0.9) {
-          const ws = container.querySelector('.workspace');
-          const cl = q('#dg-col-templates');
-          if (ws && cl && ws.offsetWidth > 0) {
-            cl.style.flex = 'none';
-            cl.style.width = Math.round(ws.offsetWidth * saved) + 'px';
-          }
-        }
-      } catch {}
+    elrendezesVisszaallit();
+  }
+
+  // ── A munkaterület elrendezése (felhasználónként mentve) ─────────────────
+  // Az oszlopok aránya, a kártyák helye és a kézzel állított magasságuk. Az
+  // arány százalékban áll vissza: a fül rajzolásakor gyakran még rejtett, a
+  // szélessége 0 — a pixeles visszaállítás eddig ezért maradt el.
+  const ELRENDEZES_KEY = 'docgen_layout';
+
+  function elrendezesVisszaallit() {
+    let arany = Settings.getUser('docgen_ws_split', null);
+    if (arany == null) { try { arany = parseFloat(localStorage.getItem('docgen-ws-split')); } catch {} }
+    const bal = q('#dg-col-templates');
+    if (bal && arany > 0.1 && arany < 0.9) {
+      bal.style.flex  = 'none';
+      bal.style.width = (arany * 100).toFixed(2) + '%';
+    }
+    const e = Settings.getUser(ELRENDEZES_KEY, null);
+    if (!e) return;
+    for (const [oszlopId, kartyak] of Object.entries(e.oszlopok || {})) {
+      const oszlop = q('#' + oszlopId);
+      if (!oszlop) continue;
+      for (const id of kartyak) { const k = q('#' + id); if (k) oszlop.appendChild(k); }
+    }
+    for (const [id, h] of Object.entries(e.magassag || {})) {
+      const k = q('#' + id);
+      if (k && h) k.style.height = h;
+    }
+  }
+
+  function elrendezesMent() {
+    const oszlopok = {}, magassag = {};
+    container.querySelectorAll('.workspace-col').forEach(o => {
+      oszlopok[o.id] = [...o.querySelectorAll(':scope > .ws-card')].map(k => k.id);
     });
+    container.querySelectorAll('.workspace-col > .ws-card').forEach(k => {
+      if (k.style.height) magassag[k.id] = k.style.height;
+    });
+    Settings.setUser(ELRENDEZES_KEY, { oszlopok, magassag });
   }
 
   function renderSidebar() {
@@ -370,7 +396,6 @@ const DocgenModule = (() => {
       <div class="sidebar-section" style="padding-top:4px;padding-bottom:4px">
         <button class="sidebar-btn" id="dg-show-missing-log">📋 Hiányzó adatok naplója</button>
       </div>
-      <div class="sidebar-resize-handle" id="dg-sidebar-resize" title="Húzd a sidebar méretezéséhez — dupla kattintás: visszaállítás"></div>
     `;
   }
 
@@ -494,7 +519,7 @@ const DocgenModule = (() => {
 
     return `
       <div class="workspace-col" id="dg-col-templates">
-        <div class="ws-card" id="dg-card-templates" draggable="true">
+        <div class="ws-card" id="dg-card-templates">
           <div class="ws-card-header">
             <span class="ws-card-drag-handle" title="Húzd át a pozíció megváltoztatásához">⠿</span>
             <div class="ws-card-title">Sablonok</div>
@@ -532,7 +557,7 @@ const DocgenModule = (() => {
       <div class="ws-resize-divider" id="dg-col-divider" title="Húzd az oszlopok átméretezéséhez"></div>
 
       <div class="workspace-col" id="dg-col-gen">
-        <div class="ws-card" id="dg-card-mai-nap" draggable="true">
+        <div class="ws-card" id="dg-card-mai-nap">
           <div class="ws-card-header">
             <span class="ws-card-drag-handle" title="Húzd át a pozíció megváltoztatásához">⠿</span>
             <div class="ws-card-title">Mai nap</div>
@@ -544,7 +569,7 @@ const DocgenModule = (() => {
           </div>
         </div>
 
-        <div class="ws-card" id="dg-card-summary" draggable="true">
+        <div class="ws-card" id="dg-card-summary">
           <div class="ws-card-header">
             <span class="ws-card-drag-handle" title="Húzd át a pozíció megváltoztatásához">⠿</span>
             <div class="ws-card-title">Összesítő</div>
@@ -557,7 +582,7 @@ const DocgenModule = (() => {
           </div>
         </div>
 
-        <div class="ws-card" id="dg-card-merge" draggable="true">
+        <div class="ws-card" id="dg-card-merge">
           <div class="ws-card-header">
             <span class="ws-card-drag-handle" title="Húzd át a pozíció megváltoztatásához">⠿</span>
             <div class="ws-card-title">PDF összefűzés</div>
@@ -582,7 +607,7 @@ const DocgenModule = (() => {
           </div>
         </div>
 
-        <div class="ws-card" id="dg-card-gen" draggable="true">
+        <div class="ws-card" id="dg-card-gen">
           <div class="ws-card-header">
             <span class="ws-card-drag-handle" title="Húzd át a pozíció megváltoztatásához">⠿</span>
             <div class="ws-card-title">Generálás</div>
@@ -627,36 +652,6 @@ const DocgenModule = (() => {
     q('#dg-set-dir').addEventListener('click', onTemplatesDirBtn);
     q('#dg-manage-groups').addEventListener('click', DocgenGroups.openGroupsDialog);
     q('#dg-set-output').addEventListener('click', onSetOutput);
-
-    // ── Sidebar magasság-resize ───────────────────────────────────────────────
-    const sidebar       = q('#dg-sidebar');
-    const resizeHandle  = q('#dg-sidebar-resize');
-    if (sidebar && resizeHandle) {
-      const savedH = Settings.get('docgen_sidebar_h', null);
-      if (savedH) sidebar.style.maxHeight = savedH + 'px';
-
-      resizeHandle.addEventListener('mousedown', e => {
-        e.preventDefault();
-        const startY = e.clientY;
-        const startH = sidebar.offsetHeight;
-        const onMove = ev => {
-          const newH = Math.max(200, startH + (ev.clientY - startY));
-          sidebar.style.maxHeight = newH + 'px';
-        };
-        const onUp = () => {
-          Settings.set('docgen_sidebar_h', parseInt(sidebar.style.maxHeight) || sidebar.offsetHeight);
-          document.removeEventListener('mousemove', onMove);
-          document.removeEventListener('mouseup', onUp);
-        };
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-      });
-
-      resizeHandle.addEventListener('dblclick', () => {
-        sidebar.style.maxHeight = '';
-        Settings.remove('docgen_sidebar_h');
-      });
-    }
   }
 
   function bindWorkspace() {
@@ -783,10 +778,8 @@ const DocgenModule = (() => {
         }
         function onUp() {
           divider.classList.remove('resizing');
-          try {
-            const ratio = colLeft.offsetWidth / workspace.offsetWidth;
-            localStorage.setItem('docgen-ws-split', ratio.toFixed(4));
-          } catch {}
+          const ratio = colLeft.offsetWidth / workspace.offsetWidth;
+          Settings.setUser('docgen_ws_split', Number(ratio.toFixed(4)));
           window.removeEventListener('mousemove', onMove);
           window.removeEventListener('mouseup', onUp);
         }
@@ -795,46 +788,46 @@ const DocgenModule = (() => {
       });
     }
 
-    // ── Workspace kártyák drag & drop cseréje ─────────────────────────────────
-    const cards = [q('#dg-card-templates'), q('#dg-card-merge'), q('#dg-card-gen')];
-    let _wsDragCard = null;
-    cards.forEach(card => {
-      if (!card) return;
+    // ── Workspace kártyák áthelyezése ─────────────────────────────────────────
+    // Mind az öt kártya, oszlopon belül és oszlopok között is; a kártya élőben
+    // a helyére csúszik, és az elrendezés mentődik. Eddig csak három kártya
+    // mozdult, csak oszlopok közt cserélve, és semmi nem mentődött. A kártya
+    // csak a fogantyútól húzható — különben a mezőkben kijelölni és a kártya
+    // alsó sarkán a magasságot állítani sem lehetett.
+    let huzott = null;
+    container.querySelectorAll('.workspace-col > .ws-card').forEach(card => {
       const handle = card.querySelector('.ws-card-drag-handle');
       if (handle) {
         handle.addEventListener('mousedown', () => { card.draggable = true; });
         handle.addEventListener('mouseup',   () => { card.draggable = false; });
       }
       card.addEventListener('dragstart', e => {
-        _wsDragCard = card;
-        setTimeout(() => card.classList.add('ws-dragging'), 0);
+        if (!card.draggable) return;
+        huzott = card;
         e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', card.id);
+        setTimeout(() => card.classList.add('ws-dragging'), 0);
       });
       card.addEventListener('dragend', () => {
         card.classList.remove('ws-dragging');
-        cards.forEach(c => c && c.classList.remove('ws-drag-over'));
-        _wsDragCard = null;
         card.draggable = false;
+        huzott = null;
+        elrendezesMent();
       });
-      card.addEventListener('dragover', e => {
-        if (_wsDragCard && _wsDragCard !== card) {
-          e.preventDefault();
-          card.classList.add('ws-drag-over');
-        }
-      });
-      card.addEventListener('dragleave', () => card.classList.remove('ws-drag-over'));
-      card.addEventListener('drop', e => {
+      // A kártya alsó sarkával állított magasság is megmarad
+      card.addEventListener('mouseup', () => { if (card.style.height) elrendezesMent(); });
+    });
+    container.querySelectorAll('.workspace-col').forEach(oszlop => {
+      oszlop.addEventListener('dragover', e => {
+        if (!huzott) return;
         e.preventDefault();
-        card.classList.remove('ws-drag-over');
-        if (!_wsDragCard || _wsDragCard === card) return;
-        // Felcserél két kártyát az oszlopaikban
-        const srcCol = _wsDragCard.parentElement;
-        const tgtCol = card.parentElement;
-        if (srcCol && tgtCol && srcCol !== tgtCol) {
-          srcCol.insertBefore(card, null);
-          tgtCol.insertBefore(_wsDragCard, null);
+        const ele = [...oszlop.querySelectorAll(':scope > .ws-card:not(.ws-dragging)')]
+          .find(k => { const r = k.getBoundingClientRect(); return e.clientY < r.top + r.height / 2; });
+        if (huzott.parentElement !== oszlop || ele !== huzott.nextElementSibling) {
+          oszlop.insertBefore(huzott, ele || null);
         }
       });
+      oszlop.addEventListener('drop', e => { if (huzott) e.preventDefault(); });
     });
   }
 

@@ -316,17 +316,27 @@
 .cv-del:hover { background: var(--c-red); color: #fff; }
 
 /* ── Részletező fülei ────────────────────────────────────────────────────── */
+/* Mappa-fülek színezett sávon: az aktív fül fehér, vastag színes felső
+   csíkkal, és összenő az alatta lévő tartalommal. A nézetváltó (fent) gombsor,
+   ez fülsor — a két szint így ránézésre sem keveredik. */
 
 .cv-tabs {
-  display: flex; gap: 2px; padding: 6px 14px 0;
+  display: flex; gap: 4px; padding: 8px 14px 0;
+  background: var(--c-sidebar);
   border-bottom: 1px solid var(--c-border);
 }
 .cv-tab {
-  font-size: 12px; padding: 5px 12px; border: 0; background: transparent;
-  color: var(--c-muted); cursor: pointer; border-bottom: 2px solid transparent;
+  font-size: 13px; font-weight: 500; padding: 7px 18px 8px;
+  border: 1px solid var(--c-border); border-bottom: none;
+  border-radius: 8px 8px 0 0; background: var(--c-bg);
+  color: var(--c-muted); cursor: pointer;
+  position: relative; top: 1px;
 }
-.cv-tab:hover { color: var(--c-text); }
-.cv-tab.is-active { color: var(--c-teal); border-bottom-color: var(--c-teal); font-weight: 600; }
+.cv-tab:hover { color: var(--c-text); background: var(--c-card); }
+.cv-tab.is-active {
+  background: var(--c-card); color: #21474f; font-weight: 700;
+  box-shadow: inset 0 3px 0 var(--c-teal);
+}
 
 /* ── Enter Hungary panel ─────────────────────────────────────────────────── */
 
@@ -342,6 +352,21 @@
 .eh-hint { font-size: 10px; color: var(--c-muted); padding-bottom: 5px; cursor: help; }
 /* A kézi sorok rejtése a fejléc jobb szélére kerül, a többitől elhúzva. */
 .eh-kezi { margin-left: auto; margin-bottom: 4px; }
+.eh-fokusz-btn { margin-bottom: 4px; }
+
+/* ── EH fókusz nézet ─────────────────────────────────────────────────────── */
+/* Nagyítva az app fejléce, a fülsor, a nézetváltó, az ügy fejléce és a
+   részletező fülei a magasság felét vitték el — és mind a helyén marad
+   görgetéskor. Fókuszban csak a panel látszik; a dolgozó neve a panel saját
+   fejlécébe kerül, hogy kiderüljön, kinél tartunk. */
+.app-root:has(#tab-cases.active .eh-wrap.is-fokusz) :is(.app-header, .tab-nav, .proba-bar),
+#tab-cases:has(.eh-wrap.is-fokusz) :is(.cv-viewbar, .cv-dhead, .cv-tabs) { display: none; }
+#tab-cases.active:has(.eh-wrap.is-fokusz) { height: 100vh; }
+.eh-who { display: none; }
+.eh-wrap.is-fokusz .eh-who {
+  display: block; flex: 0 0 100%;
+  font-size: 13.5px; font-weight: 700; color: #21474f;
+}
 
 .eh-rows { padding: 0 0 20px; }
 
