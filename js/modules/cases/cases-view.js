@@ -69,6 +69,7 @@ const CasesModule = (() => {
     // Nyitva a tömeges ügyintézés oldala (BulkCase)? Amíg igen, a fül nem
     // rajzol újra: az `onChange`-ek nem tüntethetik el a félig kitöltött lépést.
     tomeges: false,
+    kotegJelolt: new Set(),   // a Tömeges ügyek nézet kijelölt kötegei (törléshez)
   };
 
   /** A görgető dobozok — újrarajzoláskor ezek helyzete marad meg. */
@@ -379,6 +380,11 @@ const CasesModule = (() => {
   function tomegesHtml() {
     let lista = [];
     try { lista = BulkCase.kotegek(); } catch { lista = []; }
+    // Ami közben eltűnt, ne maradjon kijelölve
+    const van = new Set(lista.map(k => k.batchId));
+    for (const id of state.kotegJelolt) if (!van.has(id)) state.kotegJelolt.delete(id);
+    const jeloltDb = state.kotegJelolt.size;
+    const torolhet = irhat();
     const nevek = k => {
       const n = k.ugyek.map(c => dolgozoNeve(c.employeeId));
       return n.slice(0, 4).join(', ') + (n.length > 4 ? ` és még ${n.length - 4}` : '');
@@ -389,6 +395,8 @@ const CasesModule = (() => {
           ${lista.length ? `
             <table class="data-table cv-table">
               <thead><tr>
+                ${torolhet ? `<th class="cv-th cv-th--cb"><input type="checkbox" id="cv-batch-all"
+                    title="Mind kijelölése" ${jeloltDb && jeloltDb === lista.length ? 'checked' : ''}></th>` : ''}
                 <th class="cv-th">Megnyitva</th>
                 <th class="cv-th">Ügytípus</th>
                 <th class="cv-th">Dolgozók</th>
@@ -396,7 +404,10 @@ const CasesModule = (() => {
                 <th class="cv-th cv-th--go"></th>
               </tr></thead>
               <tbody>${lista.map(k => `
-                <tr class="cv-tr" data-batch="${escHtml(k.batchId)}" tabindex="0" title="A köteg megnyitása">
+                <tr class="cv-tr ${state.kotegJelolt.has(k.batchId) ? 'is-selected' : ''}"
+                    data-batch="${escHtml(k.batchId)}" tabindex="0" title="A köteg megnyitása">
+                  ${torolhet ? `<td class="cv-td--cb"><input type="checkbox" data-batch-cb="${escHtml(k.batchId)}"
+                      ${state.kotegJelolt.has(k.batchId) ? 'checked' : ''} title="Kijelölés törléshez"></td>` : ''}
                   <td class="cv-td--date">${escHtml(k.openedAt || '')}</td>
                   <td>${escHtml(CaseTypes.label(k.tipus))}</td>
                   <td><span class="cv-t__nev">${k.ugyek.length} dolgozó</span>
@@ -412,6 +423,8 @@ const CasesModule = (() => {
         <div class="cv-foot">
           ${irhat() && BulkCase.hasznalhato()
             ? '<button class="btn btn-primary btn-sm" id="cv-new-bulk">Új tömeges ügy</button>' : ''}
+          ${torolhet ? `<button class="btn btn-ghost btn-sm cv-del" id="cv-batch-del" ${jeloltDb ? '' : 'disabled'}
+              >Kijelöltek törlése${jeloltDb ? ` (${jeloltDb})` : ''}</button>` : ''}
           <span class="cv-count">${lista.length} köteg</span>
         </div>
       </div>`;
@@ -713,6 +726,51 @@ const CasesModule = (() => {
     });
   }
 
+  /**
+   * Kijelölt kötegek végleges törlése, minden ügyükkel. A nyilvántartásba írt
+   * cím marad — ezt ki kell mondani, különben a törlést visszavonásnak hinnék.
+   */
+  function kotegTorlesMegerosites() {
+    const kotegek = BulkCase.kotegek().filter(k => state.kotegJelolt.has(k.batchId));
+    if (!kotegek.length) return;
+    const ugyDb = kotegek.reduce((n, k) => n + k.ugyek.length, 0);
+    showDialog({
+      title: 'Tömeges ügyek törlése',
+      body: `
+        <p style="font-size:13px;margin-bottom:10px">
+          Biztosan véglegesen törlöd a kijelölt <b>${kotegek.length}</b> köteget?
+          Összesen <b>${ugyDb}</b> ügy törlődik.
+        </p>
+        <ul class="sv-warn-list">
+          ${kotegek.map(k => `<li>${escHtml(k.openedAt || '')} · ${escHtml(CaseTypes.label(k.tipus))} ·
+             ${k.ugyek.length} dolgozó${k.nyitott < k.ugyek.length ? ` (${k.ugyek.length - k.nyitott} lezárt ügy is)` : ''}</li>`).join('')}
+        </ul>
+        <ul class="sv-warn-list">
+          <li>Az ügyek idővonala (státuszok, megjegyzések, EH szám, iktatószám) elvész.</li>
+          <li>A nyilvántartásba rögzített adatok (pl. az új cím) <b>maradnak</b> — a törlés nem
+              állítja vissza őket. A régi érték a Nyilvántartás → Legutóbbi változások listában látszik.</li>
+          <li>A már legenerált fájlok a mappában maradnak.</li>
+        </ul>
+        <p class="ef-hint">A törlés a <code>data/backup/</code> mappából állítható vissza,
+          ha adatmappát használsz.</p>`,
+      footer: `
+        <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Mégse</button>
+        <button class="btn btn-danger btn-sm" id="cv-batch-del-confirm">Végleges törlés (${ugyDb} ügy)</button>`,
+    });
+    document.getElementById('cv-batch-del-confirm').addEventListener('click', async () => {
+      try {
+        const db = await BulkCase.torol(kotegek.map(k => k.batchId));
+        closeDialog();
+        BevLogger.info('UGY_TORLES', `${kotegek.length} tömeges köteg törölve (${db} ügy)`, '', '');
+        state.kotegJelolt.clear();
+        toast(`✓ ${kotegek.length} köteg törölve (${db} ügy)`, 'success');
+        render();
+      } catch (e) {
+        toast('A törlés nem sikerült: ' + e.message, 'error');
+      }
+    });
+  }
+
   // ── Megjelenítés ───────────────────────────────────────────────────────────
 
   function valt(nezet) {
@@ -877,6 +935,7 @@ const CasesModule = (() => {
       el.addEventListener('click', fn);
       el.addEventListener('keydown', e => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
+        if (e.target.closest && e.target.closest('input')) return;   // a jelölőnégyzet szóköze
         e.preventDefault();
         fn();
       });
@@ -884,8 +943,20 @@ const CasesModule = (() => {
 
     container.querySelectorAll('.cv-tr[data-id]').forEach(tr =>
       sorAktival(tr, () => megnyit(tr.dataset.id)));
+    // A jelölőnégyzet nem nyitja meg a köteget
     container.querySelectorAll('[data-batch]').forEach(el =>
-      sorAktival(el, () => tomegesNyit(el.dataset.batch)));
+      sorAktival(el, e => { if (!(e && e.target.closest('.cv-td--cb'))) tomegesNyit(el.dataset.batch); }));
+    container.querySelectorAll('[data-batch-cb]').forEach(cb => cb.addEventListener('change', () => {
+      if (cb.checked) state.kotegJelolt.add(cb.dataset.batchCb); else state.kotegJelolt.delete(cb.dataset.batchCb);
+      render();
+    }));
+    const mind = q('#cv-batch-all');
+    if (mind) mind.addEventListener('change', () => {
+      state.kotegJelolt = new Set(mind.checked ? BulkCase.kotegek().map(k => k.batchId) : []);
+      render();
+    });
+    const kotegTorles = q('#cv-batch-del');
+    if (kotegTorles) kotegTorles.addEventListener('click', kotegTorlesMegerosites);
     const ujKoteg = q('#cv-new-bulk');
     if (ujKoteg) ujKoteg.addEventListener('click', () => tomegesNyit());
     container.querySelectorAll('[data-open-case]').forEach(el =>

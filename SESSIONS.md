@@ -68,6 +68,29 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-27 (3.) — Kötegek tömeges törlése, tömeges szerkesztés a Nyilvántartásból
+
+**Cél:** a tömeges ügyek legyenek tömegesen törölhetők; a Nyilvántartásból
+lehessen tömegesen adatot szerkeszteni a tömeges ügy metodikájával, ügy nélkül.
+**Változás (`v10.87`):** részletek: `TERV-tomeges-ugyintezes.md` 12.
+- Új `js/modules/registry/bulk-edit.js` (`BulkEdit`: `szerkesztheto`, `terv`,
+  `alkalmaz`, `mezoHtml`, `open`); Nyilvántartás → „Tömeges szerkesztés…”
+  (a kijelöltekre); napló-forrás: `tomeges_szerk`.
+- `bulk-case.js`: a `terv` / `rogzit` a `BulkEdit` közös magjára épül; új
+  `torol(batchIds)`. `cases-view.js`: a Tömeges ügyek nézetben jelölőnégyzetek,
+  „Kijelöltek törlése” megerősítéssel (`kotegTorlesMegerosites`).
+**Miért / döntés:** a kötegtörlés NEM állítja vissza a nyilvántartást (a napló
+megőrzi a régit, a visszaírás azóta módosított adatot írhatna felül). A tömeges
+szerkesztésből kimarad a név, a születési dátum, az azonosítók és a közvetlen vezető.
+**Tesztek:** `node test/run-all.js` zöld; `bulk-case.test.js` +5 (32). Headless
+Chrome-ban: 6 dolgozó két mezője egy lépésben (`tomeges_szerk`, ügy nem
+keletkezett); a köteg jelölőnégyzete nem nyitja meg a köteget; törlés után 0 köteg.
+
+**Nyitott / következő:**
+- **Éles próba:** Nyilvántartás → 2-3 dolgozó → Tömeges szerkesztés → egy mező →
+  összesítő → jóváhagyás → Legutóbbi változások: „tömeges szerkesztés”. Ügyek →
+  Tömeges ügyek → egy próbaköteg törlése.
+
 ## 2026-10-27 (2.) — Javítások: hiánynapló-fagyás, szótárvesztés, szálláshely jogcíme, tömeges ügy finomítások
 
 **Cél:** nyolc pontos visszajelzés a `v10.85` után (lásd `TERV-tomeges-ugyintezes.md` 11.).

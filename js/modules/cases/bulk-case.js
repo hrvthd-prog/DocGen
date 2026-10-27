@@ -53,57 +53,62 @@ const BulkCase = (() => {
   // ── Logika ─────────────────────────────────────────────────────────────────
 
   /**
-   * Mi fog változni? Semmit nem módosít.
+   * Mi fog változni? Semmit nem módosít. A tömeges szerkesztés (BulkEdit.terv)
+   * a típus mezőcsoportjára, plusz a régi/új cím és a nyitott ügy jelzése.
    *
    * Az új cím TELJES CSERE: az üresen hagyott mező (emelet, ajtó…) törlődik,
-   * különben a régi címből bent ragadna (döntés: TERV 9.). A validáció csak a
-   * típus mezőire szól — egy máshol hiányzó kötelező mező nem akaszthatja meg
-   * a címváltozást.
+   * különben a régi címből bent ragadna (döntés: TERV 9.).
    *
    * → [{ emp, nev, uj, valtozasok: [{key, label, from, to}], hibak, regiCim, ujCim, nyitottUgy }]
    */
   function terv(t, employeeIds, ujErtekek = {}) {
-    const kulcsok = mezoi(t).map(f => f.key);
-    return employeeIds.map(id => EmployeeRepo.get(id)).filter(Boolean).map(emp => {
-      const uj = {};
-      for (const k of kulcsok) uj[k] = str(ujErtekek[k]);
-      const utana = Object.assign({}, emp.fields, uj);
-      const valtozasok = kulcsok
-        .filter(k => str(emp.fields[k]) !== uj[k])
-        .map(k => ({ key: k, label: SchemaStore.field(k).label.hu, from: str(emp.fields[k]), to: uj[k] }));
-      const hibak = SchemaStore.validateValues(utana)
-        .filter(p => kulcsok.includes(p.key)).map(p => p.message);
+    return BulkEdit.terv(mezoi(t).map(f => f.key), employeeIds, ujErtekek).map(s => {
       let nyitottUgy = false;
-      try { nyitottUgy = CaseRepo.hasOpenCaseOfType(emp.id, t.caseType); } catch { /* ügyek nélkül */ }
-      return { emp, nev: nevOf(emp), uj, valtozasok, hibak,
-               regiCim: cim(t, emp.fields), ujCim: cim(t, utana), nyitottUgy };
+      try { nyitottUgy = CaseRepo.hasOpenCaseOfType(s.emp.id, t.caseType); } catch { /* ügyek nélkül */ }
+      return Object.assign(s, { regiCim: cim(t, s.emp.fields), ujCim: cim(t, s.utana), nyitottUgy });
     });
   }
 
   /**
-   * A jóváhagyott terv végrehajtása: a nyilvántartás (ugyanaz az út, mint az
-   * importnál — napló, validáció, mentés), dolgozónként egy ügy közös köteggel,
-   * majd mentés és VISSZAOLVASÁS a tárolóból.
+   * A jóváhagyott terv végrehajtása: a nyilvántartás és a visszaolvasás a
+   * tömeges szerkesztéssel közös (BulkEdit.alkalmaz), utána dolgozónként egy
+   * ügy közös köteggel — annál, akinél az írás sikerült.
    *
    * → { batchId, ugyek: [id], hibak: [{nev, uzenet}], nemMentett: [nev] }
    */
   async function rogzit(t, sorok, { triggerDate = null } = {}) {
     const batchId = CaseRepo.newId();
-    const ugyek = [], hibak = [];
+    const { hibak, nemMentett } = await BulkEdit.alkalmaz(sorok, SOURCE);
+    const hibas = new Set(hibak.map(h => h.id));
+    const ugyek = [];
     for (const s of sorok) {
+      if (hibas.has(s.emp.id)) continue;
       try {
-        if (s.valtozasok.length) EmployeeRepo.update(s.emp.id, { fields: s.uj, source: SOURCE });
         ugyek.push(CaseRepo.create({
           employeeId: s.emp.id, type: t.caseType, triggerDate: triggerDate || null, batchId,
           note: `Tömeges ügyintézés — ${sorok.length} dolgozó`,
         }).id);
       } catch (e) {
-        hibak.push({ nev: s.nev, uzenet: e.message });
+        hibak.push({ id: s.emp.id, nev: s.nev, uzenet: e.message });
       }
     }
-    const elteres = await EmployeeRepo.verifyStored(sorok.map(s => s.emp.id));
     await CaseRepo.flush();
-    return { batchId, ugyek, hibak, nemMentett: elteres.map(id => nevOf(EmployeeRepo.get(id))) };
+    return { batchId, ugyek, hibak, nemMentett };
+  }
+
+  /**
+   * Kötegek végleges törlése, minden ügyükkel. A nyilvántartásba írt adat
+   * MARAD (a változásnapló mutatja a régit) — visszaállítani nem lehet
+   * biztonságosan, mert azóta más is módosíthatta. → a törölt ügyek száma
+   */
+  async function torol(batchIds) {
+    let db = 0;
+    for (const id of batchIds) {
+      for (const c of CaseRepo.batch(id)) { if (CaseRepo.destroy(c.id)) db++; }
+      if (typeof FsService !== 'undefined') FsService.saveHandle(mappaKulcs(id), null).catch(() => {});
+    }
+    await CaseRepo.flush();
+    return db;
   }
 
   /** Egy köteg: az ügyei, a dolgozói és a típusa (a köteg újranyitásához). */
@@ -221,27 +226,7 @@ const BulkCase = (() => {
       </section>`;
   }
 
-  function mezoHtml(f) {
-    const id = 'bk-f-' + f.key;
-    const val = str(st.ertekek[f.key]);
-    let input;
-    if (f.type === 'enum') {
-      const opts = ValueCodec.options(f, 'hu');
-      input = `<select class="field-select" id="${id}" data-key="${escHtml(f.key)}">
-          <option value="">—</option>
-          ${opts.map(o => `<option value="${escHtml(o.id)}"${o.id === val ? ' selected' : ''}>${escHtml(o.label)}</option>`).join('')}
-        </select>`;
-    } else if (f.type === 'date') {
-      input = dateFieldHtml({ id, key: f.key, value: val });
-    } else {
-      input = `<input type="text" class="field-input" id="${id}" data-key="${escHtml(f.key)}" value="${escHtml(val)}">`;
-    }
-    return `
-      <label class="ef-field" for="${id}">
-        <span class="ef-label">${escHtml(f.label.hu)}${f.required ? '<span class="ef-req">*</span>' : ''}</span>
-        ${input}
-      </label>`;
-  }
+  const mezoHtml = f => BulkEdit.mezoHtml(f, st.ertekek[f.key], 'bk-f-');
 
   function rajzol() {
     if (!gyoker || !st) return;
@@ -671,7 +656,7 @@ const BulkCase = (() => {
   }
 
   return {
-    TIPUSOK, tipus, mezoi, terv, rogzit, koteg, kotegek, elovalasztott,
+    TIPUSOK, tipus, mezoi, terv, rogzit, torol, koteg, kotegek, elovalasztott,
     hasznalhato, open, openTemplates,
   };
 })();

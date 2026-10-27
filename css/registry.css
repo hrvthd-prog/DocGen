@@ -493,3 +493,14 @@
 .eh-recent-row { cursor: pointer; }
 .eh-recent-row:hover, .eh-recent-row:focus { background: rgba(61,166,140,.08); outline: none; }
 .eh-more { color: var(--c-muted); font-size: 11px; }
+
+/* Tömeges szerkesztés (BulkEdit) */
+.be-add { margin: 10px 0; }
+.be-add .field-select { max-width: 360px; }
+.be-grid { margin-bottom: 8px; }
+.be-field { position: relative; }
+.be-del {
+  position: absolute; top: -2px; right: 0; border: none; background: none; cursor: pointer;
+  color: var(--c-muted); font-size: 15px; line-height: 1; padding: 2px 4px;
+}
+.be-del:hover { color: var(--c-red); }

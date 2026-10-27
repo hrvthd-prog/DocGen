@@ -265,3 +265,27 @@ hiánynapló Javítás → mentés → frissült napló → Legutóbbi változá
 | Tömeges ügyek közvetlenül | — | Új nézet: Ügyek → **Tömeges ügyek** (`BulkCase.kotegek`). |
 | Generálás / „Külön mappa” után felgörget | A teljes újrarajzolás. | A tömeges oldal görgetése megmarad. |
 | A köteg mappáját jegyezze meg | — | IndexedDB-ben, kötegenként (`tomeges_kimenet:<batchId>`: mappa + kapcsoló); az engedélyt a generálás gombja kéri vissza. |
+
+## 12. Kötegek tömeges törlése, tömeges szerkesztés a Nyilvántartásból (2026-10-27, `v10.87`)
+
+**Kötegtörlés.** Ügyek → Tömeges ügyek: jelölőnégyzet soronként és a fejlécben,
+*Kijelöltek törlése* → megerősítés (kötegek, ügyszám) → `BulkCase.torol`
+(`CaseRepo.destroy` ügyenként, majd `flush`; a köteg megjegyzett mappája is
+törlődik). **A nyilvántartásba írt adat marad**: a régi érték a változásnaplóban
+megvan, de visszaírni nem biztonságos (azóta más is módosíthatta). Ezt a
+megerősítő párbeszéd kimondja, különben a törlést visszavonásnak hinnék.
+
+**Tömeges szerkesztés** (új `js/modules/registry/bulk-edit.js`, `BulkEdit`).
+Ugyanaz a menet, mint a tömeges ügynél, csak ügy nélkül: Nyilvántartás kijelölés
+→ mezők (egyenként vagy egész csoport) és értékek → összesítő → jóváhagyás →
+`EmployeeRepo.update` (`source: 'tomeges_szerk'`) → `verifyStored`.
+
+- **Csak a felvett mezők** változnak; a felvett, üresen hagyott mező töröl (mint
+  a tömeges címnél) — az összesítő kiírja.
+- **Kimarad:** számított mező; az azonosítóból tükrözött mezők (egyediek, az
+  azonosító-blokk a forrásuk); név és születési dátum (a dolgozó azonossága);
+  a közvetlen vezető (saját tömeges eszköze van fiók-választóval); amit a szint
+  nem írhat (`Auth.canWriteGroup`).
+- **Közös mag:** a `BulkEdit.terv` / `alkalmaz` a tömeges ügy logikája is —
+  a `BulkCase.terv` a szálláshely-csoportra hívja, a `rogzit` az írás és a
+  visszaolvasás után csak annál nyit ügyet, akinél az írás sikerült.

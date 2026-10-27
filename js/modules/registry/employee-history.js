@@ -29,6 +29,7 @@ const EmployeeHistory = (() => {
     fiok:   'fiók átnevezése',
     'eh-panel':  'EH-panel',
     tomeges_ugy: 'tömeges ügyintézés',
+    tomeges_szerk: 'tömeges szerkesztés',
     hianynaplo:  'hiányzó-adat napló',
   };
 

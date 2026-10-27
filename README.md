@@ -513,6 +513,17 @@ bejegyzés** — egy változatlan adatokkal újramentett sor nem zajosítja a
 naplót; a létrehozás, a kilépés és a visszavétel viszont önmagában is
 esemény, mezőváltozás nélkül is bekerül.
 
+### Tömeges szerkesztés
+
+Nyilvántartás → sorok kijelölése → **Tömeges szerkesztés…**: ugyanaz az érték
+minden kijelöltnél, ügy nélkül. A *Mező hozzáadása* listából egyes mezők vagy
+egy egész csoport vehető fel; **csak a felvett mezők változnak**, a felvett, de
+üresen hagyott mező törlődik. Utána összesítő (dolgozónként régi → új), majd
+jóváhagyás: a változásnaplóba „tömeges szerkesztés” forrással kerül, és a
+program visszaolvassa a tárolóból. Nem szerkeszthető így a név, a születési
+dátum, az azonosítók (az Azonosítók blokkból jönnek) és a közvetlen vezető
+(arra a *Közvetlen vezető…* gomb való).
+
 ### Legutóbbi változások
 
 Nyilvántartás → **Legutóbbi változások**: az összes dolgozó naplója egy
@@ -769,7 +780,9 @@ megszokott űrlap) és **Tömeges ügyintézés**. Egyelőre egy tömeges típus
    újraindítás után a generálás gombja kéri vissza a mappa-engedélyt.
 
 A kötegek az Ügyek fül **Tömeges ügyek** nézetében közvetlenül elérhetők
-(megnyitás napja, ügytípus, dolgozók, állapot). A köteg ügyei a listán
+(megnyitás napja, ügytípus, dolgozók, állapot). Jelölőnégyzettel több köteg is
+kijelölhető, és a **Kijelöltek törlése** minden ügyükkel együtt törli őket — a
+nyilvántartásba rögzített adat (pl. az új cím) marad. A köteg ügyei a listán
 **„Tömeges”** jelölést kapnak; bármelyik ügy részletezőjéből a **Tömeges ügy
 (N dolgozó)** gomb is újranyitja a köteget a generálási lépésnél.
 

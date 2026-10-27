@@ -524,6 +524,7 @@ const RegistryModule = (() => {
     const egy  = n === 1;
     const mind = n > 0 && emps.every(e => e.exited);
     const nemHossz = n > 0 && emps.every(e => e.noRenewal);
+    const irhat = Auth.can('registry.write') || Auth.can('registry.write.hr');
 
     bar.innerHTML = `
       <span class="rg-bulk-count">${
@@ -534,6 +535,8 @@ const RegistryModule = (() => {
               title="Egy kijelölt rekord előzményei">Előzmények</button>
       <button class="btn btn-ghost btn-sm" data-bulk="edit" ${egy ? '' : 'disabled'}
               title="Egy kijelölt rekord szerkesztése">Szerkesztés</button>
+      ${irhat ? `<button class="btn btn-ghost btn-sm" data-bulk="bulkedit" ${n ? '' : 'disabled'}
+              title="Ugyanaz az érték minden kijelöltnél — összesítő és jóváhagyás után">Tömeges szerkesztés…</button>` : ''}
       <button class="btn btn-ghost btn-sm" data-bulk="exit" ${n ? '' : 'disabled'}>${
         mind ? 'Visszavétel' : 'Kilépettnek jelölés'}</button>
       <button class="btn btn-ghost btn-sm" data-bulk="norenewal" ${n ? '' : 'disabled'}
@@ -611,6 +614,7 @@ const RegistryModule = (() => {
           break;
         }
         case 'edit':    openForm(emps[0].id); break;
+        case 'bulkedit': BulkEdit.open(emps.map(e => e.id)); break;
         case 'export':  RegistryXlsxIO.exportData(emps); break;
         case 'leader':  openLeaderDialog(emps); break;
         case 'destroy': confirmDestroy(emps.map(e => e.id)); break;

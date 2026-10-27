@@ -43,6 +43,7 @@ for (const [rel, name] of [
   ['../js/services/case-repo.js',             'CaseRepo'],
   ['../js/modules/docgen/missing-log.js',     'DocgenMissingLog'],
   ['../js/modules/registry/employee-history.js', 'EmployeeHistory'],
+  ['../js/modules/registry/bulk-edit.js',     'BulkEdit'],
   ['../js/modules/cases/bulk-case.js',        'BulkCase'],
 ]) {
   let code = fs.readFileSync(path.join(__dirname, rel), 'utf8');
@@ -50,7 +51,7 @@ for (const [rel, name] of [
   vm.runInContext(code, sandbox, { filename: rel });
 }
 const { EmployeeRepo, SchemaStore, SEED_SCHEMA, CaseTypes, CaseRepo,
-        DocgenMissingLog, EmployeeHistory, BulkCase } = sandbox;
+        DocgenMissingLog, EmployeeHistory, BulkEdit, BulkCase } = sandbox;
 SchemaStore.loadFrom(SEED_SCHEMA);
 CaseTypes.loadFrom(null);
 
@@ -386,6 +387,68 @@ atest('bármely sémamentés (nem csak a szótáré) megtartja a máshol felvett
   assertEq(tarolt.dictionary.map(e => e.en).join(), 'Brazil');
   SchemaStore.useBackend(null);
   SchemaStore.loadFrom(SEED_SCHEMA);
+});
+
+// ── Tömeges szerkesztés a Nyilvántartásból (ügy nélkül) ─────────────────────
+asection('Tömeges szerkesztés');
+
+atest('a szerkeszthető mezők közül kimarad a név, a szül. dátum, az azonosító és a számított', () => {
+  const k = BulkEdit.szerkesztheto().map(f => f.key);
+  for (const tilos of ['surname', 'forename', 'date_of_birth', 'personnel_reg_number', 'pp_number', 'address'])
+    assert(!k.includes(tilos), tilos + ' szerkeszthető lett');
+  assert(k.includes('position') && k.includes('locality'), 'a szokásos mezők megvannak');
+});
+
+atest('csak a felvett mezők változnak; az üres felvett mező törlődik', async () => {
+  await tisztaAllapot();
+  const a = ujDolgozo('Nagy Béla', { position: 'hegesztő', feor: '7325' });
+  const b = ujDolgozo('Kis Anna',  { position: 'operátor', feor: '' });
+  const sorok = BulkEdit.terv(['position', 'feor'], [a.id, b.id], { position: 'gépkezelő', feor: '' });
+  assertEq(sorok[0].valtozasok.map(v => v.key).join(), 'position,feor');
+  assertEq(sorok[1].valtozasok.map(v => v.key).join(), 'position', 'az üres FEOR-nál nincs változás');
+  const r = await BulkEdit.alkalmaz(sorok);
+  assertEq(r.hibak.length + r.nemMentett.length, 0);
+  const t = id => tarolo._peek().employees.find(e => e.id === id);
+  assertEq(t(a.id).fields.position, 'gépkezelő');
+  assertEq(t(a.id).fields.feor, '', 'a felvett, üresen hagyott mező törlődött');
+  assertEq(t(a.id).fields.locality, 'Budapest', 'a fel nem vett mező érintetlen');
+  assertEq(t(a.id).history.at(-1).source, 'tomeges_szerk');
+  assertEq(CaseRepo.all().length, 0, 'ügy nem keletkezik');
+});
+
+atest('kötelező mező nem üríthető tömegesen', async () => {
+  await tisztaAllapot();
+  const a = ujDolgozo('Nagy Béla', { citizenship: 'Szerbia' });
+  const [s] = BulkEdit.terv(['citizenship'], [a.id], { citizenship: '' });
+  assert(s.hibak.length === 1, 'nincs hiba a kötelező mező ürítésére');
+});
+
+atest('enum mező: ismeretlen érték hibát ad, ismert átmegy', async () => {
+  await tisztaAllapot();
+  const a = ujDolgozo('Nagy Béla');
+  const [s] = BulkEdit.terv(['legal_title_of_accommodation'], [a.id], { legal_title_of_accommodation: 'nincs ilyen' });
+  assert(s.hibak.length === 1, 'ismeretlen enum-érték átment');
+  const [s2] = BulkEdit.terv(['legal_title_of_accommodation'], [a.id], { legal_title_of_accommodation: 'tenant' });
+  assertEq(s2.hibak.length, 0);
+});
+
+// ── Kötegek törlése ─────────────────────────────────────────────────────────
+asection('Kötegek törlése');
+
+atest('a kijelölt köteg minden ügye törlődik, más ügy és a nyilvántartás marad', async () => {
+  await tisztaAllapot();
+  const a = ujDolgozo('Nagy Béla'), b = ujDolgozo('Kis Anna');
+  const t = SZALLAS();
+  const r1 = await BulkCase.rogzit(t, BulkCase.terv(t, [a.id, b.id], UJ_CIM));
+  const r2 = await BulkCase.rogzit(t, BulkCase.terv(t, [a.id], UJ_CIM));
+  const egyedi = CaseRepo.create({ employeeId: b.id, type: 'adatvaltozas' });
+  const db = await BulkCase.torol([r1.batchId]);
+  assertEq(db, 2);
+  assertEq(CaseRepo.batch(r1.batchId).length, 0);
+  assertEq(CaseRepo.batch(r2.batchId).length, 1, 'a másik köteg megmaradt');
+  assert(CaseRepo.get(egyedi.id), 'az egyedi ügy megmaradt');
+  assertEq(EmployeeRepo.get(a.id).fields.locality, 'Győr', 'a rögzített cím marad');
+  assertEq(BulkCase.kotegek().length, 1);
 });
 
 // ── Futtatás ────────────────────────────────────────────────────────────────

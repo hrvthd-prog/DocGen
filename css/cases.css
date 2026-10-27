@@ -680,3 +680,7 @@
 .bk-del { color: var(--c-red); }
 .bk-map-bar { display: flex; gap: 8px; margin-bottom: 8px; }
 .bk-map-bar .field-select { flex: 0 0 auto; max-width: 340px; }
+
+/* Tömeges ügyek nézet: kijelölés törléshez */
+.cv-th--cb, .cv-td--cb { width: 34px; text-align: center; }
+.cv-td--cb input, .cv-th--cb input { cursor: pointer; }
