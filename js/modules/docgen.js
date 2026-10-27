@@ -1317,27 +1317,36 @@ const DocgenModule = (() => {
   // Műhely Áttekintője két fél dolgozót látna.
   // A válasz munkamenetre megjegyzésre kerül: egy kötegelt generálás ne kérdezzen
   // ugyanarról a dolgozóról többször.
-  const _workerChoice = new Map();          // clientName -> mappanév | '' (gyökér)
+  // A gyökér (kimeneti mappa) szerint külön: a tömeges ügy saját mappába generál,
+  // és ott a Dokumentumok fülön adott „gyökérbe” válasz nem érvényes.
+  const _workerChoice = new WeakMap();      // gyökér -> (clientName -> mappanév | '')
 
   // `sub`: a dolgozói alkönyvtár — a kész PDF-nyomtatvány (aláírás nélkül is
   // kész) a DIR_UP-ba megy, minden más a DIR_PREP-be.
-  async function resolveWorkerTarget(clientName, sub = FsService.DIR_PREP) {
-    if (!state.outputDir || !clientName) return null;
-    if (_workerChoice.has(clientName)) {
-      const pick = _workerChoice.get(clientName);
-      return pick ? _prepDirIn(pick, sub) : null;
+  // `ujatKerdesNelkul`: a tömeges ügy „Külön mappa minden dolgozónak” kapcsolója
+  // maga a beleegyezés — ott a NEM LÉTEZŐ mappa kérdés nélkül készül. Ha viszont
+  // több hasonló nevű van, ott is kérdezünk (párhuzamos dolgozói mappák ellen).
+  async function resolveWorkerTarget(clientName, sub = FsService.DIR_PREP, root = state.outputDir,
+                                     { ujatKerdesNelkul = false } = {}) {
+    if (!root || !clientName) return null;
+    if (!_workerChoice.has(root)) _workerChoice.set(root, new Map());
+    const valasztas = _workerChoice.get(root);
+    if (valasztas.has(clientName)) {
+      const pick = valasztas.get(clientName);
+      return pick ? _prepDirIn(root, pick, sub) : null;
     }
     let dirs = [];
-    try { dirs = await FsService.listSubDirs(state.outputDir); } catch { dirs = []; }
+    try { dirs = await FsService.listSubDirs(root); } catch { dirs = []; }
     dirs = dirs.filter(d => d !== FsService.DIR_PREP && d !== FsService.DIR_UP);
     const { dir, hits } = FsService.matchWorkerDir(clientName, dirs);
-    const pick = dir || await askWorkerDir(clientName, hits, dirs);
-    _workerChoice.set(clientName, pick || '');
-    return pick ? _prepDirIn(pick, sub) : null;
+    const pick = dir || (ujatKerdesNelkul && !hits.length ? clientName
+                                                          : await askWorkerDir(clientName, hits, dirs));
+    valasztas.set(clientName, pick || '');
+    return pick ? _prepDirIn(root, pick, sub) : null;
   }
 
-  async function _prepDirIn(workerDirName, sub) {
-    const wd = await FsService.getSubDir(state.outputDir, workerDirName, true);
+  async function _prepDirIn(root, workerDirName, sub) {
+    const wd = await FsService.getSubDir(root, workerDirName, true);
     return FsService.getSubDir(wd, sub, true);
   }
 
@@ -1855,28 +1864,17 @@ const DocgenModule = (() => {
              setSaving(){}, setPdf(){}, setPhase(){}, finish(){} };
   }
 
-  async function runGenerate({ docx, pdf }) {
-    if (!state.selectedClients.length)   { toast('Nincs kiválasztott ügyfél', 'warn'); return; }
-    if (!state.chosenTemplates.size)     { toast('Nincs kiválasztott sablon', 'warn'); return; }
-    if (!state.templatesDir)             { toast('Nincs sablonmappa beállítva', 'warn'); return; }
-
-    const clients   = state.clientRows.filter(r => state.selectedClients.includes(r.id));
-    const templates = [...state.chosenTemplates];
-    const total     = clients.length * templates.length;
+  /**
+   * A generálás magja, felület nélkül: dolgozó × sablon → memóriabeli fájlok.
+   * A Dokumentumok fül (`runGenerate`) és a tömeges ügy (`generateFor`) is ezt
+   * hívja; a `ui` a haladásjelző (`progress`) és az állapotsor (`status`).
+   */
+  async function renderDocs(clients, templates, ui) {
+    const total = clients.length * templates.length;
     let done = 0;
     const errors = [], generated = [];
     const allEmptyTags      = new Set();   // összegyűjtött hiányzó mezők az összes dokumentumból
     const missingLogEntries = [];          // naplóba kerülő bejegyzések
-
-    // ── Live progress az összesítő kártyán ───────────────────────────────────
-    const progress = _openProgressDialog(clients, templates);
-
-    // P3: részletes start-log
-    BevLogger.info('DOCGEN_START', `Generálás indítva (${docx?'DOCX':''}${docx&&pdf?'+':''}${pdf?'PDF':''})`,
-      BevLogger.snapshot({ clients: clients.length, templates: templates.length, total,
-        outputDir: state.outputDir?.name || null,
-        templatesDir: state.templatesDir?.name || null }),
-      `user=${currentUser}, clients=[${clients.slice(0,5).map(employeeName).join('|')}${clients.length>5?'…':''}], templates=[${templates.slice(0,5).join('|')}${templates.length>5?'…':''}]`);
 
     // Ha egy dolgozónak több nyitott ügye is hordoz EH számot, a dokumentumra a
     // legutóbb megnyitotté kerül. Ez választás, nem tény – ezért naplózzuk, hogy
@@ -1891,168 +1889,278 @@ const DocgenModule = (() => {
       }
     }
 
+    // P5: filename uniqueness tracker az egész batch-re
+    const generatedNames = new Set();
+    let suffixed = 0;
+
+    for (let ti = 0; ti < templates.length; ti++) {
+      const templateName = templates[ti];
+      // P5: per-sablon név-minta lookup
+      const np = DocgenNaming.getNamePattern(templateName);
+      const pattern = np.pattern;
+      // Word-sablon, vagy kitölthető PDF-sablon (FormPdf) — a fájl dönti el.
+      let tmplBuf = await findTemplate(state.templatesDir, templateName + '.docx');
+      let pdfSablon = false;
+      if (!tmplBuf) {
+        tmplBuf = await findTemplate(state.templatesDir, templateName + '.pdf');
+        pdfSablon = !!tmplBuf;
+      }
+      const pdfCel = pdfSablon && pdfKesz(templateName) ? 'up' : 'prep';
+      // A PDF-sablont egyszer nézzük meg, nem dolgozónként: mező nélküli PDF-nél
+      // egy hiba legyen, ne annyi, ahány dolgozó.
+      let formHiba = null;
+      if (pdfSablon) {
+        try { await FormPdf.check(tmplBuf); } catch (e) { formHiba = e.message; }
+      }
+      if (formHiba) {
+        BevLogger.error('PDF_TPL_NOFIELDS', `A PDF-sablon nem használható: ${templateName}`,
+          formHiba, `user=${currentUser}`);
+        for (let ci = 0; ci < clients.length; ci++) {
+          ui.progress.setError(ti * clients.length + ci);
+          done++;
+        }
+        errors.push(`${templateName}: ${formHiba}`);
+        ui.status(`Hibás PDF-sablon: ${templateName}`, Math.round(done / total * 100));
+        await _yieldFrame();
+        continue;
+      }
+      if (!tmplBuf) {
+        BevLogger.warn('TEMPLATE_MISSING', `Sablon nem található: ${templateName}`,
+          `templateName=${templateName}, templatesDir=${state.templatesDir?.name}, allTemplates(${state.allTemplates.length})=[${state.allTemplates.slice(0,8).map(t=>t.name).join('|')}${state.allTemplates.length>8?'…':''}]`,
+          state.templatesDir?.name || '');
+        for (let ci = 0; ci < clients.length; ci++) {
+          const itemIdx = ti * clients.length + ci;
+          ui.progress.setError(itemIdx);
+          errors.push(`${employeeName(clients[ci])} / ${templateName}: sablon nem található`);
+          done++;
+        }
+        ui.status(`Sablon hiányzik: ${templateName}`, Math.round(done / total * 100));
+        await _yieldFrame();
+        continue;
+      }
+      for (let ci = 0; ci < clients.length; ci++) {
+        const row = clients[ci];
+        const itemIdx = ti * clients.length + ci;
+        const clientName = employeeName(row);
+        const pct = Math.round(done / total * 100);
+        ui.progress.setActive(itemIdx);
+        ui.status(`${clientName} / ${templateName}  (${done + 1}/${total})`, pct);
+        await _yieldFrame();   // ← böngésző repaint engedélyezése ELŐTTE, hogy a státusz látszódjon
+        try {
+          const enrichedRow = buildRenderRow(row);
+          const forditatlan = new Set();
+          let outBuf, emptyTags;
+          if (pdfSablon) {
+            // Ugyanaz a jelölő-feloldó, mint a Word-sablonnál: a mezőnév a jelölő.
+            const ures = new Set();
+            const parser = DocxService.makeParser(enrichedRow, ures,
+              makeSchemaResolver(row, forditatlan), makeSchemaMatcher(row));
+            const kesz = await FormPdf.fill(tmplBuf, {
+              text:    n => parser(n).get(),
+              checked: kif => parser('CHECK:' + kif).get() === DocxService.CHECKED,
+              keywords: FormPdf.stampFor(pdfCel,
+                { who: clientName, tipus: templateName, docgenMark: DocxService.docgenMark() }),
+            });
+            outBuf = kesz.bytes;
+            // A kilógó (legkisebb betűvel sem férő) érték ki van írva, de jelezzük.
+            emptyTags = [...ures].concat(kesz.overflow.map(n => `${n} (nem fér el)`));
+          } else {
+            ({ buffer: outBuf, emptyTags } = await DocxService.generateDocx(
+              tmplBuf, enrichedRow,
+              { resolve: makeSchemaResolver(row, forditatlan), equals: makeSchemaMatcher(row) }));
+          }
+          emptyTags.forEach(t => allEmptyTags.add(t));
+          if (emptyTags.length > 0 || forditatlan.size > 0) {
+            missingLogEntries.push({
+              ts:        new Date().toISOString(),
+              user:      currentUser || '',
+              // A hiánypótló szerkesztő ebből nyitja a dolgozót (a név nem egyedi)
+              employeeId: row.id,
+              client:    clientName,
+              template:  templateName,
+              emptyTags: emptyTags,
+              // Van adat, de nincs szótári pár → magyar szöveg az angol rovatban
+              untranslatedTags: [...forditatlan],
+            });
+          }
+          let baseName = DocxService.outputFilename(templateName, enrichedRow, pattern);
+          if (pdfSablon) baseName = baseName.replace(/\.docx$/i, '.pdf');
+          const name = DocxService.uniqueFilename(baseName, generatedNames);
+          if (name !== baseName) {
+            suffixed++;
+            BevLogger.info('FILENAME_SUFFIX',
+              `Filename ütközés — suffix hozzáadva: ${baseName} → ${name}`,
+              `template=${templateName}, pattern=${pattern || '(default)'}`,
+              `client=${clientName}, user=${currentUser}`);
+          }
+          ui.progress.setDone(itemIdx);
+          const tokenek = nameTokens(row);
+          generated.push({ buf: outBuf, name, itemIdx, templateName, clientName,
+            pdf: pdfSablon, cel: pdfCel,
+            vezeteknev: tokenek['Vezetéknév'], keresztnev: tokenek['Keresztnév'] });
+          done++;
+        } catch (e) {
+          BevLogger.error('DOCGEN', `Generálási hiba: ${clientName} / ${templateName}`,
+            `error=${e.message}\nstack=${e.stack || '(no stack)'}\nrowKeys=${Object.keys(row).slice(0,10).join(',')}`,
+            `client=${clientName}, template=${templateName}, user=${currentUser}`);
+          ui.progress.setError(itemIdx);
+          errors.push(`${clientName} / ${templateName}: ${e.message}`);
+          done++;
+        }
+      }
+    }
+    return { generated, errors, missingLogEntries, allEmptyTags, suffixed };
+  }
+
+  /**
+   * A mentési fázis. `target(clientName, cel)` → a dolgozó mappája, vagy null
+   * (= a `root` gyökere). Kimeneti mappa nélkül böngészős letöltés. → hibák
+   */
+  async function saveDocs(generated, { docx, root, target, ui }) {
+    const errors = [];
+    let wi = 0;
+    for (const { buf, name, itemIdx, clientName, pdf: kitoltott, cel } of generated) {
+      if (docx || kitoltott) {
+        ui.progress.setSaving(itemIdx);
+        if (root) {
+          ui.status(`Mentés: ${name}`, Math.round(wi / generated.length * 100));
+          const dir = await target(clientName, cel);
+          try {
+            await FsService.writeToDir(dir || root, name, buf);
+            wi++;
+            continue;
+          } catch (e) {
+            // Néma letöltésre esés helyett HIBA: a csendben máshova került
+            // fájlt a PDF Műhely nem látja (TERV-mappaszerkezet.md 2.g).
+            BevLogger.error('DOCX_SAVE', 'Mentés a mappába sikertelen',
+                            `${name}: ${e.message}`, currentUser);
+            errors.push(`${name}: a mentés nem sikerült — ${e.message}`);
+            if (FsService.hasFsApi) { wi++; continue; }
+          }
+        }
+        saveAs(new Blob([buf], {
+          type: kitoltott ? 'application/pdf'
+                     : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        }), name);
+      }
+      wi++;
+    }
+    return errors;
+  }
+
+  // ── Kívülről hívható generálás (tömeges ügy) ─────────────────────────────
+
+  /** A sablonmappa sablonjai (fiókra szűrve) — ugyanaz, amit a Sablonok kártya lát. */
+  function templateNames() { return state.allTemplates.map(t => t.name); }
+  function templatesReady() { return !!state.templatesDir; }
+
+  /**
+   * Sablonmappa-hozzáférés egy kattintásból: a böngésző csak felhasználói
+   * gesztusra ad engedélyt, és indulásonként elveszi. Tárolt mappánál csak
+   * engedélyt kér (mint a Dokumentumok fül bannere), különben választót nyit.
+   */
+  async function requestTemplatesDir() {
+    if (state.templatesDir) return true;
+    const h = await FsService.loadHandle('templates_dir').catch(() => null);
+    if (!h) { await onSetTemplatesDir(); return !!state.templatesDir; }
+    if (!await FsService.verifyPermission(h)) return false;
+    state.templatesDir = h;
+    _rerenderTemplatesDirUI();
+    q('#dg-restore-banner')?.remove();
+    await refreshTemplates({ silent: true });
+    _refreshOnboardSteps();
+    return true;
+  }
+
+  /**
+   * Generálás a Dokumentumok fül kijelölésétől függetlenül. Ugyanaz a motor
+   * (sablonkeresés, jelölők, névminta, hiánynapló, PDF-lánc), csak a dolgozók,
+   * a sablonok és a kimeneti mappa paraméter.
+   *
+   * perWorker: false → minden fájl az `outputDir` gyökerébe; true → a dolgozó
+   * mappájába (<Név>_Elokeszitett), ugyanúgy feloldva, mint a Dokumentumok fülön.
+   * → { count, docxCount, szkript (a PDF-készítő a mappába került), errors, missing }
+   */
+  async function generateFor({ employeeIds, templates, outputDir = null, perWorker = false,
+                               docx = true, pdf = false, ui = {} }) {
+    if (!state.templatesDir) throw new Error('Nincs sablonmappa — előbb engedélyezd vagy állítsd be.');
+    loadFromRegistry({ silent: true });
+    const clients = state.clientRows.filter(r => employeeIds.includes(r.id));
+    const u = {
+      progress: Object.assign(_nullProgress(), ui.progress || {}),
+      status:   ui.status || (() => {}),
+    };
+    BevLogger.info('DOCGEN_START', `Tömeges generálás (${pdf ? 'DOCX+PDF' : 'DOCX'})`,
+      `clients=${clients.length}, templates=${templates.length}, perWorker=${perWorker}`,
+      `user=${currentUser}, outputDir=${outputDir ? outputDir.name : '(letöltés)'}`);
+
+    const r = await renderDocs(clients, templates, u);
+    DocgenMissingLog.append(r.missingLogEntries);
+    r.errors.push(...await saveDocs(r.generated, {
+      docx, root: outputDir, ui: u,
+      target: (nev, cel) => perWorker
+        ? resolveWorkerTarget(nev, cel === 'up' ? FsService.DIR_UP : FsService.DIR_PREP, outputDir,
+                              { ujatKerdesNelkul: true })
+        : null,
+    }));
+
+    // A PDF-lánc ugyanúgy, mint a Dokumentumok fülön: a konvertáló szkript az
+    // almappákat is bejárja, így a dolgozói mappás kimenettel is működik.
+    const docxGen = r.generated.filter(g => !g.pdf);
+    let szkript = false;
+    if (outputDir && docxGen.length) {
+      await DocgenPdfChain.writeManifest(outputDir, docxGen.map(g => ({
+        name: g.name, clientName: g.clientName, templateName: g.templateName,
+        vezeteknev: g.vezeteknev, keresztnev: g.keresztnev,
+      })));
+      if (pdf) szkript = await DocgenPdfChain.copyScript(outputDir);
+    }
+    BevLogger.info('DOCGEN_END', `Tömeges generálás kész (${r.generated.length} dokumentum)`,
+      `errors=${r.errors.length}, missingLogEntries=${r.missingLogEntries.length}`, `user=${currentUser}`);
+    return { count: r.generated.length, docxCount: docxGen.length, szkript,
+             errors: r.errors, missing: r.missingLogEntries.length };
+  }
+
+  async function runGenerate({ docx, pdf }) {
+    if (!state.selectedClients.length)   { toast('Nincs kiválasztott ügyfél', 'warn'); return; }
+    if (!state.chosenTemplates.size)     { toast('Nincs kiválasztott sablon', 'warn'); return; }
+    if (!state.templatesDir)             { toast('Nincs sablonmappa beállítva', 'warn'); return; }
+
+    const clients   = state.clientRows.filter(r => state.selectedClients.includes(r.id));
+    const templates = [...state.chosenTemplates];
+    const total     = clients.length * templates.length;
+
+    // ── Live progress az összesítő kártyán ───────────────────────────────────
+    const progress = _openProgressDialog(clients, templates);
+
+    // P3: részletes start-log
+    BevLogger.info('DOCGEN_START', `Generálás indítva (${docx?'DOCX':''}${docx&&pdf?'+':''}${pdf?'PDF':''})`,
+      BevLogger.snapshot({ clients: clients.length, templates: templates.length, total,
+        outputDir: state.outputDir?.name || null,
+        templatesDir: state.templatesDir?.name || null }),
+      `user=${currentUser}, clients=[${clients.slice(0,5).map(employeeName).join('|')}${clients.length>5?'…':''}], templates=[${templates.slice(0,5).join('|')}${templates.length>5?'…':''}]`);
+
     setStatus('Generálás…', 0);
     setGenButtons(false);
 
-    // P5: filename uniqueness tracker az egész batch-re
-    const generatedNames = new Set();
-    const suffixedCount = { v: 0 };
-
     try {
-      for (let ti = 0; ti < templates.length; ti++) {
-        const templateName = templates[ti];
-        // P5: per-sablon név-minta lookup
-        const np = DocgenNaming.getNamePattern(templateName);
-        const pattern = np.pattern;
-        // Word-sablon, vagy kitölthető PDF-sablon (FormPdf) — a fájl dönti el.
-        let tmplBuf = await findTemplate(state.templatesDir, templateName + '.docx');
-        let pdfSablon = false;
-        if (!tmplBuf) {
-          tmplBuf = await findTemplate(state.templatesDir, templateName + '.pdf');
-          pdfSablon = !!tmplBuf;
-        }
-        const pdfCel = pdfSablon && pdfKesz(templateName) ? 'up' : 'prep';
-        // A PDF-sablont egyszer nézzük meg, nem dolgozónként: mező nélküli PDF-nél
-        // egy hiba legyen, ne annyi, ahány dolgozó.
-        let formHiba = null;
-        if (pdfSablon) {
-          try { await FormPdf.check(tmplBuf); } catch (e) { formHiba = e.message; }
-        }
-        if (formHiba) {
-          BevLogger.error('PDF_TPL_NOFIELDS', `A PDF-sablon nem használható: ${templateName}`,
-            formHiba, `user=${currentUser}`);
-          for (let ci = 0; ci < clients.length; ci++) {
-            progress.setError(ti * clients.length + ci);
-            done++;
-          }
-          errors.push(`${templateName}: ${formHiba}`);
-          setStatus(`Hibás PDF-sablon: ${templateName}`, Math.round(done / total * 100));
-          await _yieldFrame();
-          continue;
-        }
-        if (!tmplBuf) {
-          BevLogger.warn('TEMPLATE_MISSING', `Sablon nem található: ${templateName}`,
-            `templateName=${templateName}, templatesDir=${state.templatesDir?.name}, allTemplates(${state.allTemplates.length})=[${state.allTemplates.slice(0,8).map(t=>t.name).join('|')}${state.allTemplates.length>8?'…':''}]`,
-            state.templatesDir?.name || '');
-          for (let ci = 0; ci < clients.length; ci++) {
-            const itemIdx = ti * clients.length + ci;
-            progress.setError(itemIdx);
-            errors.push(`${employeeName(clients[ci])} / ${templateName}: sablon nem található`);
-            done++;
-          }
-          setStatus(`Sablon hiányzik: ${templateName}`, Math.round(done / total * 100));
-          await _yieldFrame();
-          continue;
-        }
-        for (let ci = 0; ci < clients.length; ci++) {
-          const row = clients[ci];
-          const itemIdx = ti * clients.length + ci;
-          const clientName = employeeName(row);
-          const pct = Math.round(done / total * 100);
-          progress.setActive(itemIdx);
-          setStatus(`${clientName} / ${templateName}  (${done + 1}/${total})`, pct);
-          await _yieldFrame();   // ← böngésző repaint engedélyezése ELŐTTE, hogy a státusz látszódjon
-          try {
-            const enrichedRow = buildRenderRow(row);
-            const forditatlan = new Set();
-            let outBuf, emptyTags;
-            if (pdfSablon) {
-              // Ugyanaz a jelölő-feloldó, mint a Word-sablonnál: a mezőnév a jelölő.
-              const ures = new Set();
-              const parser = DocxService.makeParser(enrichedRow, ures,
-                makeSchemaResolver(row, forditatlan), makeSchemaMatcher(row));
-              const kesz = await FormPdf.fill(tmplBuf, {
-                text:    n => parser(n).get(),
-                checked: kif => parser('CHECK:' + kif).get() === DocxService.CHECKED,
-                keywords: FormPdf.stampFor(pdfCel,
-                  { who: clientName, tipus: templateName, docgenMark: DocxService.docgenMark() }),
-              });
-              outBuf = kesz.bytes;
-              // A kilógó (legkisebb betűvel sem férő) érték ki van írva, de jelezzük.
-              emptyTags = [...ures].concat(kesz.overflow.map(n => `${n} (nem fér el)`));
-            } else {
-              ({ buffer: outBuf, emptyTags } = await DocxService.generateDocx(
-                tmplBuf, enrichedRow,
-                { resolve: makeSchemaResolver(row, forditatlan), equals: makeSchemaMatcher(row) }));
-            }
-            emptyTags.forEach(t => allEmptyTags.add(t));
-            if (emptyTags.length > 0 || forditatlan.size > 0) {
-              missingLogEntries.push({
-                ts:        new Date().toISOString(),
-                user:      currentUser || '',
-                client:    clientName,
-                template:  templateName,
-                emptyTags: emptyTags,
-                // Van adat, de nincs szótári pár → magyar szöveg az angol rovatban
-                untranslatedTags: [...forditatlan],
-              });
-            }
-            let baseName = DocxService.outputFilename(templateName, enrichedRow, pattern);
-            if (pdfSablon) baseName = baseName.replace(/\.docx$/i, '.pdf');
-            const name = DocxService.uniqueFilename(baseName, generatedNames);
-            if (name !== baseName) {
-              suffixedCount.v++;
-              BevLogger.info('FILENAME_SUFFIX',
-                `Filename ütközés — suffix hozzáadva: ${baseName} → ${name}`,
-                `template=${templateName}, pattern=${pattern || '(default)'}`,
-                `client=${clientName}, user=${currentUser}`);
-            }
-            progress.setDone(itemIdx);
-            const tokenek = nameTokens(row);
-            generated.push({ buf: outBuf, name, itemIdx, templateName, clientName,
-              pdf: pdfSablon, cel: pdfCel,
-              vezeteknev: tokenek['Vezetéknév'], keresztnev: tokenek['Keresztnév'] });
-            done++;
-          } catch (e) {
-            BevLogger.error('DOCGEN', `Generálási hiba: ${clientName} / ${templateName}`,
-              `error=${e.message}\nstack=${e.stack || '(no stack)'}\nrowKeys=${Object.keys(row).slice(0,10).join(',')}`,
-              `client=${clientName}, template=${templateName}, user=${currentUser}`);
-            progress.setError(itemIdx);
-            errors.push(`${clientName} / ${templateName}: ${e.message}`);
-            done++;
-          }
-        }
-      }
+      const { generated, errors, missingLogEntries, allEmptyTags, suffixed } =
+        await renderDocs(clients, templates, { progress, status: setStatus });
+      const suffixedCount = { v: suffixed };
 
       DocgenMissingLog.append(missingLogEntries);
 
       // ── DOCX mentési fázis ────────────────────────────────────────────────────
-      // writeToDir valódi async (File System API) → a setStatus itt ténylegesen
-      // megjelenik a képernyőn, nincs szükség extra yieldre.
+      // A dolgozó 01_Elokeszitett mappájába: az irat nyomtatásra vár. Kivétel
+      // az aláírás nélkül kész PDF-sablon irata: az a 02_Feltoltheto-ba megy.
+      // Ha a mappa nem oldható fel, a resolveWorkerTarget kérdez — és ha
+      // a válasz „ne”, akkor a kimeneti mappa gyökerébe írunk.
       progress.setPhase('DOCX fájlok mentése…');
-      { let wi = 0;
-        for (const { buf, name, itemIdx, clientName, pdf: kitoltott, cel } of generated) {
-          if (docx || kitoltott) {
-            progress.setSaving(itemIdx);
-            if (state.outputDir) {
-              setStatus(`Mentés: ${name}`, Math.round(wi / generated.length * 100));
-              // A dolgozó 01_Elokeszitett mappájába: az irat nyomtatásra vár. Kivétel
-              // az aláírás nélkül kész PDF-sablon irata: az a 02_Feltoltheto-ba megy.
-              // Ha a mappa nem oldható fel, a resolveWorkerTarget kérdez — és ha
-              // a válasz „ne”, akkor a kimeneti mappa gyökerébe írunk.
-              const dir = await resolveWorkerTarget(clientName,
-                cel === 'up' ? FsService.DIR_UP : FsService.DIR_PREP);
-              try {
-                await FsService.writeToDir(dir || state.outputDir, name, buf);
-                wi++;
-                continue;
-              } catch (e) {
-                // Néma letöltésre esés helyett HIBA: a csendben máshova került
-                // fájlt a PDF Műhely nem látja (TERV-mappaszerkezet.md 2.g).
-                BevLogger.error('DOCX_SAVE', 'Mentés a mappába sikertelen',
-                                `${name}: ${e.message}`, currentUser);
-                errors.push(`${name}: a mentés nem sikerült — ${e.message}`);
-                if (FsService.hasFsApi) { wi++; continue; }
-              }
-            }
-            saveAs(new Blob([buf], {
-              type: kitoltott ? 'application/pdf'
-                         : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-            }), name);
-          }
-          wi++;
-        }
-      }
+      errors.push(...await saveDocs(generated, {
+        docx, root: state.outputDir, ui: { progress, status: setStatus },
+        target: (clientName, cel) => resolveWorkerTarget(clientName,
+          cel === 'up' ? FsService.DIR_UP : FsService.DIR_PREP),
+      }));
 
       // A PDF-fé alakítás szándékosan NEM része a generálásnak: böngészőből nem
       // lehet Wordöt vezérelni, szervert pedig nem telepíthetünk. Az app itt
@@ -2276,5 +2384,7 @@ const DocgenModule = (() => {
     // ellenőrzéshez kívülről is használható.
     buildRenderRow,
     makeSchemaResolver,
+    // A tömeges ügy generálása (TERV-tomeges-ugyintezes.md 4.4)
+    templateNames, templatesReady, requestTemplatesDir, generateFor,
   };
 })();

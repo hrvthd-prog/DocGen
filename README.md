@@ -89,6 +89,14 @@ letöltésre, mert a Letöltések mappában landolt iratot a Műhely nem is lát
 > váltáshoz van. (Ezt korábban egy helyi kiszolgáló végezte; az kikerült a
 > pipeline-ból.)
 
+### Hiányzó adatok naplója → Javítás
+
+A Dokumentumok fül **Hiányzó adatok naplója** soronként **Javítás** gombot
+kap: a dolgozó adatlapja egy külön változatban nyílik (csak innen érhető el),
+a generáláskor hiányzó mezők kijelölve, *Csak a hiányzó mezők* szűrővel.
+Mentés után a program visszaolvassa az adatot a tárolóból, és a napló
+**frissítve** nyílik újra: az azóta pótolt mező zölden áthúzva.
+
 ## Sablonok
 
 A sablon sima `.docx`, a behelyettesítendő helyekre `{{Mezőnév}}` kerül:
@@ -502,6 +510,14 @@ bejegyzés** — egy változatlan adatokkal újramentett sor nem zajosítja a
 naplót; a létrehozás, a kilépés és a visszavétel viszont önmagában is
 esemény, mezőváltozás nélkül is bekerül.
 
+### Legutóbbi változások
+
+Nyilvántartás → **Legutóbbi változások**: az összes dolgozó naplója egy
+listában, **legfrissebb elöl** (a felvitel is benne van). Szűrhető névre és
+forrásra (űrlap, import, tömeges ügyintézés, hiányzó-adat napló…); egy sorra
+kattintva a dolgozó összesítője nyílik. Erre való: egy rossz import vagy
+elgépelés több száz dolgozó között is visszakereshető.
+
 ## Összesítő lap
 
 Egy dolgozó adatai egy csak olvasható lapon: Nyilvántartás → **dupla kattintás
@@ -725,6 +741,34 @@ Egy ügy megnyitása után a felső sáv **„⌂ Áttekintés"** gombja (vagy a
 
 A „Nincs még ügye” listából kimarad, akinél a Nyilvántartásban jelölve van:
 **Nem hosszabbítjuk**.
+
+### Új ügy: egy dolgozó vagy tömeges
+
+Az **Új ügy** gomb két csempét kínál: **Egy dolgozó ügyintézése** (a
+megszokott űrlap) és **Tömeges ügyintézés**. Egyelőre egy tömeges típus van, a
+**szálláshely-változás** — ugyanaz az új cím több dolgozónál:
+
+1. **Dolgozók** — ugyanaz a választó, mint a Dokumentumok fülön.
+2. **Új szálláshely** — a séma „Magyarországi szálláshely” csoportjának mezői +
+   költözés napja (nem kötelező; ebből jön a 3 napos, tájékoztató határidő).
+   **Az üresen hagyott mező törlődik** (az új cím teljes csere).
+3. **Összesítő** — dolgozónként a régi cím és minden változó mező, a
+   törlődők pirossal; jóváhagyás után írunk.
+4. **Rögzítés** — a címek a nyilvántartásba (napló: „tömeges ügyintézés”),
+   dolgozónként egy ügy közös kötegben, majd **visszaolvasás a tárolóból**:
+   a modul kiírja, ha valakinél a mentés nem ért célba.
+5. **Generálás** — az ügytípushoz rendelt sablonok előre kijelölve; kimeneti
+   mappa **Tallózás…**-sal; alapból minden fájl a választott mappába, a
+   **Külön mappa minden dolgozónak** kapcsolóval `<Név>_Elokeszitett`-be
+   (meglévő mappát megtalálja, nem létezőt kérdés nélkül létrehoz, több hasonló
+   névnél rákérdez).
+
+A köteg ügyei a listán **„Tömeges”** jelölést kapnak; bármelyik ügy
+részletezőjéből a **Tömeges ügy (N dolgozó)** gomb újranyitja a köteget a
+generálási lépésnél.
+
+**Ügytípus-sablonok:** Ügyek → Áttekintés → **Ügytípus-sablonok…** — melyik
+sablon kell egy ügytípushoz. A közös configba kerül, nincs beégetve.
 
 ### Enter Hungary panel: fókusz nézet
 

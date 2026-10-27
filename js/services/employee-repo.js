@@ -341,6 +341,25 @@ const EmployeeRepo = (() => {
     if (dirty) await save();
   }
 
+  /**
+   * Mentés + visszaolvasás: a megadott rekordok a TÁROLÓBAN is a mostani
+   * mezőértékekkel állnak-e? A tömeges írás és a hiánypótló szerkesztő
+   * ellenőrzése — „mentettem, de nem látszik” helyett kimondható, hogy a
+   * fájlban is ott van. → az eltérő / hiányzó rekordok azonosítói ([] = rendben)
+   */
+  async function verifyStored(ids) {
+    ensureLoaded();
+    await flush();
+    // A fájl-háttér `load()`-ja a frissesség-ellenőrzés alapját is átállítaná,
+    // ezért ott a mellékhatás nélküli `peek()` olvas.
+    const raw = await (backend.peek ? backend.peek() : backend.load());
+    const tarolt = new Map(((raw && raw.employees) || []).map(e => [e.id, e]));
+    return ids.filter(id => {
+      const most = get(id), t = tarolt.get(id);
+      return !most || !t || diffFields(t.fields, most.fields).length > 0;
+    });
+  }
+
   // ── Lekérdezés ─────────────────────────────────────────────────────────────
 
   function all({ includeExited = false } = {}) {
@@ -713,6 +732,11 @@ const EmployeeRepo = (() => {
         }
       },
 
+      /** Olvasás a `seen` frissítése nélkül (visszaolvasó ellenőrzéshez). */
+      async peek() {
+        return JSON.parse(await FsService.readTextFromDir(dirHandle, filename));
+      },
+
       async save(data) {
         // ── Közben más írt? Akkor NEM írunk. ─────────────────────────────────
         // A visszaolvasás hibáját (nincs fájl, olvashatatlan) nem tekintjük
@@ -856,7 +880,7 @@ const EmployeeRepo = (() => {
     // tároló
     useBackend, hasBackend, describeBackend, onChange,
     createFileBackend, createIdbBackend, createMemoryBackend,
-    load, save, scheduleSave, flush,
+    load, save, scheduleSave, flush, verifyStored,
     // lekérdezés
     all, get, count, search, findByIdentifier, findByNaturalKey, matchIncoming,
     currentIdentifier, idTypeLabel, naturalKeyOf,

@@ -322,6 +322,8 @@ const RegistryModule = (() => {
                 </label>
                 <button class="btn btn-ghost btn-sm" id="rg-export-data">Export xlsx-be</button>
                 <button class="btn btn-ghost btn-sm" id="rg-export-template">Üres sablon letöltése</button>
+                <button class="btn btn-ghost btn-sm" id="rg-recent"
+                        title="Minden dolgozó változásai időrendben, legfrissebb elöl — import, űrlap, tömeges ügy…">Legutóbbi változások</button>
                 <span class="rg-io-note" id="rg-export-note"></span>
               </div>
               <div id="rg-list"></div>
@@ -581,6 +583,10 @@ const RegistryModule = (() => {
     });
     document.getElementById('rg-export-template').addEventListener('click',
       () => RegistryXlsxIO.exportTemplate());
+    document.getElementById('rg-recent').addEventListener('click', () => {
+      if (!state.ready) { toast('A nyilvántartás még nem töltődött be.', 'error'); return; }
+      EmployeeHistory.openRecent({ onOpen: openSummary });
+    });
 
     // Minden rekord-művelet a kijelölésre vonatkozik, egy helyről
     document.getElementById('rg-bulk').addEventListener('click', ev => {

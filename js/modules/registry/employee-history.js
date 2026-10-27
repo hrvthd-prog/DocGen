@@ -27,6 +27,9 @@ const EmployeeHistory = (() => {
     ugy:    'ügy',
     tomeges: 'tömeges művelet',
     fiok:   'fiók átnevezése',
+    'eh-panel':  'EH-panel',
+    tomeges_ugy: 'tömeges ügyintézés',
+    hianynaplo:  'hiányzó-adat napló',
   };
 
   function huDatum(iso) {
@@ -98,5 +101,85 @@ const EmployeeHistory = (() => {
     });
   }
 
-  return { open };
+  // ── Legutóbbi változások — minden dolgozó egy listában ─────────────────────
+
+  const RECENT_MAX = 500;
+
+  /** Minden dolgozó minden bejegyzése, legfrissebb elöl (a felvitel is az). */
+  function osszesBejegyzes() {
+    const out = [];
+    for (const emp of EmployeeRepo.all({ includeExited: true })) {
+      for (const h of emp.history || []) out.push({ emp, h });
+    }
+    return out.sort((a, b) => String(b.h.at || '').localeCompare(String(a.h.at || '')));
+  }
+
+  function valtozasCella(changes) {
+    const l = Array.isArray(changes) ? changes : [];
+    const elso = l.slice(0, 3).map(c =>
+      `<div><span class="eh-diff-key">${escHtml(fieldLabel(c.key))}:</span>
+         ${escHtml(renderVal(c.key, c.from))} → <b>${escHtml(renderVal(c.key, c.to))}</b></div>`).join('');
+    return elso + (l.length > 3 ? `<div class="eh-more">+${l.length - 3} további mező</div>` : '');
+  }
+
+  /**
+   * Legutóbbi változások: az összes dolgozó naplója időrendben, legfrissebb
+   * elöl. Egy rossz import vagy elgépelés több száz dolgozó között is így
+   * kereshető vissza — „kik voltak az utolsók”. Sorra kattintva `onOpen(id)`.
+   */
+  function openRecent({ onOpen = null } = {}) {
+    const mind = osszesBejegyzes();
+    const forrasok = [...new Set(mind.map(x => x.h.source).filter(Boolean))];
+    showDialog({
+      title: 'Legutóbbi változások',
+      body: `
+        <div class="eh-recent-bar">
+          <input type="search" id="eh-r-q" class="field-input" placeholder="Szűrés névre">
+          <select id="eh-r-src" class="field-select" title="Honnan történt a változás">
+            <option value="">Minden forrás</option>
+            ${forrasok.map(f => `<option value="${escHtml(f)}">${escHtml(SOURCE_LABEL[f] || f)}</option>`).join('')}
+          </select>
+          <span id="eh-r-db" class="eh-recent-db"></span>
+        </div>
+        <div class="data-table-wrap eh-recent-wrap">
+          <table class="data-table eh-recent">
+            <thead><tr><th>Időpont</th><th>Dolgozó</th><th>Művelet</th><th>Forrás</th>
+                       <th>Ki</th><th>Változás</th></tr></thead>
+            <tbody id="eh-r-body"></tbody>
+          </table>
+        </div>`,
+      footer: `<button class="btn btn-primary btn-sm" onclick="closeDialog()">Bezárás</button>`,
+    });
+
+    const rajzol = () => {
+      const q   = document.getElementById('eh-r-q').value.trim().toLowerCase();
+      const src = document.getElementById('eh-r-src').value;
+      const lista = mind.filter(x => (!src || x.h.source === src) &&
+                                     (!q || nevOf(x.emp).toLowerCase().includes(q)));
+      const lathato = lista.slice(0, RECENT_MAX);
+      document.getElementById('eh-r-db').textContent = lista.length > RECENT_MAX
+        ? `a legutóbbi ${RECENT_MAX} / ${lista.length} bejegyzés` : `${lista.length} bejegyzés`;
+      const body = document.getElementById('eh-r-body');
+      body.innerHTML = lathato.map((x, i) => `
+        <tr class="eh-recent-row" data-r="${i}" tabindex="0" title="A dolgozó megnyitása">
+          <td style="white-space:nowrap">${escHtml(huDatum(x.h.at))}</td>
+          <td><b>${escHtml(nevOf(x.emp))}</b>${x.emp.exited ? ' <span class="eh-more">(kilépett)</span>' : ''}</td>
+          <td>${escHtml(ACTION_LABEL[x.h.action] || x.h.action || '')}</td>
+          <td>${escHtml(SOURCE_LABEL[x.h.source] || x.h.source || '')}</td>
+          <td>${escHtml(x.h.user || '')}</td>
+          <td>${valtozasCella(x.h.changes)}</td>
+        </tr>`).join('')
+        || '<tr><td colspan="6" class="eh-empty">Nincs a szűrésnek megfelelő bejegyzés.</td></tr>';
+      body.querySelectorAll('[data-r]').forEach(tr => {
+        const nyit = () => { if (onOpen) onOpen(lathato[Number(tr.dataset.r)].emp.id); };
+        tr.addEventListener('click', nyit);
+        tr.addEventListener('keydown', e => { if (e.key === 'Enter') nyit(); });
+      });
+    };
+    document.getElementById('eh-r-q').addEventListener('input', rajzol);
+    document.getElementById('eh-r-src').addEventListener('change', rajzol);
+    rajzol();
+  }
+
+  return { open, openRecent, _osszesBejegyzes: osszesBejegyzes, SOURCE_LABEL };
 })();

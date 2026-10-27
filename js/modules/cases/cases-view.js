@@ -64,6 +64,9 @@ const CasesModule = (() => {
     irany:   1,
     dRend:   'nap',        // nap | nev
     dIrany:  1,
+    // Nyitva a tömeges ügyintézés oldala (BulkCase)? Amíg igen, a fül nem
+    // rajzol újra: az `onChange`-ek nem tüntethetik el a félig kitöltött lépést.
+    tomeges: false,
   };
 
   /** A görgető dobozok — újrarajzoláskor ezek helyzete marad meg. */
@@ -87,7 +90,7 @@ const CasesModule = (() => {
     // Esc: vissza a listához. Csak akkor, ha nincs nyitott párbeszéd és nem
     // egy mezőben gépel valaki – ott az Esc mást jelent.
     document.addEventListener('keydown', e => {
-      if (e.key !== 'Escape' || !state.kivalasztott) return;
+      if (e.key !== 'Escape' || !state.kivalasztott || state.tomeges) return;
       if (!container.classList.contains('active')) return;
       const dlg = document.getElementById('dialog-overlay');
       if (dlg && !dlg.classList.contains('hidden')) return;
@@ -322,7 +325,8 @@ const CasesModule = (() => {
           data-id="${escHtml(c.id)}" tabindex="0">
         <td class="cv-td--nev">
           <span class="cv-t__nev">${escHtml(dolgozoNeve(c.employeeId))}</span>
-          <span class="cv-t__tip">${escHtml(CaseTypes.label(c.type))}</span>
+          <span class="cv-t__tip">${escHtml(CaseTypes.label(c.type))}${c.batchId
+            ? ' <span class="cv-batch" title="Tömeges ügyintézés része">Tömeges</span>' : ''}</span>
         </td>
         <td class="cv-td--allapot">${escHtml(CaseTypes.statusLabel(c.type, c.status))}</td>
         <td class="cv-td--id">${azonositoCella(c)}</td>
@@ -516,8 +520,10 @@ const CasesModule = (() => {
     // A fejléc alcíme összefogja, amit eddig a sor és az idővonal külön mondott:
     // típus, állapot, a két azonosító és a határidő. Ez az a négy-öt adat, ami
     // miatt eddig vissza kellett lépni a listára.
+    const kotegDb = c.batchId ? CaseRepo.batch(c.batchId).length : 0;
     const alcim = [
       CaseTypes.label(c.type),
+      kotegDb ? `tömeges (${kotegDb} dolgozó)` : '',
       CaseTypes.statusLabel(c.type, c.status),
       c.ehNumber   ? (onCimkezett('EH', c.ehNumber) ? c.ehNumber : `EH ${c.ehNumber}`) : '',
       c.fileNumber ? `ikt. ${c.fileNumber}` : '',
@@ -537,6 +543,8 @@ const CasesModule = (() => {
         <button class="btn btn-ghost btn-sm" id="cv-edit">Adatok szerkesztése</button>
         ${c.closedAt ? '' : '<button class="btn btn-primary btn-sm" id="cv-advance">Státusz rögzítése</button>'}
         <button class="btn btn-secondary btn-sm" id="cv-fee">Díj a kötegbe</button>
+        ${kotegDb ? `<button class="btn btn-secondary btn-sm" id="cv-batch"
+            title="A köteg dolgozói együtt — dokumentumok generálása">Tömeges ügy (${kotegDb} dolgozó)</button>` : ''}
         <button class="btn btn-ghost btn-sm cv-del" id="cv-delete">Ügy törlése</button>
       </div>`;
 
@@ -672,8 +680,53 @@ const CasesModule = (() => {
     render();
   }
 
+  /**
+   * „Új ügy” → két út: egy dolgozó (a megszokott űrlap) vagy tömeges
+   * ügyintézés. A tömeges a nagyobb csempe: ez az új, és ez spórol többet.
+   */
+  function ujUgyValaszto() {
+    const tomegesOk = BulkCase.hasznalhato();
+    showDialog({
+      title: 'Új ügy',
+      body: `
+        <div class="nu-grid">
+          <button type="button" class="nu-tile" id="nu-egy">
+            <span class="nu-tile__ikon" aria-hidden="true">👤</span>
+            <span class="nu-tile__cim">Egy dolgozó ügyintézése</span>
+            <span class="nu-tile__sub">Egy ügy egy dolgozóra — a megszokott űrlap.</span>
+          </button>
+          <button type="button" class="nu-tile nu-tile--big" id="nu-tomeges" ${tomegesOk ? '' :
+            'disabled title="Ehhez az ügyek és a nyilvántartás írása is kell."'}>
+            <span class="nu-tile__ikon" aria-hidden="true">👥</span>
+            <span class="nu-tile__cim">Tömeges ügyintézés</span>
+            <span class="nu-tile__sub">Több dolgozó egyszerre — pl. közös új szálláshely:
+              az adatok frissítése, dolgozónként egy ügy és az iratok generálása egy helyen.</span>
+          </button>
+        </div>`,
+      footer: '<button class="btn btn-ghost btn-sm" onclick="closeDialog()">Mégse</button>',
+    });
+    document.getElementById('nu-egy').addEventListener('click', () => {
+      closeDialog();
+      CaseForm.open({ onSaved: id => megnyit(id) });
+    });
+    document.getElementById('nu-tomeges').addEventListener('click', () => {
+      closeDialog();
+      tomegesNyit();
+    });
+  }
+
+  /** A tömeges oldal a fül teljes területét kapja; Vissza → ahonnan jöttünk. */
+  function tomegesNyit(batchId = null) {
+    state.tomeges = true;
+    BulkCase.open(container, {
+      batchId,
+      onClose: () => { state.tomeges = false; render(); },
+    });
+  }
+
   function render() {
     if (!container) return;
+    if (state.tomeges) return;   // a tömeges oldal magát rajzolja (BulkCase)
 
     if (!keszAll()) {
       container.innerHTML = `
@@ -708,7 +761,11 @@ const CasesModule = (() => {
 
     if (state.kivalasztott)                el.innerHTML = reszletHtml();
     else if (state.nezet === 'attekintes') el.innerHTML =
-      `<div class="cv-page cv-page--scroll">${CasesDashboard.render()}</div>`;
+      `<div class="cv-page cv-page--scroll">${irhat() ? `
+        <div class="cv-dash-tools">
+          <button class="btn btn-ghost btn-sm" id="cv-case-tpl" type="button"
+                  title="Mely sablonok kellenek egy ügytípushoz — a tömeges generálás ezeket jelöli ki előre">Ügytípus-sablonok…</button>
+        </div>` : ''}${CasesDashboard.render()}</div>`;
     else if (state.nezet === 'dolgozok')   el.innerHTML = dolgozokHtml();
     else                                   el.innerHTML = ugyekHtml();
 
@@ -805,7 +862,16 @@ const CasesModule = (() => {
     if (kovetkezo) kovetkezo.addEventListener('click', () => lep(1));
 
     const uj = q('#cv-new');
-    if (uj) uj.addEventListener('click', () => CaseForm.open({ onSaved: id => megnyit(id) }));
+    if (uj) uj.addEventListener('click', ujUgyValaszto);
+
+    const koteg = q('#cv-batch');
+    if (koteg) koteg.addEventListener('click', () => {
+      const c = CaseRepo.get(state.kivalasztott);
+      if (c && c.batchId) tomegesNyit(c.batchId);
+    });
+
+    const sablonok = q('#cv-case-tpl');
+    if (sablonok) sablonok.addEventListener('click', () => BulkCase.openTemplates());
 
     const dij = q('#cv-fee');
     if (dij) dij.addEventListener('click', () => {

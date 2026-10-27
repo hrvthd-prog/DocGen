@@ -68,6 +68,55 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-27 — Tömeges ügyintézés (szálláshely-változás), ügytípus-sablonok, hiánypótló szerkesztő, legutóbbi változások
+
+**Cél:** szálláshely-változás több dolgozónál egy helyen (eddig export → Excel →
+import → Dokumentumok); sablonok ügytípushoz kötése felületről; a legutóbb
+módosított adatok visszakereshetősége; a hiányzó-adat naplóból javítható adatlap,
+bizonyítottan a DB-be mentve, frissülő nézettel.
+**Változás (`v10.85`):** terv és döntések: `TERV-tomeges-ugyintezes.md` (két
+kérdéskör a felhasználóval, kód elleni ellenőrzés, 10. fejezet: menet közbeni döntések).
+- Új `js/modules/cases/bulk-case.js` (`BulkCase`): `terv` / `rogzit` / `koteg`
+  tiszta logika + lépéses oldal + `openTemplates` (ügytípus ↔ sablon párbeszéd).
+- `cases-view.js`: „Új ügy” → két csempe (egy dolgozó / tömeges, nagyobb);
+  `state.tomeges` alatt nincs újrarajzolás; „Tömeges” jelölés a listán; a
+  részletezőből „Tömeges ügy (N dolgozó)” → köteg újranyitása; Áttekintés →
+  „Ügytípus-sablonok…”.
+- `case-repo.js`: `batchId` (migráció: null), `batch()`, `newId` export.
+- `employee-repo.js`: `verifyStored(ids)` — flush + visszaolvasás + összevetés;
+  a fájl-háttér `peek()`-je nem állítja át a frissesség-ellenőrzés alapját.
+- `docgen.js`: a `runGenerate` magja kiemelve (`renderDocs`, `saveDocs`, csak
+  mozgatás); új export `generateFor`, `templateNames`, `templatesReady`,
+  `requestTemplatesDir`; `resolveWorkerTarget` gyökér-paraméterrel (a választás
+  gyökerenként jegyződik), `ujatKerdesNelkul`; a hiánynapló bejegyzés `employeeId`-t kap.
+- `missing-log.js`: soronként „Javítás”, `mezokreBont` (számított jelölő → üres
+  forrásmezők), `potolva` (élő újraértékelés), `dolgozoja` (régi bejegyzésnél
+  egyértelmű név). `employee-form.js`: `hianyzo` mód (ragadós sáv, kiemelés,
+  „Csak a hiányzó mezők”), `source`, `onCancel`.
+- `employee-history.js`: `openRecent` + új forrás-címkék (`tomeges_ugy`,
+  `hianynaplo`, `eh-panel`); Nyilvántartás → „Legutóbbi változások”.
+**Miért / döntés:** dolgozónként egy ügy közös kötegben (nem egy közös ügy — a
+saját EH szám, státusz megmarad); az üresen hagyott címmező törlődik; a költözés
+napja nem kötelező; a tömeges „külön mappa” a nem létező dolgozói mappát kérdés
+nélkül hozza létre (a kapcsoló a beleegyezés), hasonló neveknél kérdez.
+**Tesztek:** `node test/run-all.js` zöld; új `test/bulk-case.test.js` (21).
+Headless Chrome + CDP (eldobható, nincs a repóban; OPFS a mappaválasztó
+helyett) a teljes folyamatra, és a Dokumentumok fül generálására regresszióként.
+Ott derült ki és javult: a dátummaszk utáni olvasás (beillesztett „20261020”),
+a dolgozónkénti mappakérdés, a PDF-szkript ígérete, a kigördülő hiánypótló sáv.
+
+**Nyitott / következő:**
+- **Kézi próba az éles gépen:** Ügyek → Új ügy → Tömeges → 2-3 dolgozó → új cím →
+  összesítő → rögzítés: a zöld sáv „mentve, és visszaolvasva” legyen; Nyilvántartás →
+  Legutóbbi változások: forrás „tömeges ügyintézés”. Generálás valódi mappába
+  Tallózással, egyszer gyökérbe, egyszer „Külön mappa” kapcsolóval (a meglévő
+  PDF Műhely-es dolgozói mappát találja-e meg). Áttekintés → Ügytípus-sablonok:
+  hozzárendelés, majd a tömeges generálásnál előre kijelölve jön-e.
+- **Hiánynapló → Javítás** egy valódi bejegyzésen; a régi (azonosító nélküli)
+  bejegyzéseknél azonos nevű dolgozóknál a gomb szándékosan tiltott.
+- Próba módban a narancs sáv miatt az Ügyek fül alsó gombsora ~28 px-szel kilóg
+  (meglévő elrendezés, nem ehhez a változáshoz tartozik) — érdemes megnézni.
+
 ## 2026-10-21 — Felület-csomag: client picker, összesítő, EH fókusz, kártyák
 
 **Cél:** tizenegy pontos kérés: Azonosító ezres tagolás nélkül; kijelölhető

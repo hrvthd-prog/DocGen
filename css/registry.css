@@ -449,3 +449,46 @@
   animation: ef-focus-pulse 1.4s ease-out 1;
 }
 @keyframes ef-focus-pulse { from { background: rgba(43,170,170,.18); } to { background: transparent; } }
+
+/* ── Hiánypótló szerkesztő (csak a hiányzó-adat naplóból nyílik) ─────────── */
+/* Ragadós: a szerkesztő az első hiányzó mezőhöz görget, a lista mégis látsszon */
+.ef-hiany {
+  position: sticky; top: -1px; z-index: 2;
+  border: 1px solid #F0D9A6; background: #FDF6E6; border-radius: var(--radius-sm);
+  padding: 10px 12px; margin-bottom: 12px; font-size: 12.5px;
+  box-shadow: 0 4px 10px rgba(26,50,56,.08);
+}
+.ef-hiany__cim  { margin-bottom: 6px; }
+.ef-hiany__lista { display: flex; flex-wrap: wrap; gap: 5px; max-height: 84px; overflow-y: auto; }
+.ef-hiany__mezo {
+  border: 1px solid var(--c-amber); background: #fff; color: #7A4A0E;
+  border-radius: 4px; padding: 2px 8px; font-size: 12px; cursor: pointer;
+}
+.ef-hiany__mezo:hover { background: #FBE9C8; }
+.ef-hiany__szuro { margin-top: 8px; font-size: 12px; }
+.ef-hiany__egyeb, .ef-hiany__nincs { margin-top: 6px; color: var(--c-muted); font-size: 11.5px; }
+.ef-field--hianyzo {
+  background: #FDF3DD; box-shadow: 0 0 0 2px var(--c-amber); border-radius: 4px; padding: 3px 5px;
+}
+.ef-field--hianyzo .ef-label { color: #7A4A0E; font-weight: 600; }
+.ef-wrap.csak-hiany .ef-group:not(.has-hiany),
+.ef-wrap.csak-hiany .ef-field:not(.ef-field--hianyzo) { display: none; }
+
+/* Hiányzó-adat napló: az azóta pótolt jelölő áthúzva, zölden */
+.ml-tag {
+  background: var(--c-bg); border: 1px solid var(--c-border); border-radius: 3px; padding: 1px 5px;
+}
+.ml-tag.is-potolva { color: var(--c-green); border-color: var(--c-green); text-decoration: line-through; }
+.ml-ok { color: var(--c-green); font-weight: 600; font-size: 11px; margin-right: 6px; }
+.ml-na { color: var(--c-muted); }
+
+/* Legutóbbi változások */
+.eh-recent-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.eh-recent-bar .field-input { max-width: 240px; }
+.eh-recent-bar .field-select { flex: 0 0 auto; width: auto; }
+.eh-recent-db { margin-left: auto; font-size: 11.5px; color: var(--c-muted); white-space: nowrap; }
+.eh-recent-wrap { max-height: 62vh; }
+.eh-recent td { font-size: 12px; vertical-align: top; }
+.eh-recent-row { cursor: pointer; }
+.eh-recent-row:hover, .eh-recent-row:focus { background: rgba(61,166,140,.08); outline: none; }
+.eh-more { color: var(--c-muted); font-size: 11px; }

@@ -21,7 +21,9 @@ A *miért*-et a tervdokumentumok őrzik: `TERV.md` (alapterv),
 `TERV-mappaszerkezet.md` (a PDF Műhellyel közös mappaszerkezet + `fs-service`),
 `TERV-fiokok.md` (felhasználói fiókok, négy jogosultsági szint — **még nincs
 megvalósítva**),
-`TERV-pdf-nyomtatvany.md` (kitölthető PDF-sablonok; példa: NEAK NYT.52).
+`TERV-pdf-nyomtatvany.md` (kitölthető PDF-sablonok; példa: NEAK NYT.52),
+`TERV-tomeges-ugyintezes.md` (tömeges ügy, ügytípus-sablonok, hiánypótló
+szerkesztő, legutóbbi változások).
 A használat: `README.md`.
 
 ## Hol fut?

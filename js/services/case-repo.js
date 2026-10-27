@@ -19,6 +19,8 @@
  *     outcome      a lezárás eredménye (CaseTypes.outcomes())
  *     producedId   ha az ügy azonosítót hozott: { type, value }
  *     note         szabad szöveg
+ *     batchId      tömeges ügyintézésnél a közös kötegazonosító, egyébként null
+ *                  (a köteg = az azonos batchId-jú ügyek; TERV-tomeges-ugyintezes.md)
  *     events[]     { at, occurredAt, status, outcome, note, user, ehNumber, fileNumber }
  *                  at = mikor rögzítettük (audit), occurredAt = mikor történt
  *     createdAt / updatedAt / updatedBy
@@ -114,6 +116,7 @@ const CaseRepo = (() => {
     o.outcome    = o.outcome  || null;
     o.producedId = o.producedId || null;
     o.note       = o.note || '';
+    o.batchId    = o.batchId || null;
     o.events     = Array.isArray(o.events) ? o.events.map(normalizeEvent) : [];
     o.createdAt  = o.createdAt || nowIso();
     o.updatedAt  = o.updatedAt || o.createdAt;
@@ -632,7 +635,7 @@ const CaseRepo = (() => {
    */
   function create({ employeeId, type, dueAt, ehNumber = '', fileNumber = '',
                     note = '', openedAt = null,
-                    triggerDate = null } = {}) {
+                    triggerDate = null, batchId = null } = {}) {
     ensureLoaded();
     const indul = openedAt || today();
     const c = {
@@ -651,6 +654,7 @@ const CaseRepo = (() => {
       outcome: null,
       producedId: null,
       note: String(note || ''),
+      batchId: batchId || null,
       events: [],
       createdAt: nowIso(),
       updatedAt: nowIso(),
@@ -1031,6 +1035,12 @@ const CaseRepo = (() => {
   }
 
   /** Van-e már előjegyezve következő ügy ehhez a dolgozóhoz? */
+  /** Egy tömeges köteg ügyei (azonos `batchId`). */
+  function batch(batchId) {
+    ensureLoaded();
+    return batchId ? cache.cases.filter(c => c.batchId === batchId) : [];
+  }
+
   function hasOpenCaseOfType(employeeId, type) {
     ensureLoaded();
     return cache.cases.some(c => c.employeeId === employeeId && c.type === type && !c.closedAt);
@@ -1122,7 +1132,7 @@ const CaseRepo = (() => {
     docIdentifiers, docTags, DOC_TAGS, numberOwner, numberConflicts,
     timeline, submissionStatus, authorityDelay,
     create, update, setStatus, addEvent, updateEvent, recordProducedIdentifier,
-    openNextCase, hasOpenCaseOfType, isBackdated, summary, EXPIRY_FIELD_MAP,
+    openNextCase, hasOpenCaseOfType, batch, newId, isBackdated, summary, EXPIRY_FIELD_MAP,
     destroy, destroyForEmployee, suggestRenewals,
     _validate: validate,
   };

@@ -12,31 +12,93 @@ const EmployeeForm = (() => {
   let editingId = null;      // null → új felvitel
   let draftIdentifiers = []; // az azonosítók a mentésig itt élnek
   let onSaved = null;
+  let forras = 'urlap';      // a változásnapló `source`-a
 
   // ── Megnyitás ──────────────────────────────────────────────────────────────
 
   /**
-   * @param focus  opcionális mezőkulcs: az űrlap ott nyílik (az összesítő lapról
-   *               érkezve). `EmployeeSummary.AZONOSITO`: az azonosító-blokk.
+   * @param focus    opcionális mezőkulcs: az űrlap ott nyílik (az összesítő lapról
+   *                 érkezve). `EmployeeSummary.AZONOSITO`: az azonosító-blokk.
+   * @param hianyzo  { mezok, egyeb, sablon, forditatlan } — a HIÁNYPÓTLÓ változat:
+   *                 a generáláskor hiányzó mezők kijelölve. Csak a hiányzó-adat
+   *                 napló adja át (DocgenMissingLog.javit), máshonnan nem nyílik.
+   * @param source   a változásnapló forrása (alap: 'urlap')
+   * @param onCancel Mégse után (a napló így visszanyílik)
    */
-  function open({ id = null, onSave, focus = null } = {}) {
+  function open({ id = null, onSave, focus = null, hianyzo = null,
+                  source = 'urlap', onCancel = null } = {}) {
     editingId = id;
     onSaved   = onSave;
+    forras    = source;
     const emp = id ? EmployeeRepo.get(id) : null;
     draftIdentifiers = emp ? JSON.parse(JSON.stringify(emp.identifiers)) : [];
 
     const values = emp ? emp.fields : {};
     showDialog({
-      title: emp ? 'Munkavállaló szerkesztése' : 'Új munkavállaló',
-      body: renderBody(values),
+      title: hianyzo ? 'Hiányzó adatok pótlása' : emp ? 'Munkavállaló szerkesztése' : 'Új munkavállaló',
+      body: (hianyzo ? hianySavHtml(hianyzo) : '') + renderBody(values),
       footer: `
         <span id="ef-error" class="ef-error"></span>
-        <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Mégse</button>
+        <button class="btn btn-ghost btn-sm" id="ef-cancel">${onCancel ? 'Vissza a naplóhoz' : 'Mégse'}</button>
         <button class="btn btn-primary btn-sm" id="ef-save">Mentés</button>
       `,
     });
     bind();
-    if (focus) fokuszal(focus);
+    document.getElementById('ef-cancel').addEventListener('click', () => {
+      closeDialog();
+      if (onCancel) onCancel();
+    });
+    if (hianyzo) hianyJelol(hianyzo);
+    else if (focus) fokuszal(focus);
+  }
+
+  // ── Hiánypótló változat ────────────────────────────────────────────────────
+
+  function hianySavHtml({ mezok = [], egyeb = [], sablon = '', forditatlan = [] }) {
+    const cimke = k => { const f = SchemaStore.field(k); return f ? f.label.hu : k; };
+    const jelolok = l => l.map(t => `<code>${escHtml(t)}</code>`).join(' ');
+    return `
+      <div class="ef-hiany">
+        <div class="ef-hiany__cim">${sablon
+          ? `A(z) <b>${escHtml(sablon)}</b> generálásakor ezek hiányoztak:`
+          : 'A generáláskor ezek hiányoztak:'}</div>
+        ${mezok.length ? `
+          <div class="ef-hiany__lista">
+            ${mezok.map(k => `<button type="button" class="ef-hiany__mezo" data-hiany-mezo="${escHtml(k)}"
+                 title="Ugrás a mezőhöz">${escHtml(cimke(k))}</button>`).join('')}
+          </div>
+          <label class="check-row ef-hiany__szuro">
+            <input type="checkbox" id="ef-csak-hiany"> <span>Csak a hiányzó mezők</span>
+          </label>`
+        : '<div class="ef-hiany__nincs">Ebből semmi nem a nyilvántartásban pótolható.</div>'}
+        ${egyeb.length ? `<div class="ef-hiany__egyeb">Nem sémamező — az ügyből (EH szám, iktatószám),
+          az Azonosítók blokkból, a generálásból (mai nap) jön, vagy ismeretlen jelölő:
+          ${jelolok(egyeb)}</div>` : ''}
+        ${forditatlan.length ? `<div class="ef-hiany__egyeb">Fordítatlan (van adat, de nincs szótári
+          pár — Beállítások → Szótár): ${jelolok(forditatlan)}</div>` : ''}
+      </div>`;
+  }
+
+  /** A hiányzó mezők kijelölése; a „Csak a hiányzó mezők” a többit elrejti. */
+  function hianyJelol({ mezok = [] }) {
+    const wrap = document.querySelector('.ef-wrap');
+    for (const k of mezok) {
+      const el = document.getElementById('ef-f-' + k);
+      const doboz = el && el.closest('.ef-field');
+      if (!doboz) continue;
+      doboz.classList.add('ef-field--hianyzo');
+      doboz.closest('.ef-group')?.classList.add('has-hiany');
+      // Az azonosítóból tükrözött mező forrása az azonosító-blokk: annak is látszania kell
+      if (el.dataset.mirror) document.getElementById('ef-id-list')?.closest('.ef-group')?.classList.add('has-hiany');
+    }
+    // A számított mezők előnézete (pl. a teljes lakcím) a szűrt nézetben is látsszon
+    document.getElementById('ef-computed')?.closest('.ef-group')?.classList.add('has-hiany');
+
+    document.querySelectorAll('[data-hiany-mezo]').forEach(b =>
+      b.addEventListener('click', () => fokuszal(b.dataset.hianyMezo)));
+    const szuro = document.getElementById('ef-csak-hiany');
+    if (szuro && wrap) szuro.addEventListener('change', () => wrap.classList.toggle('csak-hiany', szuro.checked));
+    if (mezok.length) fokuszal(mezok[0]);
   }
 
   /** A kért mezőhöz görget, kiemeli és bele is teszi a kurzort. */
@@ -321,6 +383,10 @@ const EmployeeForm = (() => {
 
     const problems = SchemaStore.validateValues(values);
     if (problems.length) {
+      // A „csak a hiányzók” szűrő elrejthetné a hibás mezőt — hibánál minden látsszon
+      document.querySelector('.ef-wrap')?.classList.remove('csak-hiany');
+      const szuro = document.getElementById('ef-csak-hiany');
+      if (szuro) szuro.checked = false;
       for (const p of problems) {
         const el = document.querySelector(`[data-error-for="${CSS.escape(p.key)}"]`);
         if (el) {
@@ -338,6 +404,7 @@ const EmployeeForm = (() => {
       if (editingId) {
         EmployeeRepo.update(editingId, {
           fields: values, identifiers: draftIdentifiers, schemaVersion: SchemaStore.version(),
+          source: forras,
         });
       } else {
         EmployeeRepo.create({
