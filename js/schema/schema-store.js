@@ -19,6 +19,9 @@ const SchemaStore = (() => {
 
   let backend = null;
   let schema  = null;
+  // A tárolóból LÁTOTT szótárpárok (normalizált angol alak) — a mentéskori
+  // átvételhez kell (`szotarAtvetel`): ami nem volt itt, azt más mentette.
+  let latottSzotar = new Set();
   const listeners = new Set();
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -43,6 +46,7 @@ const SchemaStore = (() => {
       try { raw = await backend.load(); } catch { raw = null; }
     }
     schema = normalize(raw && Array.isArray(raw.fields) ? raw : clone(SEED_SCHEMA));
+    latottSzotar = szotarKulcsok(schema.dictionary);
     emit();
     return schema;
   }
@@ -50,6 +54,7 @@ const SchemaStore = (() => {
   /** Séma betöltése memóriából – teszthez és előnézethez. */
   function loadFrom(obj) {
     schema = normalize(obj ? clone(obj) : clone(SEED_SCHEMA));
+    latottSzotar = szotarKulcsok(schema.dictionary);
     emit();
     return schema;
   }
@@ -57,8 +62,39 @@ const SchemaStore = (() => {
   async function save() {
     ensureLoaded();
     schema.updatedAt = nowIso();
-    if (backend) await backend.save(schema);
+    if (backend) {
+      await szotarAtvetel();
+      await backend.save(schema);
+    }
+    latottSzotar = szotarKulcsok(schema.dictionary);
     return true;
+  }
+
+  function szotarKulcsok(lista) {
+    return new Set((lista || []).map(e => ValueCodec.normalize(e.en)));
+  }
+
+  /**
+   * Mentés előtt: a tárolóban közben megjelent szótárpárok ÁTVÉTELE.
+   *
+   * A config közös fájl, és minden ablak/gép a BETÖLTÉSKORI sémáját írta
+   * vissza — egy régóta nyitott ablak bármely sémamentése (mező, szótár, az
+   * induló felhozatal) némán eltüntette a máshol időközben felvett párokat.
+   * Most a tárolt pár, amit ez a példány még NEM látott, megmarad. Amit itt
+   * töröltek (láttuk, és már nincs nálunk), az törölve marad.
+   * ponytail: csak a szótárra; a mezőszerkesztés ugyanígy ütközhet, ott
+   * ritkább — ha előjön, ugyanez a minta a `fields`-re.
+   */
+  async function szotarAtvetel() {
+    let tarolt = null;
+    try { tarolt = await backend.load(); } catch { return 0; }
+    const nalunk = szotarKulcsok(schema.dictionary);
+    const uj = normalizeDictionary(tarolt && tarolt.dictionary).filter(e => {
+      const k = ValueCodec.normalize(e.en);
+      return !latottSzotar.has(k) && !nalunk.has(k);
+    });
+    if (uj.length) schema.dictionary = schema.dictionary.concat(uj);
+    return uj.length;
   }
 
   /** Hiányzó részek pótlása – a séma sosem bukhat el hiányos adat miatt. */

@@ -93,7 +93,8 @@ const DEFAULT_EXPORT_PROFILES = [
      * őket. (2026-08-18-i döntés – korábban mindkettő benne volt a lakcím-
      * szakaszban.)
      */
-    excludeColumns: ['topographical_number', 'other_accommodation'],
+    // 2026-10-27: a szálláshely jogcíme is a HR-é (a párja, az egyéb jogcím is az).
+    excludeColumns: ['topographical_number', 'legal_title_of_accommodation', 'other_accommodation'],
 
     /**
      * Lapvédelem az ÜRES sablonhoz.

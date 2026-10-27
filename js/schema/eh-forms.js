@@ -169,7 +169,8 @@ const EhForms = (() => {
     { eh: 'lepcsohaz', label: 'lépcsőház', key: 'stairway', max: '4' },
     { eh: 'emelet', label: 'emelet', key: 'floor', list: '01…19 vagy földszint' },
     { eh: 'ajto', label: 'ajtó', key: 'door', max: '4' },
-    { eh: 'tartjogcim', label: 'tartózkodás jogcíme', req: true, manual: true, list: true },
+    { eh: 'tartjogcim', label: 'tartózkodás jogcíme', req: true,
+      key: 'legal_title_of_accommodation', list: true },
     { eh: 'tartjogcimegyeb', label: 'éspedig', key: 'other_accommodation' },
 
     { panel: 'Teljes körű egészségbiztosítás feltételei' },

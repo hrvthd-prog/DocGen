@@ -171,9 +171,16 @@ const DocxService = (() => {
     // egy 120 kB-os hatósági sablonból 1,15 MB-os kimenet lesz – ugyanaz a
     // tartalom tizedannyi helyen elfér, és a hálózaton is annyival megy.
     const filled = doc.getZip().generate({ type: 'uint8array', compression: 'DEFLATE' });
+    // A jelölőnégyzet-vezérlő csoportja is hiány, ha a mezője ismert, de üres:
+    // különben minden négyzete némán üres marad, és a napló nem szól.
+    const uresNegyzet = new Set();
+    const buffer = stampDocGen(processCheckboxes(filled, data, opts.equals, col => {
+      if (opts.resolve && opts.resolve(col) === '') uresNegyzet.add(col);
+    }));
     return {
-      buffer:    stampDocGen(processCheckboxes(filled, data, opts.equals)),
-      emptyTags: [...emptyTags].filter(t => t && !t.startsWith('CHECK:') && !t.startsWith('B:')),
+      buffer,
+      emptyTags: [...emptyTags].filter(t => t && !t.startsWith('CHECK:') && !t.startsWith('B:'))
+                   .concat([...uresNegyzet]),
     };
   }
 
@@ -249,7 +256,7 @@ const DocxService = (() => {
     return sdtXml.replace(cM[0], content);
   }
 
-  function processSdt(sdtXml, match) {
+  function processSdt(sdtXml, match, onCol) {
     const prM = sdtXml.match(/<w:sdtPr\b[\s\S]*?<\/w:sdtPr>/i);
     if (!prM) return sdtXml;
     // Csak valódi jelölőnégyzet-vezérlőkhöz nyúlunk – a dátum/legördülő
@@ -263,6 +270,7 @@ const DocxService = (() => {
     const col = raw.slice(0, i).trim();
     const target = raw.slice(i + 1).trim();
     if (!col || !target) return sdtXml;
+    if (onCol) onCol(col);
 
     const checked = !!match(col, target);
     let out = sdtXml.replace(prM[0], setCheckedInSdtPr(prM[0], checked));
@@ -310,13 +318,14 @@ const DocxService = (() => {
     return zip.generate({ type: 'uint8array', compression: 'DEFLATE' });
   }
 
-  function processCheckboxes(uint8, rowData, equals) {
+  /** `onCol(mező)`: minden feldolgozott jelölőnégyzet mezőjére (a hiánynaplóhoz). */
+  function processCheckboxes(uint8, rowData, equals, onCol = null) {
     const zip = new PizZip(uint8);
     const entry = zip.file('word/document.xml');
     if (!entry) return uint8;
     const match = makeSdtMatcher(rowData, equals);
     const xml = entry.asText();
-    const updated = xml.replace(/<w:sdt\b[\s\S]*?<\/w:sdt>/gi, sdt => processSdt(sdt, match));
+    const updated = xml.replace(/<w:sdt\b[\s\S]*?<\/w:sdt>/gi, sdt => processSdt(sdt, match, onCol));
     zip.file('word/document.xml', updated);
     return zip.generate({ type: 'uint8array', compression: 'DEFLATE' });
   }

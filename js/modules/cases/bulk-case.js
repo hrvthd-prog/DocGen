@@ -115,6 +115,23 @@ const BulkCase = (() => {
              openedAt: ugyek[0].openedAt };
   }
 
+  /** Az összes köteg, legújabb elöl — az Ügyek „Tömeges ügyek” nézetéhez. */
+  function kotegek() {
+    const csop = new Map();
+    for (const c of CaseRepo.all()) {
+      if (!c.batchId) continue;
+      if (!csop.has(c.batchId)) csop.set(c.batchId, []);
+      csop.get(c.batchId).push(c);
+    }
+    return [...csop].map(([batchId, ugyek]) => ({
+      batchId, ugyek,
+      tipus:     ugyek[0].type,
+      openedAt:  ugyek.map(c => c.openedAt).sort()[0],
+      createdAt: ugyek.map(c => c.createdAt).sort()[0],
+      nyitott:   ugyek.filter(c => !c.closedAt).length,
+    })).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  }
+
   /** A generáláshoz előre kijelölt sablonok: az ügytípushoz rendeltek, amik meg is vannak. */
   function elovalasztott(caseType, elerheto) {
     const t = CaseTypes.byKey(caseType);
@@ -137,7 +154,7 @@ const BulkCase = (() => {
       tipus: TIPUSOK[0].key, ids: [], ertekek: {}, triggerDate: '',
       batchId: null, rogzites: null,     // rögzítés után: a `rogzit` eredménye
       sablonok: null,                    // Set; null = az ügytípus hozzárendelése
-      outDir: null, perWorker: false, fut: false, eredmeny: null,
+      outDir: null, outEngedely: false, perWorker: false, fut: false, eredmeny: null,
     };
   }
 
@@ -160,6 +177,30 @@ const BulkCase = (() => {
       }
     }
     rajzol();
+    if (st.batchId) mappaVissza(st.batchId);
+  }
+
+  // ── A köteg kimeneti mappája: kötegenként megjegyezve ──────────────────────
+  // A böngésző tárolójában (IndexedDB), mint a többi mappa-handle: a handle nem
+  // menthető fájlba. Az engedélyt indulásonként elveszi — újrakérni csak
+  // kattintásra lehet, ezért az a generálás gombjánál történik.
+
+  const mappaKulcs = batchId => 'tomeges_kimenet:' + batchId;
+
+  async function mappaVissza(batchId) {
+    let m = null;
+    try { m = await FsService.loadHandle(mappaKulcs(batchId)); } catch { m = null; }
+    if (!m || !m.dir || !st || st.batchId !== batchId || st.outDir) return;
+    st.outDir = m.dir;
+    st.perWorker = !!m.perWorker;
+    st.outEngedely = await FsService.queryPermissionOnly(m.dir, true);
+    rajzol();
+  }
+
+  function mappaMent() {
+    if (!st.batchId || !st.outDir) return;
+    FsService.saveHandle(mappaKulcs(st.batchId), { dir: st.outDir, perWorker: st.perWorker })
+      .catch(e => BevLogger.warn('TOMEGES_UGY', 'A kimeneti mappa nem jegyezhető meg', e.message, ''));
   }
 
   function bezar() {
@@ -249,6 +290,10 @@ const BulkCase = (() => {
     const l5 = lepesHtml(5, 'Dokumentumok generálása', kesz ? 'active' : 'off',
       kesz ? generalasHtml(t) : '<div class="bk-hint">A rögzítés után nyílik meg.</div>');
 
+    // A görgetés marad: eddig minden gomb (generálás, „Külön mappa”, sablon-
+    // jelölő) után a lap tetejére ugrott az újrarajzolás.
+    const regi = gyoker.querySelector('.bk');
+    const gorgetes = regi ? regi.scrollTop : 0;
     gyoker.innerHTML = `
       <div class="cv-page cv-page--scroll bk">
         <div class="cv-dhead">
@@ -262,6 +307,7 @@ const BulkCase = (() => {
         </div>
         <div class="bk-body">${l1}${l2}${l3}${l4}${l5}</div>
       </div>`;
+    if (gorgetes) gyoker.querySelector('.bk').scrollTop = gorgetes;
     kot(t);
   }
 
@@ -314,7 +360,8 @@ const BulkCase = (() => {
           <div class="bk-subtitle">Kimeneti mappa</div>
           <div class="bk-out">
             <button type="button" class="btn btn-secondary btn-sm" id="bk-out">Tallózás…</button>
-            <span class="bk-outname">${st.outDir ? '📁 ' + escHtml(st.outDir.name)
+            <span class="bk-outname">${st.outDir ? '📁 ' + escHtml(st.outDir.name) + (st.outEngedely ? ''
+                : ' <span class="bk-muted">(megjegyzett — a generáláskor engedélyt kér)</span>')
               : (kellMappa ? 'nincs kiválasztva' : 'letöltésként érkeznek')}</span>
           </div>
           <button type="button" class="bk-toggle ${st.perWorker ? 'is-on' : ''}" id="bk-perworker"
@@ -394,7 +441,7 @@ const BulkCase = (() => {
       rajzol();
     }));
     q('#bk-out')?.addEventListener('click', mappaValaszto);
-    q('#bk-perworker')?.addEventListener('click', () => { st.perWorker = !st.perWorker; rajzol(); });
+    q('#bk-perworker')?.addEventListener('click', () => { st.perWorker = !st.perWorker; mappaMent(); rajzol(); });
     q('#bk-gen-pdf')?.addEventListener('click', () => general(true));
     q('#bk-gen-docx')?.addEventListener('click', () => general(false));
     q('#bk-missing')?.addEventListener('click', () => DocgenMissingLog.showDialog());
@@ -500,7 +547,9 @@ const BulkCase = (() => {
     try {
       // A saját `id` miatt a rendszerablak a legutóbb választott helyen nyílik.
       st.outDir = await window.showDirectoryPicker({ id: 'tomeges_kimenet', mode: 'readwrite' });
+      st.outEngedely = true;
       st.eredmeny = null;
+      mappaMent();
       rajzol();
     } catch (e) {
       if (e.name !== 'AbortError') toast('A mappa nem választható: ' + e.message, 'error');
@@ -509,6 +558,12 @@ const BulkCase = (() => {
 
   async function general(pdf) {
     if (st.fut) return;
+    // A megjegyzett mappa engedélye: a kattintás a felhasználói gesztus.
+    if (st.outDir && !st.outEngedely) {
+      try { st.outEngedely = await FsService.verifyPermission(st.outDir, true); }
+      catch { st.outEngedely = false; }
+      if (!st.outEngedely) { toast('A mappához nincs engedély — válassz újat a Tallózással.', 'error'); rajzol(); return; }
+    }
     const sablonok = [...st.sablonok];
     st.fut = true;
     st.eredmeny = null;
@@ -616,7 +671,7 @@ const BulkCase = (() => {
   }
 
   return {
-    TIPUSOK, tipus, mezoi, terv, rogzit, koteg, elovalasztott,
+    TIPUSOK, tipus, mezoi, terv, rogzit, koteg, kotegek, elovalasztott,
     hasznalhato, open, openTemplates,
   };
 })();

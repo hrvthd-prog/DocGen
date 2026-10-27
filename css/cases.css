@@ -598,11 +598,12 @@
   .dash-stat    { flex-basis: 100px; }
 }
 
-/* ── Új ügy: két út, a tömeges a nagyobb csempe ─────────────────────────── */
-.nu-grid { display: grid; grid-template-columns: 1fr 1.6fr; gap: 14px; }
+/* ── Új ügy: két egyforma csempe, középre igazított szöveggel ──────────── */
+.nu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .nu-tile {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left;
-  padding: 16px 18px; border: 1px solid var(--c-border); border-radius: var(--radius-lg, 10px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; text-align: center; min-height: 150px;
+  padding: 20px 22px; border: 2px solid var(--c-border); border-radius: var(--radius-lg, 10px);
   background: var(--c-bg); color: var(--c-text); cursor: pointer; font: inherit;
   transition: border-color .12s, box-shadow .12s, background .12s;
 }
@@ -610,14 +611,8 @@
   border-color: var(--c-teal); box-shadow: 0 2px 12px rgba(26,50,56,.12); outline: none;
 }
 .nu-tile[disabled] { opacity: .5; cursor: not-allowed; }
-.nu-tile--big {
-  min-height: 170px; padding: 22px 24px; background: #E9F5F2; border: 2px solid var(--c-green);
-}
-.nu-tile__ikon { font-size: 22px; line-height: 1; }
-.nu-tile--big .nu-tile__ikon { font-size: 34px; }
-.nu-tile__cim { font-weight: 700; font-size: 14px; }
-.nu-tile--big .nu-tile__cim { font-size: 17px; color: #21474f; }
-.nu-tile__sub { font-size: 12px; color: var(--c-muted); line-height: 1.45; }
+.nu-tile__cim { font-weight: 700; font-size: 16px; color: #21474f; }
+.nu-tile__sub { font-size: 12px; color: var(--c-muted); line-height: 1.45; max-width: 34ch; }
 @media (max-width: 640px) { .nu-grid { grid-template-columns: 1fr; } }
 
 /* Tömeges ügy jelölése a listán */

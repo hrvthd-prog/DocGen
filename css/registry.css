@@ -481,6 +481,7 @@
 .ml-tag.is-potolva { color: var(--c-green); border-color: var(--c-green); text-decoration: line-through; }
 .ml-ok { color: var(--c-green); font-weight: 600; font-size: 11px; margin-right: 6px; }
 .ml-na { color: var(--c-muted); }
+.ml-pager { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 12px; color: var(--c-muted); }
 
 /* Legutóbbi változások */
 .eh-recent-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }

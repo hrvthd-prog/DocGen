@@ -33,6 +33,8 @@ const CasesModule = (() => {
   const NEZETEK = [
     { key: 'attekintes', label: 'Áttekintés' },
     { key: 'ugyek',      label: 'Ügyek' },
+    // A tömeges kötegek közvetlenül — eddig csak egy köteges ügy részletezőjéből
+    { key: 'tomeges',    label: 'Tömeges ügyek' },
     { key: 'dolgozok',   label: 'Dolgozók' },
     { key: 'atutalasok', label: 'Átutalások' },
   ];
@@ -252,8 +254,10 @@ const CasesModule = (() => {
     let ugyDb = 0, dolgozoDb = 0;
     try { ugyDb = CaseRepo.summary().nyitott; } catch { /* marad 0 */ }
     try { dolgozoDb = EmployeeRepo.all().length; } catch { /* marad 0 */ }
+    let kotegDb = 0;
+    try { kotegDb = BulkCase.kotegek().filter(k => k.nyitott).length; } catch { /* marad 0 */ }
     const atDb = atutalasDb();
-    const szam = { ugyek: ugyDb, dolgozok: dolgozoDb };
+    const szam = { ugyek: ugyDb, dolgozok: dolgozoDb, tomeges: kotegDb };
 
     return `
       <div class="cv-viewbar">
@@ -365,6 +369,50 @@ const CasesModule = (() => {
         <div class="cv-foot">
           ${irhat() ? '<button class="btn btn-primary btn-sm" id="cv-new">Új ügy</button>' : ''}
           <span class="cv-count">${lista.length} ügy</span>
+        </div>
+      </div>`;
+  }
+
+  // ── Tömeges ügyek ──────────────────────────────────────────────────────────
+
+  /** A kötegek listája; soronként a köteg nyílik (dolgozók + generálás). */
+  function tomegesHtml() {
+    let lista = [];
+    try { lista = BulkCase.kotegek(); } catch { lista = []; }
+    const nevek = k => {
+      const n = k.ugyek.map(c => dolgozoNeve(c.employeeId));
+      return n.slice(0, 4).join(', ') + (n.length > 4 ? ` és még ${n.length - 4}` : '');
+    };
+    return `
+      <div class="cv-page">
+        <div class="cv-table-wrap">
+          ${lista.length ? `
+            <table class="data-table cv-table">
+              <thead><tr>
+                <th class="cv-th">Megnyitva</th>
+                <th class="cv-th">Ügytípus</th>
+                <th class="cv-th">Dolgozók</th>
+                <th class="cv-th">Állapot</th>
+                <th class="cv-th cv-th--go"></th>
+              </tr></thead>
+              <tbody>${lista.map(k => `
+                <tr class="cv-tr" data-batch="${escHtml(k.batchId)}" tabindex="0" title="A köteg megnyitása">
+                  <td class="cv-td--date">${escHtml(k.openedAt || '')}</td>
+                  <td>${escHtml(CaseTypes.label(k.tipus))}</td>
+                  <td><span class="cv-t__nev">${k.ugyek.length} dolgozó</span>
+                      <span class="cv-t__tip">${escHtml(nevek(k))}</span></td>
+                  <td class="cv-td--allapot">${k.nyitott
+                    ? `${k.nyitott} nyitott${k.ugyek.length - k.nyitott ? ` · ${k.ugyek.length - k.nyitott} lezárt` : ''}`
+                    : 'mind lezárva'}</td>
+                  <td class="cv-td--go">Megnyitás</td>
+                </tr>`).join('')}</tbody>
+            </table>`
+          : '<div class="cv-empty">Még nincs tömeges ügy — Új ügy → Tömeges ügyintézés.</div>'}
+        </div>
+        <div class="cv-foot">
+          ${irhat() && BulkCase.hasznalhato()
+            ? '<button class="btn btn-primary btn-sm" id="cv-new-bulk">Új tömeges ügy</button>' : ''}
+          <span class="cv-count">${lista.length} köteg</span>
         </div>
       </div>`;
   }
@@ -682,7 +730,7 @@ const CasesModule = (() => {
 
   /**
    * „Új ügy” → két út: egy dolgozó (a megszokott űrlap) vagy tömeges
-   * ügyintézés. A tömeges a nagyobb csempe: ez az új, és ez spórol többet.
+   * ügyintézés. A két csempe egyforma (2026-10-27: a felhasználó kérte).
    */
   function ujUgyValaszto() {
     const tomegesOk = BulkCase.hasznalhato();
@@ -691,13 +739,11 @@ const CasesModule = (() => {
       body: `
         <div class="nu-grid">
           <button type="button" class="nu-tile" id="nu-egy">
-            <span class="nu-tile__ikon" aria-hidden="true">👤</span>
             <span class="nu-tile__cim">Egy dolgozó ügyintézése</span>
             <span class="nu-tile__sub">Egy ügy egy dolgozóra — a megszokott űrlap.</span>
           </button>
-          <button type="button" class="nu-tile nu-tile--big" id="nu-tomeges" ${tomegesOk ? '' :
+          <button type="button" class="nu-tile" id="nu-tomeges" ${tomegesOk ? '' :
             'disabled title="Ehhez az ügyek és a nyilvántartás írása is kell."'}>
-            <span class="nu-tile__ikon" aria-hidden="true">👥</span>
             <span class="nu-tile__cim">Tömeges ügyintézés</span>
             <span class="nu-tile__sub">Több dolgozó egyszerre — pl. közös új szálláshely:
               az adatok frissítése, dolgozónként egy ügy és az iratok generálása egy helyen.</span>
@@ -767,6 +813,7 @@ const CasesModule = (() => {
                   title="Mely sablonok kellenek egy ügytípushoz — a tömeges generálás ezeket jelöli ki előre">Ügytípus-sablonok…</button>
         </div>` : ''}${CasesDashboard.render()}</div>`;
     else if (state.nezet === 'dolgozok')   el.innerHTML = dolgozokHtml();
+    else if (state.nezet === 'tomeges')    el.innerHTML = tomegesHtml();
     else                                   el.innerHTML = ugyekHtml();
 
     bind();
@@ -837,6 +884,10 @@ const CasesModule = (() => {
 
     container.querySelectorAll('.cv-tr[data-id]').forEach(tr =>
       sorAktival(tr, () => megnyit(tr.dataset.id)));
+    container.querySelectorAll('[data-batch]').forEach(el =>
+      sorAktival(el, () => tomegesNyit(el.dataset.batch)));
+    const ujKoteg = q('#cv-new-bulk');
+    if (ujKoteg) ujKoteg.addEventListener('click', () => tomegesNyit());
     container.querySelectorAll('[data-open-case]').forEach(el =>
       sorAktival(el, () => megnyit(el.dataset.openCase)));
     container.querySelectorAll('[data-new-for]').forEach(el =>

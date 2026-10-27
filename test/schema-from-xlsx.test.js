@@ -122,7 +122,7 @@ section('Összevetés a kiinduló sémával');
 // kiszúrja a véletlen eltérést.
 const FORMANYOMTATVANY_MEZOK = [
   'occupation_before_arrival', 'other_accommodation', 'pp_issuance_place',
-  'stairway', 'topographical_number',
+  'stairway', 'topographical_number', 'legal_title_of_accommodation',
   'hr_bank_account', 'hr_bank_name', 'hr_children', 'hr_computer_skills',
   'hr_degree_document_number',
   'hr_department_cost_center', 'hr_direct_leader', 'hr_dual_citizenship',

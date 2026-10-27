@@ -50,6 +50,8 @@ section('Kiinduló séma épsége');
 const FORMANYOMTATVANY_MEZOK = [
   'pp_issuance_place', 'stairway', 'topographical_number',
   'other_accommodation', 'occupation_before_arrival',
+  // 2026-10-27: a 3. pont jogcím-négyzetei (a 06-os sablon content control-jai)
+  'legal_title_of_accommodation',
 ];
 
 // A HR korábbi „Personal Data Sheet" űrlapjából átvett rovatok. Egyetlen irat
@@ -179,7 +181,7 @@ const HATOSAGI_SORREND = [
   // 3. pont — magyarországi szálláshely (helyrajzi szám elöl)
   'topographical_number', 'postal_code', 'locality', 'name_of_public_place',
   'type_of_public_place', 'street_number', 'building', 'stairway', 'floor', 'door',
-  'other_accommodation',
+  'legal_title_of_accommodation', 'other_accommodation',
   // 6. pont — eltartott hozzátartozók
   'hr_children',
   // 7. pont — érkezést megelőző lakcím
@@ -214,10 +216,10 @@ test('a kötelező mezők jelölve vannak', () => {
   assertEq(req.join(','), 'citizenship,date_of_birth,forename,surname');
 });
 
-test('mind az öt legördülő mező enum típusú', () => {
+test('mind a hat legördülő mező enum típusú', () => {
   const enums = SchemaStore.fields().filter(f => f.type === 'enum').map(f => f.key).sort();
   assertEq(enums.join(','),
-    'educational_attainment,marital_status,passport_type,sex,speaks_hungarian');
+    'educational_attainment,legal_title_of_accommodation,marital_status,passport_type,sex,speaks_hungarian');
 });
 
 test('a séma önmagában ellentmondásmentes', () => {

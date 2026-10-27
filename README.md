@@ -95,7 +95,10 @@ A Dokumentumok fül **Hiányzó adatok naplója** soronként **Javítás** gombo
 kap: a dolgozó adatlapja egy külön változatban nyílik (csak innen érhető el),
 a generáláskor hiányzó mezők kijelölve, *Csak a hiányzó mezők* szűrővel.
 Mentés után a program visszaolvassa az adatot a tárolóból, és a napló
-**frissítve** nyílik újra: az azóta pótolt mező zölden áthúzva.
+**frissítve** nyílik újra (ugyanazon a lapon): az azóta pótolt mező zölden
+áthúzva. A napló **50 soros lapokra** bomlik (*Újabbak / Régebbiek*), és a
+legújabb 2000 bejegyzést őrzi — korlát nélkül a megnyitás befagyott. Az üres
+jelölőnégyzet-csoport (pl. a szálláshely jogcíme) is bekerül.
 
 ## Sablonok
 
@@ -515,7 +518,8 @@ esemény, mezőváltozás nélkül is bekerül.
 Nyilvántartás → **Legutóbbi változások**: az összes dolgozó naplója egy
 listában, **legfrissebb elöl** (a felvitel is benne van). Szűrhető névre és
 forrásra (űrlap, import, tömeges ügyintézés, hiányzó-adat napló…); egy sorra
-kattintva a dolgozó összesítője nyílik. Erre való: egy rossz import vagy
+kattintva **egyenesen a szerkesztő** nyílik, mentés (vagy *Vissza a listához*)
+után a lista ugyanazzal a szűrővel, ugyanott áll. Erre való: egy rossz import vagy
 elgépelés több száz dolgozó között is visszakereshető.
 
 ## Összesítő lap
@@ -761,11 +765,13 @@ megszokott űrlap) és **Tömeges ügyintézés**. Egyelőre egy tömeges típus
    mappa **Tallózás…**-sal; alapból minden fájl a választott mappába, a
    **Külön mappa minden dolgozónak** kapcsolóval `<Név>_Elokeszitett`-be
    (meglévő mappát megtalálja, nem létezőt kérdés nélkül létrehoz, több hasonló
-   névnél rákérdez).
+   névnél rákérdez). A választott mappát és a kapcsolót a köteg **megjegyzi**;
+   újraindítás után a generálás gombja kéri vissza a mappa-engedélyt.
 
-A köteg ügyei a listán **„Tömeges”** jelölést kapnak; bármelyik ügy
-részletezőjéből a **Tömeges ügy (N dolgozó)** gomb újranyitja a köteget a
-generálási lépésnél.
+A kötegek az Ügyek fül **Tömeges ügyek** nézetében közvetlenül elérhetők
+(megnyitás napja, ügytípus, dolgozók, állapot). A köteg ügyei a listán
+**„Tömeges”** jelölést kapnak; bármelyik ügy részletezőjéből a **Tömeges ügy
+(N dolgozó)** gomb is újranyitja a köteget a generálási lépésnél.
 
 **Ügytípus-sablonok:** Ügyek → Áttekintés → **Ügytípus-sablonok…** — melyik
 sablon kell egy ügytípushoz. A közös configba kerül, nincs beégetve.

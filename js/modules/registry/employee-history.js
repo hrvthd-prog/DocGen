@@ -122,26 +122,34 @@ const EmployeeHistory = (() => {
     return elso + (l.length > 3 ? `<div class="eh-more">+${l.length - 3} további mező</div>` : '');
   }
 
+  // A szűrő és a görgetés a szerkesztőből visszatérve megmarad.
+  const recent = { q: '', src: '', gorgetes: 0 };
+
   /**
    * Legutóbbi változások: az összes dolgozó naplója időrendben, legfrissebb
    * elöl. Egy rossz import vagy elgépelés több száz dolgozó között is így
-   * kereshető vissza — „kik voltak az utolsók”. Sorra kattintva `onOpen(id)`.
+   * kereshető vissza — „kik voltak az utolsók”.
+   *
+   * Sorra kattintva `onOpen(id, vissza)`: a hívó nyitja a szerkesztőt, és a
+   * `vissza()`-val ide tér vissza — ugyanazzal a szűrővel, ugyanott (`marad`).
    */
-  function openRecent({ onOpen = null } = {}) {
+  function openRecent({ onOpen = null, marad = false } = {}) {
+    if (!marad) Object.assign(recent, { q: '', src: '', gorgetes: 0 });
     const mind = osszesBejegyzes();
     const forrasok = [...new Set(mind.map(x => x.h.source).filter(Boolean))];
     showDialog({
       title: 'Legutóbbi változások',
       body: `
         <div class="eh-recent-bar">
-          <input type="search" id="eh-r-q" class="field-input" placeholder="Szűrés névre">
+          <input type="search" id="eh-r-q" class="field-input" placeholder="Szűrés névre"
+                 value="${escHtml(recent.q)}">
           <select id="eh-r-src" class="field-select" title="Honnan történt a változás">
             <option value="">Minden forrás</option>
-            ${forrasok.map(f => `<option value="${escHtml(f)}">${escHtml(SOURCE_LABEL[f] || f)}</option>`).join('')}
+            ${forrasok.map(f => `<option value="${escHtml(f)}" ${f === recent.src ? 'selected' : ''}>${escHtml(SOURCE_LABEL[f] || f)}</option>`).join('')}
           </select>
           <span id="eh-r-db" class="eh-recent-db"></span>
         </div>
-        <div class="data-table-wrap eh-recent-wrap">
+        <div class="data-table-wrap eh-recent-wrap" id="eh-r-wrap">
           <table class="data-table eh-recent">
             <thead><tr><th>Időpont</th><th>Dolgozó</th><th>Művelet</th><th>Forrás</th>
                        <th>Ki</th><th>Változás</th></tr></thead>
@@ -161,7 +169,7 @@ const EmployeeHistory = (() => {
         ? `a legutóbbi ${RECENT_MAX} / ${lista.length} bejegyzés` : `${lista.length} bejegyzés`;
       const body = document.getElementById('eh-r-body');
       body.innerHTML = lathato.map((x, i) => `
-        <tr class="eh-recent-row" data-r="${i}" tabindex="0" title="A dolgozó megnyitása">
+        <tr class="eh-recent-row" data-r="${i}" tabindex="0" title="A dolgozó szerkesztése">
           <td style="white-space:nowrap">${escHtml(huDatum(x.h.at))}</td>
           <td><b>${escHtml(nevOf(x.emp))}</b>${x.emp.exited ? ' <span class="eh-more">(kilépett)</span>' : ''}</td>
           <td>${escHtml(ACTION_LABEL[x.h.action] || x.h.action || '')}</td>
@@ -171,7 +179,13 @@ const EmployeeHistory = (() => {
         </tr>`).join('')
         || '<tr><td colspan="6" class="eh-empty">Nincs a szűrésnek megfelelő bejegyzés.</td></tr>';
       body.querySelectorAll('[data-r]').forEach(tr => {
-        const nyit = () => { if (onOpen) onOpen(lathato[Number(tr.dataset.r)].emp.id); };
+        const nyit = () => {
+          if (!onOpen) return;
+          recent.q = document.getElementById('eh-r-q').value;
+          recent.src = document.getElementById('eh-r-src').value;
+          recent.gorgetes = document.getElementById('eh-r-wrap').scrollTop;
+          onOpen(lathato[Number(tr.dataset.r)].emp.id, () => openRecent({ onOpen, marad: true }));
+        };
         tr.addEventListener('click', nyit);
         tr.addEventListener('keydown', e => { if (e.key === 'Enter') nyit(); });
       });
@@ -179,6 +193,7 @@ const EmployeeHistory = (() => {
     document.getElementById('eh-r-q').addEventListener('input', rajzol);
     document.getElementById('eh-r-src').addEventListener('change', rajzol);
     rajzol();
+    if (marad) document.getElementById('eh-r-wrap').scrollTop = recent.gorgetes;
   }
 
   return { open, openRecent, _osszesBejegyzes: osszesBejegyzes, SOURCE_LABEL };

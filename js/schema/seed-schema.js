@@ -309,6 +309,27 @@ const SEED_SCHEMA = {
       label: { hu: 'Ajtó', en: 'Door' },
       hint: { en: 'Door number, if any.\nExample: 14\nLeave empty if not applicable.' } },
 
+    // A hatósági kérelem (9. melléklet) 3. pontjának öt jelölőnégyzete. A 06-os
+    // sablon content control-jai `legal_title_of_accommodation:<id>` címkével
+    // néznek ide — a mező hiányában egyik sem jelölődött be, és a hiánynapló
+    // sem szólt (2026-10-27). Az `other` mellé az „Egyéb jogcím” szövege kell.
+    { key: 'legal_title_of_accommodation', group: 'lakcim', type: 'enum',
+      label: { hu: 'Szálláshely jogcíme', en: 'Legal Title of Accommodation' },
+      hint: { en: 'Choose from the drop-down list:\nowner / tenant / family member / courtesy user / other\n(tenant includes subtenant). If "other", describe it in the next column.' },
+      tags: ['Szálláshely jogcíme', 'Jogcím a szálláson'],
+      values: [
+        { id: 'owner',         hu: 'Tulajdonos', en: 'Owner',
+          accepts: ['owner', 'tulajdonos'] },
+        { id: 'tenant',        hu: 'Bérlő / albérlő', en: 'Tenant / subtenant',
+          accepts: ['tenant', 'subtenant', 'tenant subtenant', 'berlo', 'alberlo', 'berlo alberlo'] },
+        { id: 'family member', hu: 'Családtag', en: 'Family member',
+          accepts: ['family member', 'family', 'csaladtag'] },
+        { id: 'courtesy user', hu: 'Szívességi lakáshasználó', en: 'Courtesy user',
+          accepts: ['courtesy user', 'courtesy', 'szivessegi lakashasznalo', 'szivessegi'] },
+        { id: 'other',         hu: 'Egyéb', en: 'Other',
+          accepts: ['other', 'egyeb'] },
+      ] },
+
     { key: 'other_accommodation', group: 'lakcim', type: 'text',
       label: { hu: 'Egyéb jogcím a szálláson', en: 'Other Legal Title of Residence' },
       hint: { en: 'Only if the legal title of residence is none of owner / (sub)tenant / family member / courtesy user.\nDescribe it in one short phrase.\nLeave empty otherwise.' } },

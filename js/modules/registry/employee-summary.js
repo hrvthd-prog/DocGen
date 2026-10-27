@@ -16,7 +16,8 @@ const EmployeeSummary = (() => {
 
   const AZONOSITO = '__azonosito';   // a szerkesztő azonosító-blokkja
 
-  function open(id) {
+  /** `gorgetes`: a szerkesztőből visszatérve ugyanott álljon a lap (nem a tetején). */
+  function open(id, { gorgetes = 0 } = {}) {
     const emp = EmployeeRepo.get(id);
     if (!emp) { toast('A dolgozó nem található.', 'error'); return; }
     const uresek = !!Settings.getUser('emp_summary_empty', false);
@@ -49,6 +50,8 @@ const EmployeeSummary = (() => {
         <button class="btn btn-primary btn-sm" onclick="closeDialog()">Bezárás</button>`,
     });
 
+    const torzs = document.querySelector('#dialog-overlay .dialog-body');
+    if (torzs && gorgetes) torzs.scrollTop = gorgetes;
     const box = document.querySelector('.es-wrap');
     box.addEventListener('click', e => {
       const sor = e.target.closest('[data-es-key]');
@@ -66,10 +69,12 @@ const EmployeeSummary = (() => {
     document.getElementById('es-history').addEventListener('click', () => EmployeeHistory.open(emp));
   }
 
-  /** A szerkesztő a kért mezőnél; mentés után vissza az összesítőre. */
+  /** A szerkesztő a kért mezőnél; mentés után vissza az összesítőre, ugyanoda. */
   function szerkeszt(id, kulcs) {
+    const torzs = document.querySelector('#dialog-overlay .dialog-body');
+    const gorgetes = torzs ? torzs.scrollTop : 0;
     closeDialog();
-    EmployeeForm.open({ id, focus: kulcs, onSave: () => open(id) });
+    EmployeeForm.open({ id, focus: kulcs, onSave: () => open(id, { gorgetes }) });
   }
 
   function sorHtml(kulcs, cimke, ertek) {

@@ -16,10 +16,21 @@ const DocgenMissingLog = (() => {
   // fagyasztjuk be: minden hivatkozásnál újraolvassuk (TERV-fiokok.md 3.2).
   const currentUser = () => Settings.currentUser();
 
+  // A napló a localStorage-ban él (~5 MB a teljes app-nak). Korlát nélkül
+  // generálásonként nőtt: a megnyitás befagyott, egy tele tároló pedig a
+  // generálást is megszakította volna (az `append` a fájlok mentése ELŐTT fut).
+  const MAX_TAROLT = 2000;   // a legújabbak maradnak
+  const OLDAL = 50;          // ennyi sor egy lapon — a régiek lapozhatók
+
   function appendMissingLog(entries) {
     if (!entries || !entries.length) return;
-    const existing = Settings.get(MISSING_LOG_KEY, []);
-    Settings.set(MISSING_LOG_KEY, existing.concat(entries));
+    let lista = Settings.get(MISSING_LOG_KEY, []).concat(entries);
+    if (lista.length > MAX_TAROLT) lista = lista.slice(-MAX_TAROLT);
+    // Tele tároló: a régebbi fele kiesik — a napló miatt a generálás nem bukhat el.
+    for (let i = 0; i < 6 && lista.length; i++) {
+      try { Settings.set(MISSING_LOG_KEY, lista); return; }
+      catch { lista = lista.slice(Math.ceil(lista.length / 2)); }
+    }
   }
 
   // ── Jelölő → mező (a hiánypótló szerkesztőhöz) ─────────────────────────────
@@ -72,14 +83,28 @@ const DocgenMissingLog = (() => {
     return v.full_name || v.surname || v.forename || '(névtelen)';
   }
 
-  /** A bejegyzés dolgozója: azonosítóval, a régi bejegyzésnél egyértelmű névvel. */
-  function dolgozoja(e) {
-    try {
-      if (e.employeeId) return EmployeeRepo.get(e.employeeId);
-      const talalat = EmployeeRepo.all().filter(emp => nevOf(emp) === e.client);
-      return talalat.length === 1 ? talalat[0] : null;
-    } catch { return null; }
+  /**
+   * Bejegyzés → dolgozó: azonosítóval, a régi bejegyzésnél egyértelmű névvel.
+   * A névindex egyszer épül (lustán): soronként az összes dolgozó nevét
+   * feloldani volt a lassú napló egyik oka.
+   */
+  function dolgozoKereso() {
+    let index = null;
+    return e => {
+      try {
+        if (e.employeeId) return EmployeeRepo.get(e.employeeId);
+        if (!index) {
+          index = new Map();
+          for (const emp of EmployeeRepo.all()) {
+            const n = nevOf(emp);
+            index.set(n, index.has(n) ? null : emp);   // két azonos név → nem találgatunk
+          }
+        }
+        return index.get(e.client) || null;
+      } catch { return null; }
+    };
   }
+  const dolgozoja = e => dolgozoKereso()(e);
 
   function irhatNyilvantartast() {
     return typeof Auth === 'undefined' || Auth.can('registry.write') || Auth.can('registry.write.hr');
@@ -105,13 +130,20 @@ const DocgenMissingLog = (() => {
         } catch (err) {
           toast('A mentés nem sikerült: ' + err.message, 'error');
         }
-        showMissingLogDialog();
+        showMissingLogDialog({ marad: true });
       },
-      onCancel: showMissingLogDialog,
+      onCancel: () => showMissingLogDialog({ marad: true }),
+      cancelLabel: 'Vissza a naplóhoz',
     });
   }
 
-  function showMissingLogDialog() {
+  // A lap és a görgetés a szerkesztőből visszatérve megmarad.
+  let oldal = 0, gorgetes = 0;
+
+  /** `opts.marad`: ugyanaz a lap és görgetés (a gombtól Event érkezik — az nem az). */
+  function showMissingLogDialog(opts) {
+    const marad = !!(opts && opts.marad === true);
+    if (!marad) { oldal = 0; gorgetes = 0; }
     const isAdmin  = Settings.isAdmin();
     const allLogs  = Settings.get(MISSING_LOG_KEY, []);
     // Admin látja az összes bejegyzést, többi felhasználó csak a sajátját
@@ -119,10 +151,20 @@ const DocgenMissingLog = (() => {
 
     const colFiok = isAdmin ? `<th style="min-width:100px">Fiók</th>` : '';
     const irhat = irhatNyilvantartast();
-    const shown = [...logs].reverse();
+    const lapok = Math.max(1, Math.ceil(logs.length / OLDAL));
+    oldal = Math.min(oldal, lapok - 1);
+    // Legfrissebb elöl; csak a látható lap sorai értékelődnek ki
+    const shown = logs.slice().reverse().slice(oldal * OLDAL, (oldal + 1) * OLDAL);
+    const keres = dolgozoKereso();
+    const lapozo = logs.length > OLDAL ? `
+        <div class="ml-pager">
+          <button type="button" class="btn btn-ghost btn-sm" data-ml-page="-1" ${oldal === 0 ? 'disabled' : ''}>‹ Újabbak</button>
+          <span>${oldal * OLDAL + 1}–${Math.min((oldal + 1) * OLDAL, logs.length)} / ${logs.length} bejegyzés</span>
+          <button type="button" class="btn btn-ghost btn-sm" data-ml-page="1" ${oldal >= lapok - 1 ? 'disabled' : ''}>Régebbiek ›</button>
+        </div>` : '';
     const rows = logs.length
       ? shown.map((e, i) => {
-          const emp = dolgozoja(e);
+          const emp = keres(e);
           const fields = emp ? emp.fields : null;
           const pot = t => !!fields && potolva(t, fields);
           const mind = !!fields && (e.emptyTags || []).length > 0 && (e.emptyTags || []).every(pot);
@@ -174,7 +216,8 @@ const DocgenMissingLog = (() => {
           A zölddel áthúzott mező azóta pótolva van.
           ${isAdmin ? '<br>Admin nézetként az összes fiók bejegyzése látható.' : ''}
         </div>
-        <div class="data-table-wrap" style="max-height:480px">
+        ${lapozo}
+        <div class="data-table-wrap" id="ml-wrap" style="max-height:480px">
           <table class="data-table">
             <thead>
               <tr>
@@ -197,11 +240,21 @@ const DocgenMissingLog = (() => {
       `,
     });
 
+    const wrap = document.getElementById('ml-wrap');
+    if (wrap && marad) wrap.scrollTop = gorgetes;
     document.querySelectorAll('#dialog-overlay [data-ml-fix]').forEach(b => {
       b.addEventListener('click', () => {
         const e = shown[Number(b.dataset.mlFix)];
-        const emp = e && dolgozoja(e);
+        const emp = e && keres(e);
+        if (wrap) gorgetes = wrap.scrollTop;
         if (emp) javit(e, emp);
+      });
+    });
+    document.querySelectorAll('#dialog-overlay [data-ml-page]').forEach(b => {
+      b.addEventListener('click', () => {
+        oldal += Number(b.dataset.mlPage);
+        gorgetes = 0;
+        showMissingLogDialog({ marad: true });
       });
     });
 
@@ -218,5 +271,5 @@ const DocgenMissingLog = (() => {
   }
 
   return { append: appendMissingLog, showDialog: showMissingLogDialog, KEY: MISSING_LOG_KEY,
-           mezokreBont, potolva, dolgozoja };
+           mezokreBont, potolva, dolgozoja, MAX_TAROLT };
 })();

@@ -585,7 +585,12 @@ const RegistryModule = (() => {
       () => RegistryXlsxIO.exportTemplate());
     document.getElementById('rg-recent').addEventListener('click', () => {
       if (!state.ready) { toast('A nyilvántartás még nem töltődött be.', 'error'); return; }
-      EmployeeHistory.openRecent({ onOpen: openSummary });
+      // Egyenesen a szerkesztő (mint a hiánynaplóból); mentés vagy Mégse után
+      // vissza a listára, ugyanott.
+      EmployeeHistory.openRecent({
+        onOpen: (id, vissza) => EmployeeForm.open({ id, onSave: vissza, onCancel: vissza,
+                                                     cancelLabel: 'Vissza a listához' }),
+      });
     });
 
     // Minden rekord-művelet a kijelölésre vonatkozik, egy helyről

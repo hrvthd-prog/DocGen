@@ -112,13 +112,14 @@ atest('`max` csak másolható soron van, `list` mellett soha', () => {
   }
 });
 
-atest('a fő űrlapon 29 másolható és 10 listás DB-s mező van', () => {
+atest('a fő űrlapon 29 másolható és 11 listás DB-s mező van', () => {
   const dbs = FO.filter(r => r.key);
   // A 29. a hozzátartozó-sor (`hr_children`): az EH nyolcszor 19 rovatot kér,
   // a DB egy szabad szöveget tárol. Másolhatónak hagyjuk – a szétbontás kézi,
   // de a nyers szöveg vágólapra tehető.
   assertEq(dbs.filter(r => !r.list).length, 29, 'másolható DB-s mező');
-  assertEq(dbs.filter(r => r.list).length, 10, 'listás DB-s mező');
+  // 11.: a szálláshely jogcíme (2026-10-27 óta sémamező, addig kézi sor)
+  assertEq(dbs.filter(r => r.list).length, 11, 'listás DB-s mező');
 });
 
 atest('a jogcím-szűrés kihagyja az idegen sorokat', () => {

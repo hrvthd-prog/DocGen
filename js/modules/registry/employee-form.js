@@ -23,10 +23,10 @@ const EmployeeForm = (() => {
    *                 a generáláskor hiányzó mezők kijelölve. Csak a hiányzó-adat
    *                 napló adja át (DocgenMissingLog.javit), máshonnan nem nyílik.
    * @param source   a változásnapló forrása (alap: 'urlap')
-   * @param onCancel Mégse után (a napló így visszanyílik)
+   * @param onCancel Mégse után (a hívó lista így visszanyílik); a gomb felirata `cancelLabel`
    */
   function open({ id = null, onSave, focus = null, hianyzo = null,
-                  source = 'urlap', onCancel = null } = {}) {
+                  source = 'urlap', onCancel = null, cancelLabel = 'Vissza' } = {}) {
     editingId = id;
     onSaved   = onSave;
     forras    = source;
@@ -39,7 +39,7 @@ const EmployeeForm = (() => {
       body: (hianyzo ? hianySavHtml(hianyzo) : '') + renderBody(values),
       footer: `
         <span id="ef-error" class="ef-error"></span>
-        <button class="btn btn-ghost btn-sm" id="ef-cancel">${onCancel ? 'Vissza a naplóhoz' : 'Mégse'}</button>
+        <button class="btn btn-ghost btn-sm" id="ef-cancel">${onCancel ? escHtml(cancelLabel) : 'Mégse'}</button>
         <button class="btn btn-primary btn-sm" id="ef-save">Mentés</button>
       `,
     });

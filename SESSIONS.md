@@ -68,6 +68,45 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-27 (2.) — Javítások: hiánynapló-fagyás, szótárvesztés, szálláshely jogcíme, tömeges ügy finomítások
+
+**Cél:** nyolc pontos visszajelzés a `v10.85` után (lásd `TERV-tomeges-ugyintezes.md` 11.).
+**Változás (`v10.86`):**
+- `missing-log.js`: 50 soros lapok, névindex, csak a látható lap értékelődik ki;
+  tárolás max. 2000 bejegyzés, tele `localStorage`-nál vágás kivétel nélkül.
+- `schema-store.js`: `save()` előtt `szotarAtvetel()` — a máshol közben mentett
+  párok megmaradnak; `settings-view.js`: a szótármentés megvárja az írást;
+  a tájékoztató és az előnézet `_hun`/`_eng`-et is mutat.
+- `seed-schema.js`: új `legal_title_of_accommodation` (enum, `lakcim`);
+  `export-profiles.js`: kimarad az adatbekérőből; `eh-forms.js`: a
+  „tartózkodás jogcíme” sor rá mutat; `docx-service.js`: az üres
+  jelölőnégyzet-csoport a hiánynaplóba kerül (`processCheckboxes` `onCol`).
+- `employee-history.js` / `registry-view.js`: Legutóbbi változások → szerkesztő,
+  vissza ugyanoda; `employee-summary.js`: görgetés megmarad;
+  `employee-form.js`: `cancelLabel`.
+- `cases-view.js`: egyforma csempék emoji nélkül; új **Tömeges ügyek** nézet;
+  `bulk-case.js`: `kotegek()`, görgetés megtartása, kötegenként megjegyzett mappa.
+**Miért / döntés:** a szótárnál nem fájlzár, hanem átvétel: a máshol felvett
+pár sosem vész el, a máshol törölt legfeljebb visszajön (az ártalmatlanabb hiba).
+A jogcím HR-mező, mint az egyéb jogcím — ezért nincs az adatbekérőben.
+**Tesztek:** `node test/run-all.js` zöld; szándékosan frissítve: `schema.test.js`
+(mezőszám/sorrend/enumok), `schema-from-xlsx.test.js`, `eh-forms.test.js` (11
+listás sor). Új esetek: `bulk-case.test.js` (+6: szótár-átvétel, naplókorlát,
+kötegek), `sdt-checkbox.test.js` (+5: jogcím-négyzetek). Headless Chrome-ban:
+1500 bejegyzéses napló 14–33 ms alatt nyílik; görgetés megmarad (tömeges oldal,
+Legutóbbi változások mentés után); a köteg mappája újranyitáskor megvan.
+
+**Nyitott / következő:**
+- **Az elveszett szótárpárok** nem állíthatók vissza a kódból (a config-mentés
+  nem készít biztonsági másolatot). Ha próba módban kerültek be, a böngészőtárban
+  lehetnek: DevTools-konzolban `(await FsService.loadHandle('config_schema'))?.dictionary`.
+- **Éles próba:** Beállítások → Szótár: egy pár mentése, újraindítás után is ott
+  van-e; 06-os sablon generálása egy jogcímmel kitöltött dolgozóra (a megfelelő
+  négyzet jelölődik-e); az EH-panel „tartózkodás jogcíme” sorának értéke egyezik-e
+  az EH legördülőjének feliratával (ha nem, a séma magyar címkéje átírható).
+- A config-mentésnél a MEZŐK ütközése (két ablak egyszerre szerkeszti a sémát)
+  továbbra is „utolsó nyer” — ritka, a szótárral azonos mintával javítható.
+
 ## 2026-10-27 — Tömeges ügyintézés (szálláshely-változás), ügytípus-sablonok, hiánypótló szerkesztő, legutóbbi változások
 
 **Cél:** szálláshely-változás több dolgozónál egy helyen (eddig export → Excel →

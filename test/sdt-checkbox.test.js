@@ -118,6 +118,34 @@ for (const t of ['marital_status:married', 'marital_status:divorced',
      (twice.match(/<cp:keywords>/g) || []).length + ' db');
 }
 
+// ── Szálláshely jogcíme (2026-10-27) ────────────────────────────────────────
+// A 06-os sablon öt jogcím-négyzete egy sémamezőre néz. A mező hiányában egyik
+// sem jelölődött be, és a hiánynapló sem szólt.
+console.log('\n[Szálláshely jogcíme]');
+{
+  const jelolt = tarolt => {
+    const lattMezok = new Set();
+    const ki = DocxService.processCheckboxes(styleTwoBuffer(), SchemaStore.resolveValues(tarolt, 'hu'),
+      (n, v) => SchemaStore.tagEquals(n, v, tarolt), col => lattMezok.add(col));
+    const x = new PizZip(ki).file('word/document.xml').asText();
+    const be = [];
+    x.replace(/<w:sdt\b[\s\S]*?<\/w:sdt>/gi, sdt => {
+      const tag = (sdt.match(/<w:tag\b[^>]*\bw:val\s*=\s*"(.*?)"/i) || [])[1] || '';
+      if (tag.startsWith('legal_title_of_accommodation:') && /<w14:checked w14:val="1"/.test(sdt)) be.push(tag);
+      return sdt;
+    });
+    return { be, lattMezok };
+  };
+  const r = jelolt({ legal_title_of_accommodation: 'family member' });
+  ok('„family member” → pontosan az a négyzet', r.be.join() === 'legal_title_of_accommodation:family member', r.be.join());
+  ok('magyar alak is értelmezhető („Bérlő / albérlő” → tenant)',
+     jelolt({ legal_title_of_accommodation: 'Bérlő / albérlő' }).be.join() === 'legal_title_of_accommodation:tenant');
+  ok('a feldolgozott négyzetek mezői visszajönnek (a hiánynaplóhoz)', r.lattMezok.has('legal_title_of_accommodation'));
+  ok('üres jogcím: a mező ismert és üres → naplózható',
+     SchemaStore.renderTag('legal_title_of_accommodation', {}) === '');
+  ok('üres jogcím: egy négyzet sem jelölődik', jelolt({}).be.length === 0);
+}
+
 console.log('\n' + '='.repeat(60));
 console.log(`Eredmény: ${passed} sikeres / ${failed} hibás (összesen ${passed + failed})`);
 console.log(failed ? 'VAN hibás ✗' : 'Mind sikeres ✓');

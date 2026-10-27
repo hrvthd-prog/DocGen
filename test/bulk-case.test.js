@@ -133,6 +133,7 @@ asection('Tömeges — összesítő (terv)');
 atest('a mezők a séma lakcim csoportjából jönnek', () => {
   const kulcsok = BulkCase.mezoi(SZALLAS()).map(f => f.key);
   assert(kulcsok.includes('postal_code') && kulcsok.includes('door'), kulcsok.join(','));
+  assert(kulcsok.includes('legal_title_of_accommodation'), 'a szálláshely jogcíme is az új cím része');
   assert(!kulcsok.includes('surname'), 'csak a csoport mezői');
   assert(!kulcsok.includes('address'), 'számított mező nem szerkeszthető');
 });
@@ -295,6 +296,96 @@ atest('minden dolgozó bejegyzése, legfrissebb elöl, a kilépett is', async ()
 atest('a forrás-címkék ismerik az új forrásokat', () => {
   assert(EmployeeHistory.SOURCE_LABEL.tomeges_ugy);
   assert(EmployeeHistory.SOURCE_LABEL.hianynaplo);
+});
+
+// ── Kötegek listája (Ügyek → Tömeges ügyek) ─────────────────────────────────
+asection('Tömeges ügyek nézet');
+
+atest('kötegek: legújabb elöl, nyitott-szám, a nem köteges ügy kimarad', async () => {
+  await tisztaAllapot();
+  const a = ujDolgozo('Nagy Béla'), b = ujDolgozo('Kis Anna');
+  const t = SZALLAS();
+  const r1 = await BulkCase.rogzit(t, BulkCase.terv(t, [a.id, b.id], UJ_CIM));
+  await new Promise(r => setTimeout(r, 5));
+  const r2 = await BulkCase.rogzit(t, BulkCase.terv(t, [a.id], UJ_CIM));
+  CaseRepo.create({ employeeId: b.id, type: 'adatvaltozas' });
+  CaseRepo.setStatus(r1.ugyek[0], 'lezarva', { outcome: 'megadva' });
+  const k = BulkCase.kotegek();
+  assertEq(k.length, 2);
+  assertEq(k[0].batchId, r2.batchId, 'a legújabb elöl');
+  assertEq(k[1].ugyek.length, 2);
+  assertEq(k[1].nyitott, 1);
+});
+
+// ── Hiányzó-adat napló: tárolási korlát ─────────────────────────────────────
+asection('Hiánynapló — tárolás');
+
+atest('a napló a korlátnál vágódik, a legújabbak maradnak', () => {
+  const tar = {};
+  sandbox.Settings = { get: (k, f) => (k in tar ? JSON.parse(tar[k]) : f), set: (k, v) => { tar[k] = JSON.stringify(v); } };
+  const N = DocgenMissingLog.MAX_TAROLT;
+  DocgenMissingLog.append(Array.from({ length: N }, (_, i) => ({ client: 'r' + i })));
+  DocgenMissingLog.append([{ client: 'uj' }]);
+  const l = JSON.parse(tar[DocgenMissingLog.KEY]);
+  assertEq(l.length, N);
+  assertEq(l[l.length - 1].client, 'uj');
+  assertEq(l[0].client, 'r1');
+});
+
+atest('tele tároló: a régebbi fele kiesik, és NEM dob (a generálás nem bukhat el)', () => {
+  const tar = {};
+  sandbox.Settings = {
+    get: (k, f) => (k in tar ? JSON.parse(tar[k]) : f),
+    set: (k, v) => { const s = JSON.stringify(v); if (s.length > 2000) throw new Error('QuotaExceededError'); tar[k] = s; },
+  };
+  DocgenMissingLog.append(Array.from({ length: 200 }, (_, i) => ({ client: 'r' + i })));
+  const l = JSON.parse(tar[DocgenMissingLog.KEY]);
+  assert(l.length > 0 && l.length < 200, String(l.length));
+  assertEq(l[l.length - 1].client, 'r199', 'a legújabb megmaradt');
+});
+
+atest('a jogcím-jelölő a jogcím mezőre mutat', () => {
+  const r = DocgenMissingLog.mezokreBont(['legal_title_of_accommodation'], {});
+  assertEq(r.mezok.join(), 'legal_title_of_accommodation');
+});
+
+// ── Szótár: más ablakban mentett párok nem vesznek el ───────────────────────
+asection('Szótár — átvétel mentéskor');
+
+atest('a közben máshol mentett pár megmarad, a saját törlés törlés marad', async () => {
+  let tarolt = JSON.parse(JSON.stringify(SEED_SCHEMA));
+  tarolt.dictionary = [{ en: 'Serbia', hu: 'Szerbia' }, { en: 'welder', hu: 'hegesztő' }];
+  SchemaStore.useBackend({
+    async load() { return JSON.parse(JSON.stringify(tarolt)); },
+    async save(d) { tarolt = JSON.parse(JSON.stringify(d)); },
+  });
+  await SchemaStore.load();                 // ez az ablak: Serbia, welder
+  // Közben egy MÁSIK ablak felvesz egy párt és ment
+  tarolt.dictionary = tarolt.dictionary.concat([{ en: 'Ukraine', hu: 'Ukrajna' }]);
+  // Ez az ablak a régi listájából töröl egyet, hozzáad egyet, és ment
+  SchemaStore.setDictionary([{ en: 'Serbia', hu: 'Szerbia' }, { en: 'Mexico', hu: 'Mexikó' }]);
+  await SchemaStore.save();
+  const en = tarolt.dictionary.map(e => e.en).sort().join(',');
+  assertEq(en, 'Mexico,Serbia,Ukraine', 'a másik ablak párja megmaradt, a törölt nem jött vissza');
+  // A {{mező_hun}} a mentett párral fordít
+  assertEq(SchemaStore.renderTag('previous_country_hun', { previous_country: 'Ukraine' }), 'Ukrajna');
+  SchemaStore.useBackend(null);
+  SchemaStore.loadFrom(SEED_SCHEMA);
+});
+
+atest('bármely sémamentés (nem csak a szótáré) megtartja a máshol felvett párt', async () => {
+  let tarolt = JSON.parse(JSON.stringify(SEED_SCHEMA));
+  tarolt.dictionary = [];
+  SchemaStore.useBackend({
+    async load() { return JSON.parse(JSON.stringify(tarolt)); },
+    async save(d) { tarolt = JSON.parse(JSON.stringify(d)); },
+  });
+  await SchemaStore.load();
+  tarolt.dictionary = [{ en: 'Brazil', hu: 'Brazília' }];
+  await SchemaStore.save();                 // pl. egy mezőszerkesztés mentése
+  assertEq(tarolt.dictionary.map(e => e.en).join(), 'Brazil');
+  SchemaStore.useBackend(null);
+  SchemaStore.loadFrom(SEED_SCHEMA);
 });
 
 // ── Futtatás ────────────────────────────────────────────────────────────────

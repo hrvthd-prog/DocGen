@@ -251,3 +251,17 @@ cím → összesítő → rögzítés (ügyek, napló forrása, tároló) → ge
 és dolgozói mappába → köteg újranyitása → ügytípus-sablonok mentése →
 hiánynapló Javítás → mentés → frissült napló → Legutóbbi változások szűrése;
 és a Dokumentumok fül generálása a kiemelt motorral (változatlan eredmény).
+
+## 11. Javítások az első éles visszajelzés után (2026-10-27, `v10.86`)
+
+| Panasz | Ok | Javítás |
+|---|---|---|
+| A hiánynapló megnyitása befagy | Korlátlanul nőtt a `localStorage`-ban, minden sor kirajzolódott; a 4.6-os újraértékelés soronként az összes dolgozó nevét feloldotta. Tele tárolónál az `append` a generálást is megszakította volna (a fájlmentés ELŐTT fut). | 50 soros lapok, egyszer épülő névindex, csak a látható lap értékelődik ki; a legújabb 2000 bejegyzés marad; tele tárolónál a régebbi fele kiesik, kivétel nélkül. |
+| Szótárpárok eltűntek | A közös `docgen-config.json`-ba minden ablak a BETÖLTÉSKORI sémáját írta vissza — egy régóta nyitott ablak bármely sémamentése törölte a máshol közben felvett párokat. A „Szótár mentése” ráadásul nem várta meg a mentést (hiba esetén is „mentve”). | `SchemaStore.save()` mentés előtt újraolvassa a tárolt szótárat, és átveszi a még nem látott párokat (a saját törlés törlés marad). A szótármentés megvárja az írást, hibánál szól. |
+| `{{mező_hun}}` | Működik (teszt: `schema.test.js`). | A tájékoztató és az élő előnézet a `_hun` / `_eng` (és `_hu`) alakot is mutatja. |
+| `legal_title_of_accommodation` nincs sehol | A 06-os sablon öt content control-ja erre a kulcsra néz, de a sémában nem volt ilyen mező (csak az „Egyéb jogcím” szöveg). A négyzetek sosem jelölődtek, és a hiánynapló sem szólt. | Új enum mező a `lakcim` csoportban (owner / tenant / family member / courtesy user / other, magyar alakkal is). Az adatbekérőből kimarad (HR tölti, mint az egyéb jogcímet); az EH-panel „tartózkodás jogcíme” sora rá mutat. Az üres négyzetcsoport mostantól a hiánynaplóba kerül. |
+| Legutóbbi változások → összesítő, mentés után a tetejére ugrik | — | Sorra kattintva a szerkesztő nyílik; mentés / *Vissza a listához* után a lista ugyanazzal a szűrővel, ugyanott. Az összesítő is ugyanott marad a szerkesztőből visszatérve. |
+| Eltérő csempék, emoji | — | Két egyforma csempe, középre igazított szöveg, emoji nélkül. |
+| Tömeges ügyek közvetlenül | — | Új nézet: Ügyek → **Tömeges ügyek** (`BulkCase.kotegek`). |
+| Generálás / „Külön mappa” után felgörget | A teljes újrarajzolás. | A tömeges oldal görgetése megmarad. |
+| A köteg mappáját jegyezze meg | — | IndexedDB-ben, kötegenként (`tomeges_kimenet:<batchId>`: mappa + kapcsoló); az engedélyt a generálás gombja kéri vissza. |

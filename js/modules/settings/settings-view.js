@@ -92,7 +92,14 @@ const SettingsModule = (() => {
                 fordítva felvéve nem hibázik — felcseréli a két kimenetet.
                 Az adat a nyilvántartásban bármelyik nyelven állhat, a párt mindkét
                 oldalról megtalálja; a nyelvet a jelölő végződése választja
-                (<code>{{mező}}</code> magyarul, <code>{{mező_en}}</code> angolul).
+                (<code>{{mező}}</code> vagy <code>{{mező_hun}}</code> magyarul,
+                <code>{{mező_en}}</code> vagy <code>{{mező_eng}}</code> angolul;
+                a <code>_hu</code> is jó). Pár nélkül az érték változatlanul megy ki.
+              </p>
+              <p class="ef-hint">
+                A szótár a közös adatmappába kerül (<code>docgen-config.json</code>). Ha
+                közben más ablakban vagy gépen is mentettek párt, mentéskor az is
+                megmarad. Próba módban csak ebben a böngészőben tárolódik.
               </p>
               <div class="sv-dict-head">
                 <span>← BAL OLDAL: ANGOL</span>
@@ -774,8 +781,8 @@ const SettingsModule = (() => {
     if (!m || !m[1].trim() || !m[2].trim()) { box.innerHTML = ''; box.title = ''; return; }
     box.title = 'A kurzor alatti sor eredménye';
     box.innerHTML = `
-      <div><code>{{mező}}</code> → <b>${escHtml(m[2].trim())}</b></div>
-      <div><code>{{mező_en}}</code> → <b>${escHtml(m[1].trim())}</b></div>`;
+      <div><code>{{mező}}</code> · <code>{{mező_hun}}</code> → <b>${escHtml(m[2].trim())}</b></div>
+      <div><code>{{mező_en}}</code> · <code>{{mező_eng}}</code> → <b>${escHtml(m[1].trim())}</b></div>`;
   }
 
   /** „Serbia = Szerbia", „Serbia<TAB>Szerbia" és „Serbia;Szerbia" is jó. */
@@ -793,7 +800,7 @@ const SettingsModule = (() => {
     return { parok, hibas };
   }
 
-  function saveDictionary() {
+  async function saveDictionary() {
     if (!schemaReady()) { toast('A séma még nem töltődött be.', 'error'); return; }
     const { parok, hibas } = parseDictionary(document.getElementById('sv-dict').value);
     const allapot = document.getElementById('sv-dict-state');
@@ -803,10 +810,23 @@ const SettingsModule = (() => {
       return;
     }
 
-    const mentett = SchemaStore.setDictionary(parok);
-    SchemaStore.save();
-    const eldobott = parok.length - mentett.length;
-    allapot.textContent = eldobott ? `${eldobott} ismétlődő angol alak kimaradt` : '';
+    const sajat = SchemaStore.setDictionary(parok).length;
+    // Megvárjuk: eddig a mentés hibája némán elveszett, a „mentve” üzenet pedig
+    // akkor is megjelent — újraindítás után a párok nem voltak sehol.
+    try {
+      await SchemaStore.save();
+    } catch (e) {
+      allapot.textContent = 'A mentés NEM sikerült: ' + e.message;
+      toast('A szótár mentése nem sikerült: ' + e.message, 'error');
+      return;
+    }
+    const mentett = SchemaStore.dictionary();
+    const eldobott = parok.length - sajat;
+    const atvett = mentett.length - sajat;
+    allapot.textContent = [
+      eldobott ? `${eldobott} ismétlődő angol alak kimaradt` : '',
+      atvett ? `${atvett} pár közben máshol (más ablakban/gépen) került be — megtartva` : '',
+    ].filter(Boolean).join(' · ');
     renderDictionary();
     toast(`Szótár mentve – ${mentett.length} pár`, 'success');
 
