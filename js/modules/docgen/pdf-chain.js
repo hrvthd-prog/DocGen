@@ -161,22 +161,22 @@ const DocgenPdfChain = (() => {
     } catch { return false; }
   }
 
-  /** A mappában lévő PDF-ek neve, és a legfrissebb módosítási ideje. */
-  async function scanPdfs(outputDir) {
+  /**
+   * A kísérőfájl PDF-jei közül a meglévők, és a legfrissebb módosítási idő.
+   *
+   * A kísérőfájl relatív utakat tárol (a DOCX a dolgozó almappájába kerül),
+   * ezért nem a gyökeret pásztázzuk, hanem a felsorolt utakat nézzük meg. Így
+   * a „mappában lévő, de nem ehhez a generáláshoz tartozó” PDF sem számít.
+   */
+  async function meglevoPdfek(outputDir, manifest) {
     const nevek = [];
     let legfrissebb = null;
-    if (!outputDir) return { nevek, legfrissebb };
-    try {
-      for await (const [name, entry] of outputDir.entries()) {
-        if (entry.kind !== 'file' || !name.toLowerCase().endsWith('.pdf')) continue;
-        nevek.push(name);
-        try {
-          const f = await entry.getFile();
-          if (!legfrissebb || f.lastModified > legfrissebb) legfrissebb = f.lastModified;
-        } catch { /* egy olvashatatlan fájl ne akassza meg a szkennelést */ }
-      }
-    } catch (e) {
-      BevLogger.warn('PDF_CHAIN', 'A kimeneti mappa nem olvasható', e.message, outputDir.name || '');
+    for (const f of (manifest && manifest.files) || []) {
+      try {
+        const file = await (await FsService.fileAt(outputDir, f.pdf)).getFile();
+        nevek.push(f.pdf);
+        if (!legfrissebb || file.lastModified > legfrissebb) legfrissebb = file.lastModified;
+      } catch { /* még nincs PDF (vagy olvashatatlan): hiányzónak számít */ }
     }
     return { nevek, legfrissebb };
   }
@@ -184,16 +184,10 @@ const DocgenPdfChain = (() => {
   /** Teljes állapotkép: kísérőfájl + lemez + szkript megléte. */
   async function status(outputDir) {
     const manifest = await readManifest(outputDir);
-    const { nevek, legfrissebb } = await scanPdfs(outputDir);
-    let docxDb = 0;
-    try {
-      docxDb = (await FsService.listFiles(outputDir,
-        n => n.toLowerCase().endsWith('.docx') && !n.startsWith('~$'))).length;
-    } catch { /* marad 0 */ }
-
+    const { nevek, legfrissebb } = await meglevoPdfek(outputDir, manifest);
     return {
       manifest,
-      docxDb,
+      docxDb: manifest ? manifest.files.length : 0,
       pdfNevek: nevek,
       legfrissebbPdf: legfrissebb,
       szkriptKesz: await scriptReady(),
@@ -211,6 +205,6 @@ const DocgenPdfChain = (() => {
   return {
     MANIFEST, SCRIPT_OUT, SCRIPT_KEY,
     buildManifest, pdfName, compare, summaryText, idoSzoveg,
-    writeManifest, readManifest, copyScript, scriptReady, scanPdfs, status,
+    writeManifest, readManifest, copyScript, scriptReady, meglevoPdfek, status,
   };
 })();

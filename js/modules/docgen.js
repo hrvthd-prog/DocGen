@@ -1308,84 +1308,57 @@ const DocgenModule = (() => {
     );
   }
 
-  // ── Dolgozói mappa a PDF Műhely szerkezetében ─────────────────────────────
-  // <kimenet>\<Dolgozó Név>\01_Elokeszitett — a generált irat nyomtatásra vár.
-  // SOSEM hozunk létre magától mappát: ha a név nem oldható fel egyértelműen,
-  // kérdezünk. Enélkül eltérő névformátumból (nagybetűs vezetéknév, EH-szám a
-  // név után, más sorrend) párhuzamos dolgozói mappák keletkeznének, és a
-  // Műhely Áttekintője két fél dolgozót látna.
-  // A válasz munkamenetre megjegyzésre kerül: egy kötegelt generálás ne kérdezzen
-  // ugyanarról a dolgozóról többször.
-  // A gyökér (kimeneti mappa) szerint külön: a tömeges ügy saját mappába generál,
-  // és ott a Dokumentumok fülön adott „gyökérbe” válasz nem érvényes.
-  const _workerChoice = new WeakMap();      // gyökér -> (clientName -> mappanév | '')
+  // ── Az irat helye a kimeneti mappában (09_OIF_kerelmek) ────────────────────
+  // A szabály és a dolgozói mappa keresése a DocgenCelmappa-ban; itt csak az
+  // kerül össze, amit az a dolgozóról tudni akar, és a kérdés párbeszéde.
+  // (plans/TERV-kimenet-es-ugyek.md 3.)
 
-  // `sub`: a dolgozói alkönyvtár — a kész PDF-nyomtatvány (aláírás nélkül is
-  // kész) a DIR_UP-ba megy, minden más a DIR_PREP-be.
-  // `ujatKerdesNelkul`: a tömeges ügy „Külön mappa minden dolgozónak” kapcsolója
-  // maga a beleegyezés — ott a NEM LÉTEZŐ mappa kérdés nélkül készül. Ha viszont
-  // több hasonló nevű van, ott is kérdezünk (párhuzamos dolgozói mappák ellen).
-  async function resolveWorkerTarget(clientName, sub = FsService.DIR_PREP, root = state.outputDir,
-                                     { ujatKerdesNelkul = false } = {}) {
-    if (!root || !clientName) return null;
-    if (!_workerChoice.has(root)) _workerChoice.set(root, new Map());
-    const valasztas = _workerChoice.get(root);
-    if (valasztas.has(clientName)) {
-      const pick = valasztas.get(clientName);
-      return pick ? _prepDirIn(root, pick, sub) : null;
+  /** A generált irat célmappája → { dir, ut } vagy null (a kérdésre: kihagyás). */
+  function celFor(root, g) {
+    const emp = state.clientRows.find(r => r.id === g.employeeId) || { fields: {} };
+    const t = nameTokens(emp);
+    const nev = DocxService.fileSafe(`${t['Vezetéknév']} ${t['Keresztnév']}`.replace(/\s+/g, ' '));
+    // A nyitott kérelem dönti el, hol jön létre az új dolgozói mappa.
+    let ugyTipus = null;
+    try {
+      const nyitott = CaseRepo.forEmployee(g.employeeId, { includeClosed: false });
+      ugyTipus = (nyitott.find(c => c.type === 'rp_hosszabbitas' || c.type === 'rp_elso') || {}).type || null;
+    } catch { /* ügyek nélkül is generálható: akkor kérdez */ }
+    const tipusSablonok = {};
+    for (const k of ['munkaviszony_kijelentes', 'szallashely_valtozas']) {
+      tipusSablonok[k] = (CaseTypes.byKey(k) || {}).templates || [];
     }
-    let dirs = [];
-    try { dirs = await FsService.listSubDirs(root); } catch { dirs = []; }
-    dirs = dirs.filter(d => d !== FsService.DIR_PREP && d !== FsService.DIR_UP);
-    const { dir, hits } = FsService.matchWorkerDir(clientName, dirs);
-    const pick = dir || (ujatKerdesNelkul && !hits.length ? clientName
-                                                          : await askWorkerDir(clientName, hits, dirs));
-    valasztas.set(clientName, pick || '');
-    return pick ? _prepDirIn(root, pick, sub) : null;
+    return DocgenCelmappa.cel(root, {
+      empId: g.employeeId, nev, sablon: g.templateName, kesz: g.cel === 'up',
+      tipusSablonok, ugyTipus, lejarat: (emp.fields || {}).expiration_of_rp || null,
+      ma: CaseTypes.isoDate(new Date()), kerdez: kerdezDolgozoMappa,
+    });
   }
 
-  async function _prepDirIn(root, workerDirName, sub) {
-    const wd = await FsService.getSubDir(root, workerDirName, true);
-    return FsService.getSubDir(wd, sub, true);
-  }
-
-  /** Rákérdezés: melyik meglévő mappába, vagy hozzon-e létre újat ezen a néven.
-   *  -> mappanév, vagy '' (a kimeneti mappa gyökerébe) */
-  function askWorkerDir(clientName, hits, allDirs) {
+  /** Nem egyértelmű a dolgozó mappája: melyik meglévő, vagy hol legyen új?
+   *  → út (szegmensek), vagy null = kihagyás (az irat nem készül el). */
+  function kerdezDolgozoMappa({ nev, hasonlo, javaslatok }) {
     return new Promise(resolve => {
-      const opts = (hits.length ? hits : allDirs).slice(0, 12);
-      const list = opts.map((d, i) =>
-        `<button type="button" class="btn dg-wd-opt" data-i="${i}"
-                 style="display:block;width:100%;text-align:left;margin:2px 0">
-           📁 ${escHtml(d)}\\${escHtml(FsService.DIR_PREP)}
-         </button>`).join('');
+      const opciok = hasonlo.map(h => ({ ut: h.ut, felirat: '📁 ' + h.ut.join('\\'), meglevo: true }))
+        .concat(javaslatok.map(u => ({ ut: u, felirat: 'Új mappa: ' + u.join('\\') })));
       showDialog({
         title: 'Melyik dolgozói mappába?',
-        body: `<p>Hova kerüljön <b>${escHtml(clientName)}</b> generált irata?</p>` +
-              (opts.length
-                ? `<p class="muted">Meglévő mappák — kattints a helyesre:</p>${list}`
-                : `<p class="muted">A kimeneti mappában nincs hozzá illeszkedő
-                     dolgozói mappa.</p>`),
-        footer: `<button type="button" class="btn btn-primary" id="dg-wd-new">
-                   Új mappa: „${escHtml(clientName)}”</button>
-                 <button type="button" class="btn" id="dg-wd-root">
-                   A kimeneti mappa gyökerébe</button>`,
+        body: `<p>Hova kerüljön <b>${escHtml(nev)}</b> irata?</p>
+               ${hasonlo.length
+                 ? `<p class="muted">Hasonló nevű meglévő mappák — ha valamelyik ő, azt válaszd:</p>`
+                 : `<p class="muted">Nincs mappája, és nincs nyitott kiadási vagy meghosszabbítási
+                      ügye, amiből a helye kiderülne.</p>`}
+               ${opciok.map((o, i) => `
+                 <button type="button" class="btn ${o.meglevo ? '' : 'btn-ghost'} dg-wd-opt" data-i="${i}"
+                         style="display:block;width:100%;text-align:left;margin:2px 0">${escHtml(o.felirat)}</button>`).join('')}`,
+        footer: `<button type="button" class="btn" id="dg-wd-skip">Kihagyás — ez az irat ne készüljön el</button>`,
       });
-      let closed = false;
-      const done = (val) => {
-        if (closed) return;
-        closed = true;
-        closeDialog();
-        resolve(val);
-      };
-      // A párbeszéd a #dialog-overlay-ben él, NEM a fül containerében — ezért
-      // document-scope, nem a helyi q().
+      let kesz = false;
+      const done = val => { if (kesz) return; kesz = true; closeDialog(); resolve(val); };
+      // A párbeszéd a #dialog-overlay-ben él, nem a fül containerében.
       document.querySelectorAll('.dg-wd-opt').forEach(b =>
-        b.addEventListener('click', () => done(opts[Number(b.dataset.i)])));
-      document.getElementById('dg-wd-new')
-        .addEventListener('click', () => done(clientName));
-      document.getElementById('dg-wd-root')
-        .addEventListener('click', () => done(''));
+        b.addEventListener('click', () => done(opciok[Number(b.dataset.i)].ut)));
+      document.getElementById('dg-wd-skip').addEventListener('click', () => done(null));
     });
   }
 
@@ -1426,29 +1399,20 @@ const DocgenModule = (() => {
       state.outputDir = h;
       state.outputWritable = true;
       toast('✓ Kimeneti mappa: ' + h.name, 'success');
-      // Jelzés, ha a mappa nem úgy néz ki, mint a PDF Műhely munkamappája.
-      // Nem tiltjuk: első beállításnál üres is lehet — de a téves mappa a
-      // „Új mappa" válasszal oda generálna.
-      try {
-        const v = await FsService.looksLikeWorkFolder(h);
-        if (!v.ok) {
-          BevLogger.warn('OUTPUT_DIR_SET', 'A kimeneti mappa nem munkamappának tűnik',
-                         `${v.ossz} almappa, 0 dolgozói`, currentUser);
-          showDialog({
-            title: '⚠ Ez nem úgy néz ki, mint a munkamappa',
-            body: `<p>A(z) <b>${escHtml(h.name)}</b> mappa
-                     ${v.ossz} almappát tartalmaz, de egyikben sincs
-                     <code>${escHtml(FsService.DIR_PREP)}</code> /
-                     <code>${escHtml(FsService.DIR_UP)}</code> mappa és felismert irat sem.</p>
-                   <p class="muted">A generált iratok a
-                     <b>dolgozó · ${escHtml(FsService.DIR_PREP)}</b> mappájába kerülnek. Ha ez
-                     nem a PDF Műhely munkamappája, a program új dolgozói mappákat
-                     ajánlana fel itt — ellenőrizd, mielőtt generálsz.</p>`,
-            footer: `<button type="button" class="btn btn-primary"
-                             onclick="closeDialog()">Értem</button>`,
-          });
-        }
-      } catch { /* a jelzés sosem állítja meg a beállítást */ }
+      // Jelzés, ha nem a 09_OIF_kerelmek: a generálás úgyis megállna, de jobb
+      // most szólni, mint az első iratnál.
+      try { await DocgenCelmappa.ellenoriz(h); }
+      catch (e) {
+        BevLogger.warn('OUTPUT_DIR_SET', 'A kimeneti mappa nem a 09_OIF_kerelmek', e.message, currentUser);
+        showDialog({
+          title: '⚠ Ez nem a 09_OIF_kerelmek mappának tűnik',
+          body: `<p>${escHtml(e.message)}</p>
+                 <p class="muted">A generált iratok a 09_OIF_kerelmek szerkezetébe kerülnek
+                   (01_Hosszabbitasok, 02_Kiadasok, 03_Bejelentesek). Ezeket a program nem
+                   hozza létre — amíg hiányoznak, a generálás megáll.</p>`,
+          footer: `<button type="button" class="btn btn-primary" onclick="closeDialog()">Értem</button>`,
+        });
+      }
       BevLogger.info('OUTPUT_DIR_SET', 'Kimenet mappa beállítva', h.name, currentUser);
       // Sidebar teljes újrarajzolás (váltó gomb megjelenítéséhez)
       const sidebar = q('#dg-sidebar');
@@ -1995,7 +1959,7 @@ const DocgenModule = (() => {
           ui.progress.setDone(itemIdx);
           const tokenek = nameTokens(row);
           generated.push({ buf: outBuf, name, itemIdx, templateName, clientName,
-            pdf: pdfSablon, cel: pdfCel,
+            employeeId: row.id, pdf: pdfSablon, cel: pdfCel,
             vezeteknev: tokenek['Vezetéknév'], keresztnev: tokenek['Keresztnév'] });
           done++;
         } catch (e) {
@@ -2012,20 +1976,28 @@ const DocgenModule = (() => {
   }
 
   /**
-   * A mentési fázis. `target(clientName, cel)` → a dolgozó mappája, vagy null
-   * (= a `root` gyökere). Kimeneti mappa nélkül böngészős letöltés. → hibák
+   * A mentési fázis: a kimeneti mappában a `celFor` szerinti helyre (az irat
+   * `ut`-at kap, a PDF-lánc kísérőfájljához). Kimeneti mappa nélkül böngészős
+   * letöltés. → hibák
    */
-  async function saveDocs(generated, { docx, root, target, ui }) {
+  async function saveDocs(generated, { docx, root, ui }) {
     const errors = [];
     let wi = 0;
-    for (const { buf, name, itemIdx, clientName, pdf: kitoltott, cel } of generated) {
+    for (const g of generated) {
+      const { buf, name, itemIdx, pdf: kitoltott } = g;
       if (docx || kitoltott) {
         ui.progress.setSaving(itemIdx);
         if (root) {
           ui.status(`Mentés: ${name}`, Math.round(wi / generated.length * 100));
-          const dir = await target(clientName, cel);
           try {
-            await FsService.writeToDir(dir || root, name, buf);
+            const cel = await celFor(root, g);
+            if (!cel) {
+              errors.push(`${name}: kihagyva — nem lett dolgozói mappa kiválasztva`);
+              wi++;
+              continue;
+            }
+            await FsService.writeToDir(cel.dir, name, buf);
+            g.ut = cel.ut.join('/');
             wi++;
             continue;
           } catch (e) {
@@ -2046,6 +2018,10 @@ const DocgenModule = (() => {
     }
     return errors;
   }
+
+  /** A fájl útja a kimeneti mappához képest, perjellel — a PDF-lánc kísérőfájlja
+   *  ezzel találja meg az almappába mentett DOCX-et (és a mellé készült PDF-et). */
+  function relNev(g) { return g.ut ? `${g.ut}/${g.name}` : g.name; }
 
   // ── Kívülről hívható generálás (tömeges ügy) ─────────────────────────────
 
@@ -2072,15 +2048,30 @@ const DocgenModule = (() => {
   }
 
   /**
+   * A kimeneti mappa (09_OIF_kerelmek) írási engedéllyel, egy kattintásból — a
+   * tömeges ügy is ide generál. Tárolt mappánál csak engedélyt kér; ha nincs
+   * beállítva, null (azt a Dokumentumok fülön kell megtenni).
+   */
+  async function requestOutputDir() {
+    if (!state.outputDir) return null;
+    if (state.outputWritable) return state.outputDir;
+    if (!await FsService.verifyPermission(state.outputDir, true)) return null;
+    state.outputWritable = true;
+    q('#dg-output-restore-banner')?.remove();
+    rerenderSidebarSettings();
+    return state.outputDir;
+  }
+  function outputDirName() { return state.outputDir ? state.outputDir.name : ''; }
+
+  /**
    * Generálás a Dokumentumok fül kijelölésétől függetlenül. Ugyanaz a motor
    * (sablonkeresés, jelölők, névminta, hiánynapló, PDF-lánc), csak a dolgozók,
    * a sablonok és a kimeneti mappa paraméter.
    *
-   * perWorker: false → minden fájl az `outputDir` gyökerébe; true → a dolgozó
-   * mappájába (<Név>_Elokeszitett), ugyanúgy feloldva, mint a Dokumentumok fülön.
+   * A fájlok helye ugyanaz a szabály, mint a Dokumentumok fülön (celFor).
    * → { count, docxCount, szkript (a PDF-készítő a mappába került), errors, missing }
    */
-  async function generateFor({ employeeIds, templates, outputDir = null, perWorker = false,
+  async function generateFor({ employeeIds, templates, outputDir = null,
                                docx = true, pdf = false, ui = {} }) {
     if (!state.templatesDir) throw new Error('Nincs sablonmappa — előbb engedélyezd vagy állítsd be.');
     loadFromRegistry({ silent: true });
@@ -2090,26 +2081,20 @@ const DocgenModule = (() => {
       status:   ui.status || (() => {}),
     };
     BevLogger.info('DOCGEN_START', `Tömeges generálás (${pdf ? 'DOCX+PDF' : 'DOCX'})`,
-      `clients=${clients.length}, templates=${templates.length}, perWorker=${perWorker}`,
+      `clients=${clients.length}, templates=${templates.length}`,
       `user=${currentUser}, outputDir=${outputDir ? outputDir.name : '(letöltés)'}`);
 
     const r = await renderDocs(clients, templates, u);
     DocgenMissingLog.append(r.missingLogEntries);
-    r.errors.push(...await saveDocs(r.generated, {
-      docx, root: outputDir, ui: u,
-      target: (nev, cel) => perWorker
-        ? resolveWorkerTarget(nev, cel === 'up' ? FsService.DIR_UP : FsService.DIR_PREP, outputDir,
-                              { ujatKerdesNelkul: true })
-        : null,
-    }));
+    r.errors.push(...await saveDocs(r.generated, { docx, root: outputDir, ui: u }));
 
-    // A PDF-lánc ugyanúgy, mint a Dokumentumok fülön: a konvertáló szkript az
-    // almappákat is bejárja, így a dolgozói mappás kimenettel is működik.
+    // A PDF-lánc ugyanúgy, mint a Dokumentumok fülön: a kísérőfájl a relatív
+    // utat tárolja, a konvertáló szkript és az összefűzés onnan találja meg.
     const docxGen = r.generated.filter(g => !g.pdf);
     let szkript = false;
     if (outputDir && docxGen.length) {
       await DocgenPdfChain.writeManifest(outputDir, docxGen.map(g => ({
-        name: g.name, clientName: g.clientName, templateName: g.templateName,
+        name: relNev(g), clientName: g.clientName, templateName: g.templateName,
         vezeteknev: g.vezeteknev, keresztnev: g.keresztnev,
       })));
       if (pdf) szkript = await DocgenPdfChain.copyScript(outputDir);
@@ -2150,15 +2135,12 @@ const DocgenModule = (() => {
       DocgenMissingLog.append(missingLogEntries);
 
       // ── DOCX mentési fázis ────────────────────────────────────────────────────
-      // A dolgozó 01_Elokeszitett mappájába: az irat nyomtatásra vár. Kivétel
-      // az aláírás nélkül kész PDF-sablon irata: az a 02_Feltoltheto-ba megy.
-      // Ha a mappa nem oldható fel, a resolveWorkerTarget kérdez — és ha
-      // a válasz „ne”, akkor a kimeneti mappa gyökerébe írunk.
+      // A 09_OIF_kerelmek szerkezetébe (celFor): kérelem irata a dolgozó
+      // 01_Elokeszitett mappájába, TAJ a 04_TAJ-ba, bejelentés a 03_Bejelentesek
+      // alá. Ha a dolgozó mappája nem egyértelmű, kérdez; „kihagyás” → nem készül.
       progress.setPhase('DOCX fájlok mentése…');
       errors.push(...await saveDocs(generated, {
         docx, root: state.outputDir, ui: { progress, status: setStatus },
-        target: (clientName, cel) => resolveWorkerTarget(clientName,
-          cel === 'up' ? FsService.DIR_UP : FsService.DIR_PREP),
       }));
 
       // A PDF-fé alakítás szándékosan NEM része a generálásnak: böngészőből nem
@@ -2172,7 +2154,7 @@ const DocgenModule = (() => {
       // kísérőfájljába a kész PDF nevét is fel kell venni.
       const docxGenerated = generated.filter(g => !g.pdf);
       state.lastGenerated = docxGenerated.map(g => ({
-        name: g.name, clientName: g.clientName, templateName: g.templateName,
+        name: relNev(g), clientName: g.clientName, templateName: g.templateName,
         vezeteknev: g.vezeteknev, keresztnev: g.keresztnev,
       }));
 
@@ -2331,5 +2313,6 @@ const DocgenModule = (() => {
     makeSchemaResolver,
     // A tömeges ügy generálása (TERV-tomeges-ugyintezes.md 4.4)
     templateNames, templatesReady, requestTemplatesDir, generateFor,
+    requestOutputDir, outputDirName,
   };
 })();

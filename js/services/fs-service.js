@@ -125,69 +125,13 @@ const FsService = (() => {
     }
   }
 
-  // ── dolgozói mappa + a PDF Műhely két alkönyvtára ─────────────────────────
-  // A Műhely szerkezete: <munkamappa>\<Dolgozó Név>\01_Elokeszitett | 02_Feltoltheto
-  // A DocGen az ELŐKÉSZÍTETTBE generál: az irat nyomtatásra/aláírásra vár.
-  const DIR_PREP = '01_Elokeszitett';
-  const DIR_UP   = '02_Feltoltheto';
-
-  // Ékezet- és kisbetű-független kulcs — a Műhely strip_accents-ének párja.
-  const HU_MAP = { á:'a', é:'e', í:'i', ó:'o', ö:'o', ő:'o', ú:'u', ü:'u', ű:'u' };
-  function foldName(s) {
-    return String(s || '').toLowerCase().replace(/[áéíóöőúüű]/g, c => HU_MAP[c]).trim();
-  }
-
+  // A 09_OIF_kerelmek szerkezetének bejárásához (DocgenCelmappa).
   async function listSubDirs(dirHandle) {
     const out = [];
     for await (const [name, entry] of dirHandle.entries()) {
       if (entry.kind === 'directory' && !name.startsWith('.')) out.push(name);
     }
     return out.sort((a, b) => a.localeCompare(b, 'hu'));
-  }
-
-  /** A Műhely resolve_worker-ének párja: pontos egyezés, vagy az EGYETLEN
-   *  részegyezés. Bizonytalanságnál null — a hívó kérdez, nem talál ki mappát. */
-  function matchWorkerDir(name, dirs) {
-    const f = foldName(name);
-    if (!f) return { dir: null, hits: dirs.slice() };
-    const exact = dirs.filter(d => foldName(d) === f);
-    if (exact.length === 1) return { dir: exact[0], hits: exact };
-    const part = dirs.filter(d => foldName(d).includes(f) || f.includes(foldName(d)));
-    return { dir: part.length === 1 ? part[0] : null, hits: part };
-  }
-
-  /**
-   * Úgy néz-e ki a mappa, mint a PDF Műhely munkamappája? -> { ok, dolgozok, ossz }
-   *
-   * A Műhely `is_worker_folder`-ének párja, de csak JELZÉSRE: nem tiltunk, mert a
-   * kimeneti mappa első beállításakor még üres is lehet. A kár nálunk kisebb, mint
-   * a Műhelyben (a `matchWorkerDir` bizonytalanságnál kérdez, és mappát sosem hoz
-   * létre magától) — de ha valaki az „Új mappa" választ adja egy idegen mappában,
-   * oda generál. Ezért szólunk.
-   *
-   * Dolgozói mappa jele: van benne 01/02 alkönyvtár, vagy van benne .docx/.pdf.
-   */
-  async function looksLikeWorkFolder(dirHandle) {
-    let ossz = 0, dolgozok = 0;
-    try {
-      for await (const [name, entry] of dirHandle.entries()) {
-        if (entry.kind !== 'directory' || name.startsWith('.')) continue;
-        if (name === DIR_PREP || name === DIR_UP) continue;
-        ossz++;
-        let jel = false;
-        try {
-          for await (const [n2, e2] of entry.entries()) {
-            if (e2.kind === 'directory' && (n2 === DIR_PREP || n2 === DIR_UP)) { jel = true; break; }
-            if (e2.kind === 'file' && /\.(docx|pdf)$/i.test(n2)) { jel = true; break; }
-          }
-        } catch { /* olvashatatlan almappa: nem jel */ }
-        if (jel) dolgozok++;
-      }
-    } catch {
-      return { ok: true, dolgozok: 0, ossz: 0 };   // nem tudjuk megítélni: ne zavarjunk
-    }
-    // Üres mappa rendben van: első beállításnál ez a normális.
-    return { ok: ossz === 0 || dolgozok > 0, dolgozok, ossz };
   }
 
   async function listDocxFiles(dirHandle) {
@@ -208,7 +152,7 @@ const FsService = (() => {
   // .eredeti\ mentéseket is. A Műhely walk_files-a mindenhol kihagyja a ponttal
   // kezdődő mappát — itt is így kell.
   const SCAN_MAX_DEPTH = 4;
-  const SKIP_DIRS = new Set(['01_Elokeszitett', '02_Feltoltheto']);
+  const SKIP_DIRS = new Set(['01_Elokeszitett', '02_Feltoltheto', '03_Beerkezett', '04_TAJ']);
 
   // `exts`: a sablonként számító kiterjesztések — a docgen a kitölthető
   // PDF-sablonokat is kéri (['.docx', '.pdf']).
@@ -237,9 +181,17 @@ const FsService = (() => {
     return file.arrayBuffer();
   }
 
+  // A név lehet perjeles relatív út is („01_Kiadasok/Név/01_Elokeszitett/x.pdf”):
+  // a PDF-lánc kísérőfájlja így hivatkozik az almappába mentett iratra.
+  async function fileAt(dirHandle, ut) {
+    const reszek = String(ut).split('/');
+    let d = dirHandle;
+    for (const r of reszek.slice(0, -1)) d = await d.getDirectoryHandle(r);
+    return d.getFileHandle(reszek[reszek.length - 1]);
+  }
+
   async function readFromDir(dirHandle, filename) {
-    const fh = await dirHandle.getFileHandle(filename);
-    const file = await fh.getFile();
+    const file = await (await fileAt(dirHandle, filename)).getFile();
     return file.arrayBuffer();
   }
 
@@ -342,12 +294,8 @@ const FsService = (() => {
     readFromDir,
     writeToDir,
     getSubDir,
-    DIR_PREP,
-    DIR_UP,
-    foldName,
     listSubDirs,
-    matchWorkerDir,
-    looksLikeWorkFolder,
+    fileAt,
     listFiles,
     fileExists,
     deleteFromDir,

@@ -396,6 +396,7 @@ const DocxService = (() => {
     makeParser,          // a jelölő-feloldás maga (a render nélkül, teszthez is)
     enrichClientRow,
     outputFilename,
+    fileSafe,
     uniqueFilename,
     formatValue,
     NAME_TOKENS,

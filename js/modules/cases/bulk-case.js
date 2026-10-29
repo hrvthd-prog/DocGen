@@ -105,7 +105,6 @@ const BulkCase = (() => {
     let db = 0;
     for (const id of batchIds) {
       for (const c of CaseRepo.batch(id)) { if (CaseRepo.destroy(c.id)) db++; }
-      if (typeof FsService !== 'undefined') FsService.saveHandle(mappaKulcs(id), null).catch(() => {});
     }
     await CaseRepo.flush();
     return db;
@@ -159,7 +158,7 @@ const BulkCase = (() => {
       tipus: TIPUSOK[0].key, ids: [], ertekek: {}, triggerDate: '',
       batchId: null, rogzites: null,     // rögzítés után: a `rogzit` eredménye
       sablonok: null,                    // Set; null = az ügytípus hozzárendelése
-      outDir: null, outEngedely: false, perWorker: false, fut: false, eredmeny: null,
+      fut: false, eredmeny: null,
     };
   }
 
@@ -182,30 +181,6 @@ const BulkCase = (() => {
       }
     }
     rajzol();
-    if (st.batchId) mappaVissza(st.batchId);
-  }
-
-  // ── A köteg kimeneti mappája: kötegenként megjegyezve ──────────────────────
-  // A böngésző tárolójában (IndexedDB), mint a többi mappa-handle: a handle nem
-  // menthető fájlba. Az engedélyt indulásonként elveszi — újrakérni csak
-  // kattintásra lehet, ezért az a generálás gombjánál történik.
-
-  const mappaKulcs = batchId => 'tomeges_kimenet:' + batchId;
-
-  async function mappaVissza(batchId) {
-    let m = null;
-    try { m = await FsService.loadHandle(mappaKulcs(batchId)); } catch { m = null; }
-    if (!m || !m.dir || !st || st.batchId !== batchId || st.outDir) return;
-    st.outDir = m.dir;
-    st.perWorker = !!m.perWorker;
-    st.outEngedely = await FsService.queryPermissionOnly(m.dir, true);
-    rajzol();
-  }
-
-  function mappaMent() {
-    if (!st.batchId || !st.outDir) return;
-    FsService.saveHandle(mappaKulcs(st.batchId), { dir: st.outDir, perWorker: st.perWorker })
-      .catch(e => BevLogger.warn('TOMEGES_UGY', 'A kimeneti mappa nem jegyezhető meg', e.message, ''));
   }
 
   function bezar() {
@@ -323,6 +298,7 @@ const BulkCase = (() => {
     const hianyzo = [...hozzarendelt].filter(n => !elerheto.includes(n));
     const db = st.sablonok.size * st.ids.length;
     const kellMappa = FsService.hasFsApi;
+    const kimenet = DocgenModule.outputDirName();
 
     return `
       <div class="bk-gen">
@@ -344,26 +320,18 @@ const BulkCase = (() => {
         <div class="bk-gen__col">
           <div class="bk-subtitle">Kimeneti mappa</div>
           <div class="bk-out">
-            <button type="button" class="btn btn-secondary btn-sm" id="bk-out">Tallózás…</button>
-            <span class="bk-outname">${st.outDir ? '📁 ' + escHtml(st.outDir.name) + (st.outEngedely ? ''
-                : ' <span class="bk-muted">(megjegyzett — a generáláskor engedélyt kér)</span>')
-              : (kellMappa ? 'nincs kiválasztva' : 'letöltésként érkeznek')}</span>
+            <span class="bk-outname">${kimenet ? '📁 ' + escHtml(kimenet)
+              : (kellMappa ? 'nincs beállítva — a Dokumentumok fülön állítható be' : 'letöltésként érkeznek')}</span>
           </div>
-          <button type="button" class="bk-toggle ${st.perWorker ? 'is-on' : ''}" id="bk-perworker"
-                  aria-pressed="${st.perWorker}">
-            <span class="bk-toggle__dot"></span>
-            Külön mappa minden dolgozónak
-          </button>
-          <div class="bk-hint">${st.perWorker
-            ? `Minden dolgozó a saját mappájába kap: <code>&lt;Név&gt;\\${escHtml(FsService.DIR_PREP)}</code>
-               (a meglévő mappát megtalálja, ha nincs, kérdés nélkül létrehozza; ha több hasonló
-               nevű van, rákérdez).`
-            : 'Minden fájl közvetlenül a választott mappába kerül.'}</div>
+          <div class="bk-hint">Ugyanaz a mappa és szabály, mint a Dokumentumok fülön: a
+            Szálláshelyváltozás ügytípushoz rendelt sablonok a
+            <code>03_Bejelentesek\\02_Szallashelyvaltozasok\\&lt;hónap&gt;</code> mappába, a többi a
+            dolgozó saját mappájába kerül.</div>
           <div class="bk-actions">
             <button type="button" class="btn btn-primary" id="bk-gen-pdf"
-                    ${(!db || (kellMappa && !st.outDir) || st.fut) ? 'disabled' : ''}>DOCX + PDF (${db} fájl)</button>
+                    ${(!db || (kellMappa && !kimenet) || st.fut) ? 'disabled' : ''}>DOCX + PDF (${db} fájl)</button>
             <button type="button" class="btn btn-secondary" id="bk-gen-docx"
-                    ${(!db || (kellMappa && !st.outDir) || st.fut) ? 'disabled' : ''}>Csak DOCX</button>
+                    ${(!db || (kellMappa && !kimenet) || st.fut) ? 'disabled' : ''}>Csak DOCX</button>
           </div>
           <div class="bk-progress" id="bk-progress" ${st.fut ? '' : 'hidden'}><div id="bk-progress-bar"></div></div>
           <div class="bk-status" id="bk-status"></div>
@@ -425,8 +393,6 @@ const BulkCase = (() => {
       if (cb.checked) st.sablonok.add(cb.dataset.tpl); else st.sablonok.delete(cb.dataset.tpl);
       rajzol();
     }));
-    q('#bk-out')?.addEventListener('click', mappaValaszto);
-    q('#bk-perworker')?.addEventListener('click', () => { st.perWorker = !st.perWorker; mappaMent(); rajzol(); });
     q('#bk-gen-pdf')?.addEventListener('click', () => general(true));
     q('#bk-gen-docx')?.addEventListener('click', () => general(false));
     q('#bk-missing')?.addEventListener('click', () => DocgenMissingLog.showDialog());
@@ -527,27 +493,13 @@ const BulkCase = (() => {
     });
   }
 
-  async function mappaValaszto() {
-    if (!FsService.hasFsApi) { toast('Ez a böngésző nem tud mappát választani — a fájlok letöltésként érkeznek.', 'warn'); return; }
-    try {
-      // A saját `id` miatt a rendszerablak a legutóbb választott helyen nyílik.
-      st.outDir = await window.showDirectoryPicker({ id: 'tomeges_kimenet', mode: 'readwrite' });
-      st.outEngedely = true;
-      st.eredmeny = null;
-      mappaMent();
-      rajzol();
-    } catch (e) {
-      if (e.name !== 'AbortError') toast('A mappa nem választható: ' + e.message, 'error');
-    }
-  }
-
   async function general(pdf) {
     if (st.fut) return;
-    // A megjegyzett mappa engedélye: a kattintás a felhasználói gesztus.
-    if (st.outDir && !st.outEngedely) {
-      try { st.outEngedely = await FsService.verifyPermission(st.outDir, true); }
-      catch { st.outEngedely = false; }
-      if (!st.outEngedely) { toast('A mappához nincs engedély — válassz újat a Tallózással.', 'error'); rajzol(); return; }
+    // A kimeneti mappa engedélye: a kattintás a felhasználói gesztus.
+    let outDir = null;
+    if (FsService.hasFsApi) {
+      try { outDir = await DocgenModule.requestOutputDir(); } catch { outDir = null; }
+      if (!outDir) { toast('A kimeneti mappához nincs engedély — a Dokumentumok fülön állítsd be.', 'error'); return; }
     }
     const sablonok = [...st.sablonok];
     st.fut = true;
@@ -560,10 +512,10 @@ const BulkCase = (() => {
     };
     try {
       const r = await DocgenModule.generateFor({
-        employeeIds: st.ids, templates: sablonok, outputDir: st.outDir,
-        perWorker: st.perWorker, docx: true, pdf, ui: { status },
+        employeeIds: st.ids, templates: sablonok, outputDir: outDir,
+        docx: true, pdf, ui: { status },
       });
-      st.eredmeny = Object.assign(r, { pdf, outName: st.outDir ? st.outDir.name : '' });
+      st.eredmeny = Object.assign(r, { pdf, outName: outDir ? outDir.name : '' });
     } catch (e) {
       st.eredmeny = { count: 0, docxCount: 0, missing: 0, errors: [e.message], pdf, outName: '' };
     } finally {

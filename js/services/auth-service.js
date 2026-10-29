@@ -60,7 +60,7 @@ const Auth = (() => {
     return 'acc-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
   }
 
-  /** Ékezet- és kisbetű-független kulcs — az FsService.foldName párja. */
+  /** Ékezet- és kisbetű-független kulcs. */
   function fold(s) {
     return String(s || '').toLowerCase()
       .replace(/[áéíóöőúüű]/g, c => ({ á:'a', é:'e', í:'i', ó:'o', ö:'o', ő:'o', ú:'u', ü:'u', ű:'u' }[c]))

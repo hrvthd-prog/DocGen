@@ -55,25 +55,45 @@ kell újraválasztani.
 > **A sablonmappa ne a kimeneti mappa legyen, és ne is annak almappája.** A
 > sablonkeresés rekurzív; ha egybeesnek, a dolgozói mappák `.docx` fájljai is
 > sablonként jelennének meg. (A keresés kihagyja a ponttal kezdődő mappákat és a
-> `01_Elokeszitett` / `02_Feltoltheto` alkönyvtárakat, de a szétválasztás
+> dolgozói mappák `01_Elokeszitett` … `04_TAJ` alkönyvtárait, de a szétválasztás
 > így is tisztább.)
 
 ### Hova készülnek az iratok
 
-A generált irat a **dolgozó előkészített mappájába** kerül, a PDF Műhely
-szerkezete szerint:
+A kimeneti mappa a **`09_OIF_kerelmek`**. Az irat helye
+(`plans/TERV-kimenet-es-ugyek.md` 3.):
 
 ```
-<kimeneti mappa>\<Dolgozó Név>\01_Elokeszitett\<irat>.docx
+09_OIF_kerelmek\
+  01_Hosszabbitasok\<ÉÉÉÉ.HH>\<Vezetéknév Keresztnév>\   meghosszabbítás (a lejárat hónapja)
+  02_Kiadasok\<Vezetéknév Keresztnév>\                    kiadás
+      01_Elokeszitett   a generált kérelem-iratok (nyomtatásra, aláírásra várnak)
+      02_Feltoltheto    az aláírás nélkül kész PDF-nyomtatvány; a szkennelt, aláírt példány
+      03_Beerkezett     döntések, szálláshely-igazolás — csak kézzel
+      04_TAJ            a TAJ-sablonok (a név „TAJ-” kezdetű) irata
+  03_Bejelentesek\
+      01_Munkaviszony_megszunes\              a Munkaviszony megszűnése ügytípus sablonjai
+      02_Szallashelyvaltozasok\<ÉÉÉÉ.HH>\     a Szálláshelyváltozás ügytípus sablonjai (a generálás hónapja)
 ```
 
-Ez azt jelenti: *nyomtatásra és aláírásra vár*. A szkennelt, aláírt példány a
-Műhely Iktatójától kerül a `02_Feltoltheto` mappába, és onnan megy a portálra.
+A két bejelentéshez a sablonokat az **Ügyek → Áttekintés → Ügytípus-sablonok…**
+hozzárendelése jelöli ki — ami ott nincs hozzárendelve, az a dolgozó mappájába megy.
 
-A dolgozói mappát az app **sosem hozza létre magától**: a nevet ékezet- és
-kisbetű-függetlenül párosítja a meglévő mappákkal, és ha nincs biztos találat,
-**rákérdez** (melyik meglévő mappába, vagy hozzon-e létre újat ezen a néven). Így
-nem keletkezhet két párhuzamos mappa ugyanarra a dolgozóra eltérő névformátumból.
+**A dolgozó megtalálása:** minden generáláskor a program bejárja a
+`01_Hosszabbitasok\*\*` és a `02_Kiadasok\*` mappákat, és a nevet ékezet-, kis-
+és nagybetű-függetlenül, **pontosan** párosítja. Indexet nem tart: a mappák kézzel
+mozognak, egy tárolt lista elavulna.
+- Van pontos találat → oda ír.
+- Nincs mappa → a dolgozó **nyitott ügye** szerint létrehozza (meghosszabbítás:
+  a jelenlegi engedély lejáratának hónapjában; kiadás: a `02_Kiadasok` alatt), mind
+  a négy almappával.
+- Hasonló nevű mappa van (más sorrend, rész-egyezés), vagy nincs ügy, amiből a hely
+  kiderülne → **rákérdez**; a „Kihagyás” válaszra az irat nem készül el. Így nem
+  keletkezik párhuzamos mappa ugyanarra a dolgozóra.
+
+A felső szintű mappákat (`01_Hosszabbitasok`, `02_Kiadasok`, `03_Bejelentesek` és a
+két almappája) a program **sosem hozza létre**: ha hiányoznak, nem a
+`09_OIF_kerelmek` a kimeneti mappa, és a generálás megáll.
 
 A generált `.docx` egy **DocGen-bélyeget** kap (a `Keywords` tulajdonságba), amit
 a Word átvisz a PDF metaadatába a konverziónál. A Műhely ebből tudja, hogy az
@@ -772,12 +792,10 @@ megszokott űrlap) és **Tömeges ügyintézés**. Egyelőre egy tömeges típus
 4. **Rögzítés** — a címek a nyilvántartásba (napló: „tömeges ügyintézés”),
    dolgozónként egy ügy közös kötegben, majd **visszaolvasás a tárolóból**:
    a modul kiírja, ha valakinél a mentés nem ért célba.
-5. **Generálás** — az ügytípushoz rendelt sablonok előre kijelölve; kimeneti
-   mappa **Tallózás…**-sal; alapból minden fájl a választott mappába, a
-   **Külön mappa minden dolgozónak** kapcsolóval `<Név>_Elokeszitett`-be
-   (meglévő mappát megtalálja, nem létezőt kérdés nélkül létrehoz, több hasonló
-   névnél rákérdez). A választott mappát és a kapcsolót a köteg **megjegyzi**;
-   újraindítás után a generálás gombja kéri vissza a mappa-engedélyt.
+5. **Generálás** — az ügytípushoz rendelt sablonok előre kijelölve; a kimeneti
+   mappa és a szabály ugyanaz, mint a Dokumentumok fülön (a szálláshely-sablonok a
+   `03_Bejelentesek\02_Szallashelyvaltozasok\<hónap>` mappába); újraindítás után
+   a generálás gombja kéri vissza a mappa-engedélyt.
 
 A kötegek az Ügyek fül **Tömeges ügyek** nézetében közvetlenül elérhetők
 (megnyitás napja, ügytípus, dolgozók, állapot). Jelölőnégyzettel több köteg is

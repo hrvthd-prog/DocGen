@@ -97,9 +97,23 @@ test('A mappa idegen .docx fájljait NEM alakítja át', () => {
   } finally { takarit(d); }
 });
 
-test('Az almappákba sem megy le, ha van kísérőfájl', () => {
-  // Az app mindig a kimeneti mappa GYÖKERÉBE ír (FsService.writeToDir),
-  // tehát az almappa tartalma sosem a mostani generálásé.
+test('A kísérőfájl perjeles relatív útja az almappában lévő DOCX-re talál', () => {
+  // A DocGen a 09_OIF_kerelmek szerkezetébe ment (dolgozó almappája), és a
+  // kísérőfájlba a gyökérhez képesti utat írja — perjellel, mert a szkript
+  // JSON-olvasója nem kezel escape-elt visszapert.
+  const ut = '02_Kiadasok/Kiss Anna/01_Elokeszitett/Kiss Anna Adatlap.docx';
+  const d = mappat([ut, '02_Kiadasok/Kiss Anna/03_Beerkezett/Hatarozat.docx'], [ut]);
+  try {
+    const r = lista(d);
+    assertEq(r.db, 1, 'az almappás DOCX-et nem találta meg');
+    assertEq(r.hianyzo, 0);
+    assertEq(r.fajlok.join(' | '), 'Kiss Anna Adatlap.docx', 'a listán a fájlnév áll, nem az út');
+  } finally { takarit(d); }
+});
+
+test('A kísérőfájlban nem szereplő almappákba nem megy le', () => {
+  // Csak a kísérőfájlban felsorolt utak számítanak; a többi almappa (pl. a
+  // 03_Beerkezett, a régi generálások) sosem a mostani generálásé.
   const d = mappat(
     ['Uj Egy.docx', 'archiv/Tavalyi.docx', 'archiv/melyebb/Meg regebbi.docx'],
     ['Uj Egy.docx']);

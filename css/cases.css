@@ -675,14 +675,6 @@
 .bk-tag.is-warn { background: #FDF3DD; color: #7A4A0E; }
 .bk-out { display: flex; align-items: center; gap: 10px; }
 .bk-outname { font-size: 12.5px; }
-.bk-toggle {
-  display: inline-flex; align-items: center; gap: 8px; align-self: flex-start;
-  padding: 5px 12px; border: 1px solid var(--c-border); border-radius: 16px;
-  background: var(--c-card); color: var(--c-text); font: inherit; font-size: 12.5px; cursor: pointer;
-}
-.bk-toggle__dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--c-muted); }
-.bk-toggle.is-on { border-color: var(--c-green); background: #E9F5F2; }
-.bk-toggle.is-on .bk-toggle__dot { background: var(--c-green); border-color: var(--c-green); }
 .bk-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .bk-progress { height: 6px; background: var(--c-bg); border-radius: 3px; overflow: hidden; }
 .bk-progress > div { height: 100%; width: 0; background: var(--c-green); transition: width .15s; }

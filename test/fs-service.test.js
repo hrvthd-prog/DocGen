@@ -3,11 +3,10 @@
 // Az fs-service felújításának tesztjei (TERV-mappaszerkezet.md).
 // Futtatás: node test/fs-service.test.js
 //
-// A File System Access API böngészős; Node alatt nincs. Ezért két dolgot mérünk:
-//   1. a TISZTA függvényeket (foldName, matchWorkerDir) — ezek a dolgozói mappa
-//      feloldását vezetik, és egy tévedés párhuzamos mappákat hozna létre;
-//   2. a HIBAKEZELÉST egy minimális handle-utánzattal — a nyelt hiba volt az a
-//      minta, amitől a mappaírás csendben máshova került.
+// A File System Access API böngészős; Node alatt nincs. Ezért a HIBAKEZELÉST
+// mérjük egy minimális handle-utánzattal — a nyelt hiba volt az a minta, amitől
+// a mappaírás csendben máshova került. (A dolgozói mappa keresése:
+// test/celmappa.test.js.)
 
 const fs = require('fs');
 const path = require('path');
@@ -137,37 +136,6 @@ function fakeDir(spec = {}) {
 }
 
 async function main() {
-  section('Dolgozói mappa feloldása');
-  test('foldName: ékezet- és kisbetű-független', () => {
-    assertEq(FS.foldName('Horváth Dániel'), 'horvath daniel');
-    assertEq(FS.foldName('ŐRY ÜSZŐ'), 'ory uszo');
-  });
-  test('pontos egyezés ékezet nélkül is', () => {
-    const { dir } = FS.matchWorkerDir('horvath daniel', ['Horváth Dániel', 'Kiss Anna']);
-    assertEq(dir, 'Horváth Dániel');
-  });
-  test('egyetlen részegyezés elég', () => {
-    const { dir } = FS.matchWorkerDir('Kiss', ['Horváth Dániel', 'Kiss Anna']);
-    assertEq(dir, 'Kiss Anna');
-  });
-  test('két találat -> NINCS döntés (a hívó kérdez)', () => {
-    const { dir, hits } = FS.matchWorkerDir('Kiss', ['Kiss Anna', 'Kiss Béla']);
-    assertEq(dir, null);
-    assertEq(hits.length, 2);
-  });
-  test('nulla találat -> NINCS döntés, mappát nem találunk ki', () => {
-    const { dir, hits } = FS.matchWorkerDir('Nagy Zoltán', ['Kiss Anna']);
-    assertEq(dir, null);
-    assertEq(hits.length, 0);
-  });
-  test('üres név -> nincs döntés', () => {
-    assertEq(FS.matchWorkerDir('', ['Kiss Anna']).dir, null);
-  });
-  test('a két alkönyvtár neve rögzített', () => {
-    assertEq(FS.DIR_PREP, '01_Elokeszitett');
-    assertEq(FS.DIR_UP, '02_Feltoltheto');
-  });
-
   section('getSubDir: a hiba nem nyelődik el');
   await test('nincs ilyen mappa -> null (jogos eset)', async () => {
     assertEq(await FS.getSubDir(fakeDir(), 'nincs'), null);
@@ -233,44 +201,18 @@ async function main() {
     assert(/mérete eltér/.test(msg), `várt méret-hiba, kapott: ${msg || '(semmi)'}`);
   });
 
-  section('Munkamappa-felismerés (kimenet-kapu)');
-  await test('üres mappa rendben (első beállítás)', async () => {
-    const r = await FS.looksLikeWorkFolder(fakeDir());
-    assertEq(r.ok, true);
+  section('Relatív út (a PDF-lánc kísérőfájlja)');
+  await test('fileAt: perjeles úton az almappában lévő fájl', async () => {
+    const fh = { kind: 'file' };
+    const root = fakeDir({ dirs: { '02_Kiadasok': fakeDir({ dirs: {
+      'Kiss Anna': fakeDir({ files: { 'x.pdf': fh } }) } }) } });
+    assert(await FS.fileAt(root, '02_Kiadasok/Kiss Anna/x.pdf') === fh);
+    assert(await FS.fileAt(fakeDir({ files: { 'y.pdf': fh } }), 'y.pdf') === fh, 'út nélkül a gyökérből');
   });
-  await test('01/02-t tartalmazó almappa -> munkamappa', async () => {
-    const root = fakeDir({ dirs: {
-      'Kiss Anna': fakeDir({ dirs: { '02_Feltoltheto': fakeDir() } }),
-    } });
-    const r = await FS.looksLikeWorkFolder(root);
-    assertEq(r.ok, true);
-    assertEq(r.dolgozok, 1);
-  });
-  await test('iratot tartalmazó almappa -> munkamappa', async () => {
-    const root = fakeDir({ dirs: {
-      'Nagy Bela': fakeDir({ files: { 'Nagy Bela Útlevél.pdf': {} } }),
-    } });
-    assertEq((await FS.looksLikeWorkFolder(root)).ok, true);
-  });
-  await test('csak idegen almappák -> NEM munkamappa', async () => {
-    const root = fakeDir({ dirs: {
-      'nyaralas': fakeDir({ files: { 'IMG_1.jpg': {} } }),
-      'projekt':  fakeDir({ files: { 'jegyzet.txt': {} } }),
-    } });
-    const r = await FS.looksLikeWorkFolder(root);
-    assertEq(r.ok, false);
-    assertEq(r.ossz, 2);
-    assertEq(r.dolgozok, 0);
-  });
-  await test('a 01/02 a GYÖKÉRBEN nem számít dolgozói mappának', async () => {
-    // Ha valaki egy dolgozó MAPPÁJÁT adja meg kimenetnek, az nem munkamappa.
-    const root = fakeDir({ dirs: {
-      '01_Elokeszitett': fakeDir({ files: { 'x.docx': {} } }),
-      '02_Feltoltheto':  fakeDir(),
-    } });
-    const r = await FS.looksLikeWorkFolder(root);
-    assertEq(r.ossz, 0, 'a két alkönyvtárat almappának számolta');
-    assertEq(r.ok, true, 'üresnek látszik — nem zavarunk, de nincs is mit jelezni');
+  await test('fileAt: hiányzó almappa → NotFoundError', async () => {
+    let nev = '';
+    try { await FS.fileAt(fakeDir(), 'nincs/x.pdf'); } catch (e) { nev = e.name; }
+    assertEq(nev, 'NotFoundError');
   });
 
   section('Mélyszkennelés: korlát és pont-szűrés');
