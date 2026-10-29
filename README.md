@@ -344,13 +344,25 @@ Amire nem volt adat, azt a *Hiányzó adatok naplója* utólag is megmutatja.
 
 Minden adat a **te gépeden marad**, semmi nem megy ki hálózatra.
 
+Az adatmappa a program mappájának **`data\`** almappája — élesben
+`Z:\23_HARMADIK_ORSZAGBELI_MUNKAVALLALOK\08_DocGen\DocGen-main\data\`, nem a
+kimeneti `09_OIF_kerelmek` (`plans/TERV-kimenet-es-ugyek.md` 2.1). A frissítő ezt
+a mappát védi, sosem ír bele.
+
 ```
+data/docgen-accounts.json    ← a fiókok (PIN-lenyomattal)
 data/docgen-employees.json   ← a személyek (érzékeny adat!)
 data/docgen-cases.json       ← az ügyek és eseménytörténetük (érzékeny adat!)
-data/docgen-config.json      ← séma, export profilok, ügytípusok
+data/docgen-transfers.json   ← a díjátutalási kötegek
+data/docgen-config.json      ← séma, export profilok, ügytípus-sablonok, szótár
                                (személyes adat nélkül)
-data/backup/                 ← időbélyeges mentések, utolsó 20
+data/backup/                 ← időbélyeges mentések minden fájlról, fájlonként utolsó 20
+data/allapot/                ← a vezetői kivonatok (Ügyállás)
 ```
+
+Áthelyezés: a fájlokat és a `backup\`, `allapot\` mappát Intézőben másold át, utána
+**Nyilvántartás → Másik adatmappa** — a nem üres célba az app nem ír, csak betölt.
+Ezt minden gépen / böngészőprofilban meg kell tenni.
 
 A `data/` mappát a `.gitignore` kizárja — **éles adat soha nem kerül
 verziókezelésbe**. A `docgen-config.json` viszont nem tartalmaz személyes

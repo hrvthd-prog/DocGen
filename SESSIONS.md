@@ -68,6 +68,57 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-29 (2.) — A terv megvalósítása: F0–F4 és a PDF Műhely igazítása
+
+**Cél:** a `plans/TERV-kimenet-es-ugyek.md` megvalósítása a felhasználó döntései
+szerint (9. fejezet; SAP-minta: `Ticket_SAP_TR.xlsx`).
+**Változás:**
+- `v10.89` F0: `print.html` + mammoth + gyorsnyomtatás törölve (a pre-commit hook
+  sem verziózza); új `FsService.mentesElotte` (minden adatfájl mentés előtti
+  másolata egy helyen); a `docgen-config.json` sérült/olvashatatlan állapotban
+  nem íródik felül `{}`-ből, és mentés előtt másolat készül.
+- `v10.90` F2–F3: „Tömeges” kapcsoló, ügytípus-szűrő (`<details>`); tartózkodási
+  cél (`purpose`, `CaseTypes.title`); „Engedélyezve”; `CaseRepo.allapotSzoveg`;
+  a típusok címkéje a seedből (a configból csak a sablonok); lezárt ügy idővonala
+  határidők és sáv nélkül.
+- `v10.91` F1: új `js/modules/docgen/celmappa.js` — a 09_OIF_kerelmek szabálya,
+  dolgozói mappa bejárással, hasonló névnél kérdés, új mappa a nyitott ügy
+  szerint; a tömeges ügy saját mappaválasztója törölve; a PDF-lánc relatív utat
+  tárol (`docx-pdf.vbs` és összefűzés).
+- `v10.92` F4: érvényesség a lezáráskor, sorozatszám később; teendőlista,
+  „Teendő” szűrő; `CaseXlsx.sap`; új mezők `hr_time_admin`, `hr_k2`.
+- PDF Műhely `v1.39`–`v1.40`: `worker_dirs` / `dolgozo_nev`, a 03/04 kimarad.
+**Miért / döntés:**
+- A dolgozói mappát pontos (NFD-s) egyezéssel keressük; ha csak hasonló van
+  (más sorrend, rész-egyezés), kérdez és nem hoz létre újat — a párhuzamos mappa
+  ellen. Nincs mappa és van nyitott kiadási/hosszabbítási ügy → létrehozza.
+- A munkaviszony-bejelentés teendője minden engedélyezésnél megjelenik — a
+  felhasználó erre nem válaszolt; munkahipotézis a SAP-sor alapján (terv 9.7).
+- Talált régi hiba, javítva: a sorozatszám-bejegyzés a záró státuszt hordozta
+  kimenetel nélkül, és egy későbbi bejegyzés-javítás elvette a lezárt ügy
+  kimenetelét (`ujraszamolAllapot`). Most státusz nélküli „Feljegyzés”.
+- A README két helyén és a docgen.js egy kommentjében `\x01` vezérlőkarakter
+  ült a `\01_Elokeszitett` helyén (régi szerkesztési hiba) — kicserélve.
+**Tesztek:** `node test/run-all.js` zöld (új: `celmappa.test.js` 14; `cases` +14,
+`case-xlsx` +2, `fs-service`, `adatmappa`, `docx-pdf` almappás eset valódi
+cscript-tel). Headless Chrome, próba mód, CDP-vel: 18 lépés, JS-hiba nélkül.
+Műhely: önteszt 369/369, GUI 307/307.
+
+**Nyitott / következő:**
+- **Éles próba a céges gépen** (a terv 7. fejezete): adatmappa-költöztetés a 2.1
+  szerint; generálás meglévő / új hosszabbítási dolgozónak, TAJ → `04_TAJ`,
+  szálláshely-köteg → `03_Bejelentesek\02_Szallashelyvaltozasok\2026.10`; rossz
+  kimeneti mappa → hiba; „DOCX + PDF” → `PDF-keszites.vbs` az almappás DOCX-ből is
+  PDF-et készít; engedélyezés → teendők, SAP-táblázat a dolgozó `01_Elokeszitett`
+  mappájában; Műhely munkamappa = `09_OIF_kerelmek`.
+- Ügytípus-sablonok: a „Munkaviszony megszűnésének bejelentése” típushoz hozzá kell
+  rendelni a `Munkavállalói nyilatkozat foglalkoztatóváltásról` sablont, a
+  szálláshelyváltozáshoz a sajátjait — enélkül a dolgozó mappájába mennek.
+- A HR-mezők (`Időrögzítési ügyintéző`, `K2`) feltöltése (Nyilvántartás → Tömeges
+  szerkesztés).
+- Nyitva: a munkaviszony-bejelentés hosszabbításnál is kell-e (terv 9.7); az
+  összefűzött csomag helye.
+
 ## 2026-10-29 — Terv: új kimeneti mappaszerkezet, adatmappa, ügylista, engedélyezés utáni teendők; `plans/` mappa
 
 **Cél:** terv (kód nélkül) a felhasználó kéréseire: a `09_OIF_kerelmek` új

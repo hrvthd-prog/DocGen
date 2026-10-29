@@ -19,6 +19,18 @@ Az F2 és az F3 nem függ az F1-től, tetszőleges sorrendben jöhetnek. Az F4 a
 F1-re épül (a SAP-táblázat a dolgozó mappájába kerül). Minden fázis külön
 commit, zöld tesztekkel.
 
+**Megvalósítva (2026-10-29):** F0 `v10.89` · F2–F3 `v10.90` · F1 `v10.91` · F4 `v10.92`;
+PDF Műhely `v1.39`–`v1.40` (10. fejezet). Node-tesztek zölden, plusz egy headless
+Chrome-os végigkattintás próba módban (lista, szűrők, idővonal, teendők, SAP- és
+sorozatszám-párbeszéd, lezárás). Ami csak a céges gépen ellenőrizhető: 7. fejezet,
+„Böngészőben”. Eltérések a tervtől:
+- Az `Auth.fold` nem lett közös `fold()`-ra cserélve (a `celmappa.js` saját, NFD-s
+  változatot használ; a utils.js DOM-függése miatt Node-ban nem tölthető).
+- Az összefűzött PDF-csomag továbbra is a kimeneti mappa gyökerébe kerül —
+  ha a dolgozó mappájába kellene, az külön döntés.
+- A tömeges ügy saját mappája helyett a Dokumentumok fül kimeneti mappáját kéri
+  (`DocgenModule.requestOutputDir`).
+
 ---
 
 ## 1. Ponytail-audit (a teljes repó, legnagyobb vágás elöl)
@@ -493,6 +505,12 @@ egy kattintással kellene generálni, a `generateFor` ezt egy hívással tudja.)
 
 ## 10. PDF Műhely
 
-Külön repó (`pdf-muhely`), a terve ott: `kepek-pdf-terv.md` új fejezete. A DocGen
+Külön repó (`pdf-muhely`), a terve ott: `kepek-pdf-terv.md` 12.11. A DocGen
 oldala ettől független: a DocGen nem olvassa a Műhely állapotát, csak ugyanabba a
 szerkezetbe ír.
+
+A Műhelyben (`v1.39`): a `worker_dirs` a 09_OIF_kerelmek gyökerénél relatív utakat
+ad (`01_Hosszabbitasok\2026.11\Kiss Anna`), a fájlnévbe és a bélyegbe a
+`dolgozo_nev()` viszi a nevet; a `03_Beerkezett` és a `04_TAJ` kimarad az
+Áttekintőből, a Rendezésből és az átnevezésből (különben a Rendezés a kézzel
+ide tett iratokat a 01/02-be mozgatta volna).
