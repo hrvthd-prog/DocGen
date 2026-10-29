@@ -306,6 +306,27 @@ async function main() {
     assertEq(got.length, 0, 'korlát nélkül egy tévesen megadott mappa végtelen munkát adna');
   });
 
+  section('Mentés előtti biztonsági másolat');
+  await test('mentesElotte: a régi tartalom a backup-ba kerül, és csak 20 marad', async () => {
+    const regi = {};
+    for (let i = 0; i < 20; i++) regi[`2026-01-${String(i + 1).padStart(2, '0')}T00-00-00-docgen-config.json`] = {};
+    regi['2026-01-01T00-00-00-docgen-employees.json'] = {};     // másik fájl másolata: nem számít bele
+    const backup = fakeDir({ files: regi });
+    const fo = fakeDir({ dirs: { backup }, files: {
+      'docgen-config.json': { async getFile() { return { size: 2, text: async () => '{}' }; } } } });
+    await FS.mentesElotte(fo, 'docgen-config.json');
+    const nevek = await FS.listFiles(backup, n => n.endsWith('docgen-config.json'));
+    assertEq(nevek.length, 20, 'fájlonként 20 marad');
+    assert(!nevek.includes('2026-01-01T00-00-00-docgen-config.json'), 'a legrégebbi törlődik');
+    assert(await FS.fileExists(backup, '2026-01-01T00-00-00-docgen-employees.json'),
+      'más fájl másolatához nem nyúl');
+  });
+  await test('mentesElotte: nincs még fájl → nincs mit menteni, backup mappa sem jön létre', async () => {
+    const spec = {};
+    await FS.mentesElotte(fakeDir(spec), 'docgen-config.json');
+    assert(!spec.dirs, 'üres mappában ne keletkezzen backup');
+  });
+
   section('Gépszintű kulcs (adatmappa)');
   await test('belépve is a „helyi_" kulcsra ír — induláskor, belépés előtt ott keressük', async () => {
     sandbox.Settings = { currentUser: () => 'Kovács Anna' };

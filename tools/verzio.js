@@ -22,7 +22,7 @@ const fs = require('fs');
 const path = require('path');
 
 const GYOKER      = path.join(__dirname, '..');
-const LAPOK       = ['index.html', 'print.html'];
+const LAPOK       = ['index.html'];
 const VERZIO_FAJL = path.join(GYOKER, 'js', 'version.js');
 
 // Csak valódi hivatkozásra illesztünk. A `?v=` előfordulhat kommentben is

@@ -102,10 +102,3 @@ function execCopy(s) {
   ta.remove();
   return ok;
 }
-
-// ── Uint8Array → base64 ───────────────────────────────────────────────────
-function uint8ToBase64(u8) {
-  let b = '';
-  for (let i = 0; i < u8.length; i++) b += String.fromCharCode(u8[i]);
-  return btoa(b);
-}

@@ -136,7 +136,7 @@ a lapban `../vendor/mammoth…`, `tools/verzio.js` `LAPOK`, `test/verzio.test.js
 mögötti út; a kód maga írja, hogy hivatalos iratra használhatatlan, és a
 formahű PDF-et a Word-lánc adja. Vele megy a 636 KB-os `mammoth`, az
 `openPrintSelectDialog`, az `_openPrint` és az `uint8ToBase64` (~150 sor).
-→ **Döntés kell** (9. fejezet, 2. kérdés).
+→ **Döntés: törlés** (9. fejezet, 2.).
 
 ---
 
@@ -233,7 +233,7 @@ mappában új szerkezet nőjön.
 
 **Szálláshelyváltozás hónapmappája:** alapból a **generálás hónapja**
 (`ponytail:` mindig ismert; a költözés napja dolgozónként más lehet egy kötegen
-belül). → 9. fejezet, 3. kérdés.
+belül). Döntés: így marad (9. fejezet, 3.).
 
 ---
 
@@ -273,7 +273,7 @@ Kiadási és meghosszabbítási ügynél **kötelező** megadni (új ügy felvé
 | `vendegmunkas` | Vendégmunkás-tartózkodási engedély |
 | `nemzeti_kartya` | Nemzeti Kártya |
 | `eu_kek_kartya` | EU Kék Kártya |
-| `csaladi` | Családi együttélés biztosítása céljából kiadott tartózkodási engedély *(→ 9. fejezet, 4. kérdés)* |
+| `csaladi` | Családi együttélés biztosítása céljából kiadott tartózkodási engedély |
 
 - `case-types.js`: `CASE_PURPOSES` (fenti négy) + `CaseTypes.title(c)`:
   van cél → `<cél> meghosszabbítása` / `<cél> kiadása`, nincs → a típus címkéje.
@@ -400,21 +400,27 @@ A teendőlista „SAP-táblázat” gombja: kis párbeszéd két dátummal (**Ki
 | Régi TSz | `personnel_reg_number` (Személyügyi törzsszám) |
 | Név | vezetéknév keresztnév |
 | Új TSZ | mindig üres |
-| Kilépés | a párbeszédből |
-| Új belépés | a párbeszédből |
+| Kilépés | a párbeszédből — előtöltve: a döntés napja |
+| Új belépés | a párbeszédből — előtöltve: a döntés másnapja |
 | Időrögzítési ügyintéző | **új mező** `hr_time_admin` |
-| Felettes | **új mező** `hr_supervisor` — *vagy a meglévő „Közvetlen vezető”? (9. fejezet, 5.)* |
+| Felettes | a meglévő `hr_direct_leader` („Közvetlen vezető”, 9. fejezet 5.) |
 | K2 | **új mező** `hr_k2` |
 | Új határozott idő lejárta | `c.validUntil` (a határozatból) |
 | Dokumentum jellege | mindig: Határozat |
 | Dokumentum száma | az ügy iktatószáma |
 | Dokumentum dátuma | a döntés napja (`closedAt`) |
 
+- **A minta** (`Ticket_SAP_TR.xlsx`, a felhasználótól): egy lap (`Munka1`), az
+  1. sor a fejléc (szürke kitöltés, keret), alatta soronként egy dolgozó,
+  középre zárt, keretezett cellák; a dátumok valódi dátumcellák a beépített
+  rövid dátumformátummal (14-es formátumkód — a magyar Excel `2026. 10. 27.`
+  alakban mutatja). A mintában a Kilépés = a döntés napja, az Új belépés = a
+  másnap; ezért az előtöltés. A fejlécekből a záró szóközt elhagyjuk
+  (`Felettes `, `Dokumentum dátuma `, `Határozat ` a mintában).
 - Kód: `CaseXlsx.sap(c, { kilepes, belepes })` a meglévő `case-xlsx.js`-ben
-  (ExcelJS már be van töltve); a dátumok valódi dátumcellák `yyyy.mm.dd`
-  számformátummal (a magyar Excel `TEXT()`-csapdáját így elkerüljük).
+  (ExcelJS már be van töltve), a minta oszlopszélességeivel.
 - Fájlnév a dokumentumtípus-elöl szabállyal: `SAP-ticket — John Doe.xlsx`.
-- Az új mezők a seedbe kerülnek (`hr_belso` csoport, „Csak HR tölti”); a meglévő
+- A két új mező (`hr_time_admin` Időrögzítési ügyintéző, `hr_k2` K2) a seedbe kerül (`hr_belso` csoport, „Csak HR tölti”); a meglévő
   `addMissingSeedFields` minden gépen felveszi őket a configba, kódmigráció
   nélkül. Utána a Nyilvántartás tömeges szerkesztésével tölthetők.
 - Hiányzó adatnál a táblázat elkészül, de a párbeszéd kiírja, mi üres.
@@ -466,24 +472,27 @@ egy kattintással kellene generálni, a `generateFor` ezt egy hívással tudja.)
 - **A szűrők mentése** a munkamenetek között — a mostaniak sem mentődnek.
 - **Ügytípus-szerkesztő** — a típusok kódból jönnek, csak a sablon-hozzárendelés adat.
 
-## 9. Nyitott kérdések
+## 9. Döntések (a felhasználó válaszai, 2026-10-29)
 
-1. **Adatmappa:** `DocGen-main\data\` (javasolt, 2.1) vagy közvetlenül a `DocGen-main\`?
-2. **`print.html`:** törlés a mammoth-tal együtt (javasolt) vagy áthelyezés a `tools/`-ba?
-3. **`02_Szallashelyvaltozasok` hónapmappája:** `ÉÉÉÉ.HH` alak (mint a
-   hosszabbításoknál)? A generálás vagy a költözés hónapja szerint?
-4. **Családi együttélés** pontos megjelenítése („… meghosszabbítása / kiadása” elé).
-5. **„Felettes”** azonos a meglévő „Közvetlen vezető” mezővel, vagy új adat?
-6. **SAP-táblázat:** a csatolt mintafájl nem érkezett meg — a fenti 12 oszlop
-   pontos fejléc? Dátumformátum, fájlnév jó így? Egy ügy = egy táblázat?
-7. **Munkaviszony-bejelentés** minden engedélyezés után (meghosszabbításnál is)?
-   A SAP-sor („Kilépés”, „Új belépés”) alapján igen.
-8. **PDF Műhely:** az Áttekintő/Iktató egyszintű munkamappára épül
-   (`<munkamappa>\<Név>\01…`). Az új szerkezetben a `02_Kiadasok` és minden
-   `01_Hosszabbitasok\<hónap>` külön munkamappa — kell-e a Műhelyt is igazítani
-   (külön repó, külön terv)?
-9. A lejárt bejelentési határidejű teendő számítson-e bele a fül piros
-   „lejárt” jelzésébe is?
-10. **A mappanév „tisztítása”:** pontosan mit jelent — ékezet nélkül,
-    nagybetűs vezetéknév nélkül? (A keresés mindkettőre érzéketlen; ez csak az
-    új mappák nevét érinti.)
+1. **Adatmappa:** `DocGen-main\data\` — a javaslat szerint.
+2. **`print.html`:** törölhető, a mammoth-tal együtt.
+3. **Szálláshelyváltozás hónapmappája:** `ÉÉÉÉ.HH`, a **generálás** hónapja szerint.
+4. **Családi együttélés:** egyelőre a 4.4 szerinti megnevezés (nincs még ilyen kérelem).
+5. **„Felettes” = a meglévő „Közvetlen vezető”** (`hr_direct_leader`) — új mező
+   csak kettő kell: `hr_time_admin`, `hr_k2`.
+6. **SAP-táblázat:** a csatolt `Ticket_SAP_TR.xlsx` alapján (6.3, „A minta”).
+7. *Nem érkezett válasz* — munkahipotézis: **igen**, minden engedélyezés után
+   (a SAP-sor „Kilépés / Új belépés” párja hosszabbításnál is új belépést jelent).
+   Ha nem így van, a teendő egy feltétellel kihagyható a hosszabbításnál.
+8. **PDF Műhely: igen, igazítani kell** — külön repó, saját terv (10. fejezet).
+9. *Nem érkezett válasz* — alapállapot: a fül piros jelzése **nem** változik; a
+   lejárt bejelentési határidő a lista Állapot cellájában és a „Teendő” szűrőnél
+   látszik pirosan.
+10. *Nem érkezett válasz* — alapállapot: az új mappa neve a nyilvántartásban
+    tárolt `vezetéknév keresztnév`, csak a fájlnévben tiltott karakterek nélkül.
+
+## 10. PDF Műhely
+
+Külön repó (`pdf-muhely`), a terve ott: `kepek-pdf-terv.md` új fejezete. A DocGen
+oldala ettől független: a DocGen nem olvassa a Műhely állapotát, csak ugyanabba a
+szerkezetbe ír.

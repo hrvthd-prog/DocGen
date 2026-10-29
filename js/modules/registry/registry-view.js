@@ -257,10 +257,21 @@ const RegistryModule = (() => {
         } catch { return null; }
       },
       async save(data) {
+        // Csak a „nincs még fájl” jogos üres kiindulás. Olvasási vagy JSON-hibánál
+        // NEM írunk: {}-ből írva a többi szakaszt (séma, szótár, szintek,
+        // ügytípusok) törölnénk — így veszhettek el korábban szótárpárok.
         let cfg = {};
-        try { cfg = JSON.parse(await FsService.readTextFromDir(dirHandle, FILE)); } catch {}
+        try { cfg = JSON.parse(await FsService.readTextFromDir(dirHandle, FILE)); }
+        catch (e) { if (!e || e.name !== 'NotFoundError') throw e; }
         cfg[key] = data;
         cfg.savedAt = new Date().toISOString();
+        try { await FsService.mentesElotte(dirHandle, FILE); }
+        catch (e) {
+          // A másolat hibája ne akadályozza a mentést (mint a nyilvántartásnál)
+          if (typeof BevLogger !== 'undefined') {
+            BevLogger.warn('CONFIG_BACKUP', 'A config biztonsági másolata nem készült', e.message, '');
+          }
+        }
         await FsService.writeTextToDir(dirHandle, FILE, JSON.stringify(cfg, null, 2));
       },
     };

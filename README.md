@@ -967,10 +967,6 @@ Ha már fut a Word, a szkript ahhoz csatlakozik és nem zárja be a végén.
 > Mit csinálna? `cscript //Nologo tools\docx-pdf.vbs <mappa> /lista` — kiírja a
 > munkalistát, és nem indítja el a Wordöt.
 
-> A generálás után felajánlott **„Gyorsnézet nyomtatással"** NEM formahű: a
-> böngésző csak a szöveget látja, a fejlécet, láblécet és a tördelést nem.
-> Tartalom-ellenőrzésre jó, hivatalos iratnak nem.
-
 #### Indítás a böngészőből (nem kötelező)
 
 Ha nem akarsz a kimeneti mappáig navigálni, a konverzió elindítható az appból is:

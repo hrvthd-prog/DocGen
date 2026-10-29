@@ -307,6 +307,19 @@ const FsService = (() => {
     }
   }
 
+  // Mentés ELŐTT: az előző tartalom a `backup` almappába kerül időbélyeggel, és
+  // fájlonként csak a legutóbbi `keep` marad. Nincs még fájl: nincs mit menteni.
+  // A nyilvántartás, az ügyek, az átutalások, a fiókok és a config is ezt hívja.
+  async function mentesElotte(dirHandle, filename, { keep = 20, backupDir = 'backup' } = {}) {
+    if (!await fileExists(dirHandle, filename)) return;
+    const prev = await readTextFromDir(dirHandle, filename);
+    const bdir = await getSubDir(dirHandle, backupDir, true);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    await writeTextToDir(bdir, `${stamp}-${filename}`, prev);
+    const nevek = await listFiles(bdir, n => n.endsWith(filename));
+    for (const n of nevek.slice(0, Math.max(0, nevek.length - keep))) await deleteFromDir(bdir, n);
+  }
+
   // Szöveges fájl olvasása/írása – az adatbázis JSON-jaihoz
   async function readTextFromDir(dirHandle, filename) {
     const fh = await dirHandle.getFileHandle(filename);
@@ -340,6 +353,7 @@ const FsService = (() => {
     deleteFromDir,
     readTextFromDir,
     writeTextToDir,
+    mentesElotte,
     // Publikus saveHandle/loadHandle automatikusan user-prefixelt kulcsot használ
     saveHandle: (key, handle) => saveHandle(userKey(key), handle),
     loadHandle: (key) => loadHandle(userKey(key)),

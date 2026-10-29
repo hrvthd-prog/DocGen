@@ -11,4 +11,4 @@ if [ -d "$git_dir/rebase-merge" ] || [ -d "$git_dir/rebase-apply" ] || [ -f "$gi
 fi
 
 node tools/verzio.js --leptet || exit 1
-git add index.html print.html js/version.js
+git add index.html js/version.js

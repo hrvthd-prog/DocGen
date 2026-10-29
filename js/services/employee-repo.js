@@ -760,15 +760,7 @@ const EmployeeRepo = (() => {
 
         // Mentés előtt félretesszük az előző állapotot
         try {
-          if (await FsService.fileExists(dirHandle, filename)) {
-            const prev = await FsService.readTextFromDir(dirHandle, filename);
-            const bdir = await FsService.getSubDir(dirHandle, backupDir, true);
-            if (bdir) {
-              const stamp = nowIso().replace(/[:.]/g, '-').slice(0, 19);
-              await FsService.writeTextToDir(bdir, `${stamp}-${filename}`, prev);
-              await pruneBackups(bdir);
-            }
-          }
+          await FsService.mentesElotte(dirHandle, filename, { keep: keepBackups, backupDir });
         } catch (e) {
           // A biztonsági másolat hibája ne akadályozza meg a mentést
           if (typeof BevLogger !== 'undefined') {
@@ -840,12 +832,6 @@ const EmployeeRepo = (() => {
       const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})/.exec(nev);
       if (!m) return nev;
       return `${m[1]}. ${m[2]}. ${m[3]}.  ${m[4]}:${m[5]}`;
-    }
-
-    async function pruneBackups(bdir) {
-      const names = await FsService.listFiles(bdir, n => n.endsWith(filename));
-      const extra = names.length - keepBackups;
-      for (let i = 0; i < extra; i++) await FsService.deleteFromDir(bdir, names[i]);
     }
   }
 

@@ -59,7 +59,7 @@ test('foResz levágja az alverziót', () => {
 
 section('Élő lapok');
 
-for (const lap of ['index.html', 'print.html']) {
+for (const lap of ['index.html']) {
   test(`${lap}: van hivatkozás, és mind ugyanazon a verzión`, () => {
     const html = fs.readFileSync(path.join(__dirname, '..', lap), 'utf8');
     const v = verziok(html);

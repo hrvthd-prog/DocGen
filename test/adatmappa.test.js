@@ -160,6 +160,21 @@ async function main() {
     assertEq(olvas(dir, 'docgen-cases.json').cases[0].id, 'c1');
   });
 
+  console.log('\n[A config mentése]');
+  await test('sérült docgen-config.json: a mentés dob, és nem írja felül a többi szakaszt', async () => {
+    const dir = mappa('serult');
+    dir.files.set('docgen-config.json', '{ "roles": { "roles": [');   // félbeszakadt írás
+    let dobott = false;
+    try { await hatterek(dir).schema.save({ version: 1, fields: [] }); } catch { dobott = true; }
+    assert(dobott, 'sérült fájl mellett {}-ből írva elveszne a többi szakasz');
+    assertEq(dir.files.get('docgen-config.json'), '{ "roles": { "roles": [', 'a fájl érintetlen');
+  });
+  await test('nincs még config: a mentés létrehozza', async () => {
+    const dir = mappa('ures');
+    await hatterek(dir).schema.save({ version: 1, fields: [] });
+    assertEq(olvas(dir, 'docgen-config.json').schema.version, 1);
+  });
+
   console.log(`\n${'='.repeat(60)}`);
   console.log(`Eredmény: ${passed} sikeres / ${failed} hibás (összesen ${passed + failed})`);
   if (failed) {

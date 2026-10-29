@@ -132,8 +132,7 @@ const DocgenModule = (() => {
   //
   // A konverziót a tools/docx-pdf.vbs végzi (Word COM) – a környezet-próba
   // szerint ez az út járható, és teljes Word-hűséget ad. Böngészőből nem lehet
-  // Wordöt vezérelni, ezért itt nincs és nem is lehet beépített konverzió;
-  // tartaléknak marad a böngészős nyomtatás (openPrintSelectDialog).
+  // Wordöt vezérelni, ezért itt nincs és nem is lehet beépített konverzió.
 
   // Mappát Intézőben megnyitni böngészőből NEM lehet: a File System Access API
   // handle-t ad, nem elérési utat, és nincs API a fájlkezelő indítására. Ezt
@@ -2220,18 +2219,6 @@ const DocgenModule = (() => {
                készíthető elő — a dokumentumok letöltésként érkeztek.</span>`;
           ra.appendChild(lepes);
 
-          // A böngészős nyomtatás megmarad, de azzá válik, ami: gyorsnézet.
-          // Nem automatikus és nem javasolt út — ezt a felirat is kimondja,
-          // hogy senki ne hivatalos iratként küldje tovább az eredményét.
-          const gyors = document.createElement('button');
-          gyors.className = 'btn btn-ghost btn-sm';
-          gyors.style.fontSize = '11px';
-          gyors.textContent = 'Gyorsnézet nyomtatással (nem formahű)';
-          gyors.title = 'Csak a tartalom ellenőrzésére. A fejlécet, láblécet és a '
-                      + 'tördelést nem adja vissza — hivatalos irathoz a Wordből mentett PDF kell.';
-          gyors.addEventListener('click', () => openPrintSelectDialog(docxGenerated));
-          ra.appendChild(gyors);
-
           DocgenMerge.refreshChainPanel();
         }
 
@@ -2320,48 +2307,6 @@ const DocgenModule = (() => {
   async function findTemplate(dirHandle, filename) {
     const accountDir = await FsService.getSubDir(dirHandle, currentUser);
     return _findFileRecursive(accountDir || dirHandle, filename);
-  }
-
-  // PDF nyomtatás-választó dialóg.
-  // A DOCX-ek ilyenkor már elkészültek a kimeneti mappában – ez csak a PDF-be
-  // mentés kényelmi útja böngészőből. A pontos tördelést igénylő iratoknál a
-  // Wordből mentett PDF a megbízható út (lásd a 9. fázis konverziós sávjait).
-  function openPrintSelectDialog(generated) {
-    showDialog({
-      title: 'PDF mentése nyomtatással',
-      body: `
-        <p style="font-size:12.5px;margin-bottom:10px">
-          A DOCX-fájlok elkészültek. PDF-hez válaszd ki a dokumentumot, majd a
-          megnyíló lapon a nyomtatási párbeszédben válaszd a <b>„Mentés PDF-ként”</b>
-          célt.
-        </p>
-        <p style="font-size:12px;color:var(--c-muted);margin-bottom:10px">
-          Pontos tördelést igénylő iratnál inkább nyisd meg a DOCX-et Wordben, és
-          onnan mentsd PDF-be – a böngészős nyomtatás a fejlécet, láblécet és a
-          képek elhelyezését nem adja vissza pontosan.
-        </p>
-        <div class="checklist-scroll" style="max-height:200px">
-          ${generated.map((g, i) => `
-            <button class="btn btn-ghost" style="width:100%;text-align:left;margin-bottom:4px;font-size:12px"
-              data-print-idx="${i}">${escHtml(g.name.replace('.docx',''))}</button>
-          `).join('')}
-        </div>
-      `,
-      footer: `<button class="btn btn-ghost btn-sm" onclick="closeDialog()">Bezárás</button>`,
-    });
-    document.querySelectorAll('[data-print-idx]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        _openPrint(generated[Number(btn.dataset.printIdx)]);
-        closeDialog();
-      });
-    });
-  }
-
-  function _openPrint({ buf, name }) {
-    const b64 = uint8ToBase64(buf);
-    sessionStorage.setItem('docgen_print_data',
-      JSON.stringify({ b64, filename: name.replace('.docx', '.pdf') }));
-    window.open('print.html', '_blank');
   }
 
   async function _findFileRecursive(dirHandle, filename) {
