@@ -412,8 +412,8 @@ A teendőlista „SAP-táblázat” gombja: kis párbeszéd két dátummal (**Ki
 | Régi TSz | `personnel_reg_number` (Személyügyi törzsszám) |
 | Név | vezetéknév keresztnév |
 | Új TSZ | mindig üres |
-| Kilépés | a párbeszédből — előtöltve: a döntés napja |
-| Új belépés | a párbeszédből — előtöltve: a döntés másnapja |
+| Kilépés | a párbeszédből, szabadon megadva (üresen nyílik) |
+| Új belépés | a párbeszédből, szabadon megadva (üresen nyílik) |
 | Időrögzítési ügyintéző | **új mező** `hr_time_admin` |
 | Felettes | a meglévő `hr_direct_leader` („Közvetlen vezető”, 9. fejezet 5.) |
 | K2 | **új mező** `hr_k2` |
@@ -426,8 +426,9 @@ A teendőlista „SAP-táblázat” gombja: kis párbeszéd két dátummal (**Ki
   1. sor a fejléc (szürke kitöltés, keret), alatta soronként egy dolgozó,
   középre zárt, keretezett cellák; a dátumok valódi dátumcellák a beépített
   rövid dátumformátummal (14-es formátumkód — a magyar Excel `2026. 10. 27.`
-  alakban mutatja). A mintában a Kilépés = a döntés napja, az Új belépés = a
-  másnap; ezért az előtöltés. A fejlécekből a záró szóközt elhagyjuk
+  alakban mutatja). A Kilépés és az Új belépés **nem** a döntésből jön (a
+  felhasználó javítása, 2026-10-29: a mintabeli dátumok egybeesése véletlen volt),
+  ezért nincs előtöltés. A fejlécekből a záró szóközt elhagyjuk
   (`Felettes `, `Dokumentum dátuma `, `Határozat ` a mintában).
 - Kód: `CaseXlsx.sap(c, { kilepes, belepes })` a meglévő `case-xlsx.js`-ben
   (ExcelJS már be van töltve), a minta oszlopszélességeivel.

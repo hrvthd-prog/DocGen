@@ -68,6 +68,20 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-29 (3.) — SAP-táblázat: a Kilépés és az Új belépés nincs előtöltve
+
+**Cél:** a felhasználó javítása: a Kilépés NEM a döntés napja; mindkét dátum
+szabadon szerkeszthető kell legyen.
+**Változás (`v10.94`):** `case-form.js` `openSap`: a két mező üresen nyílik (eddig
+a döntés napjával és a másnappal töltöttük elő); terv 6.3 javítva.
+**Miért / döntés:** a mintában a dátumok egybeesése véletlen volt, nem szabály —
+téves levezetés volt tőlem. Üres mezőnél a táblázat elkészül, és a program jelzi,
+hogy a Kilépés / Új belépés üresen maradt.
+**Tesztek:** `node test/run-all.js` zöld; headless Chrome: a két mező üres, és
+beírható (`20261103` → `2026-11-03`).
+
+**Nyitott / következő:** lásd az előző bejegyzést.
+
 ## 2026-10-29 (2.) — A terv megvalósítása: F0–F4 és a PDF Műhely igazítása
 
 **Cél:** a `plans/TERV-kimenet-es-ugyek.md` megvalósítása a felhasználó döntései

@@ -432,24 +432,23 @@ const CaseForm = (() => {
 
   /**
    * A SAP-ticket táblázata (plans/TERV-kimenet-es-ugyek.md 6.3). A Kilépés és az
-   * Új belépés a program nem tudhatja; a minta szerint előtöltve: a döntés napja
-   * és a másnapja. A táblázat a dolgozó 01_Elokeszitett mappájába kerül.
+   * Új belépés szabadon megadandó: egyik sem vezethető le a döntésből, ezért
+   * üresen nyílnak. A táblázat a dolgozó 01_Elokeszitett mappájába kerül.
    */
   function openSap({ caseId } = {}) {
     const c = CaseRepo.get(caseId);
     if (!c || !c.closedAt) return;
-    const masnap = CaseTypes.isoDate(new Date(Date.parse(c.closedAt) + 86400000));
     showDialog({
       title: 'SAP-táblázat a back office-nak',
       body: `
         <div class="cf-grid">
           <label class="cf-field">
             <span>Kilépés</span>
-            ${dateFieldHtml({ id: 'sap-ki', value: c.closedAt })}
+            ${dateFieldHtml({ id: 'sap-ki' })}
           </label>
           <label class="cf-field">
             <span>Új belépés</span>
-            ${dateFieldHtml({ id: 'sap-be', value: masnap })}
+            ${dateFieldHtml({ id: 'sap-be' })}
           </label>
         </div>
         <p style="font-size:11.5px;color:var(--c-muted);margin-top:8px">
