@@ -3,7 +3,7 @@
 /**
  * Tömeges ügyintézés — egy lépésben több dolgozó (TERV-tomeges-ugyintezes.md).
  *
- * Az első (és egyelőre egyetlen) típus a szálláshely-változás: ugyanaz az új
+ * Az első (és egyelőre egyetlen) típus a szálláshelyváltozás: ugyanaz az új
  * cím több dolgozónál. Eddig ez export → Excel → import → Dokumentumok fül volt.
  *
  * Lépések egy oldalon: típus → dolgozók → új adatok → összesítő és jóváhagyás →
@@ -22,7 +22,7 @@ const BulkCase = (() => {
    * A mezők viszont a sémából jönnek — ha a csoport bővül, az űrlap is.
    */
   const TIPUSOK = [
-    { key: 'szallashely', label: 'Szálláshely-változás',
+    { key: 'szallashely', label: 'Szálláshelyváltozás',
       caseType: 'szallashely_valtozas', group: 'lakcim' },
   ];
 

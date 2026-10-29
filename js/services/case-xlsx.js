@@ -22,7 +22,7 @@ const CaseXlsx = (() => {
 
   const UGY_OSZLOPOK = [
     { fej: 'Dolgozó',     szelesseg: 26, ertek: (c, nev) => nev },
-    { fej: 'Ügytípus',    szelesseg: 28, ertek: c => CaseTypes.label(c.type) },
+    { fej: 'Ügytípus',    szelesseg: 28, ertek: c => CaseTypes.title(c) },
     { fej: 'Állapot',     szelesseg: 18, ertek: c => CaseTypes.statusLabel(c.type, c.status) || c.status },
     { fej: 'EH szám',     szelesseg: 22, ertek: c => c.ehNumber || '' },
     { fej: 'Iktatószám',  szelesseg: 22, ertek: c => c.fileNumber || '' },

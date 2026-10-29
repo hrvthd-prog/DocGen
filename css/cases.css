@@ -199,6 +199,19 @@
 /* Az állapot-szűrő MÁS dimenzió (hol tart az ügy), nem sürgősség. A pontozott
    keret ezt mondja ki, hogy a kettő ne tűnjön egy készletnek. */
 .cv-filter--allapot { border-style: dashed; font-size: 10.5px; }
+/* A „Tömeges” kapcsoló és a típusszűrő szintén külön dimenzió: elválasztjuk. */
+.cv-filter--kapcsolo { margin-left: 8px; }
+.cv-tipusszuro { position: relative; }
+.cv-tipusszuro > summary { list-style: none; }
+.cv-tipusszuro > summary::-webkit-details-marker { display: none; }
+.cv-tipusszuro > summary::after { content: ' ▾'; }
+.cv-tipusszuro__lista {
+  position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; min-width: 260px;
+  display: flex; flex-direction: column; gap: 4px; padding: 8px 10px;
+  background: var(--c-card); border: 1px solid var(--c-border); border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .12); font-size: 12px;
+}
+.cv-tipusszuro__lista label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
 
 /* ── Ügy- és dolgozótáblázat ─────────────────────────────────────────────── */
 

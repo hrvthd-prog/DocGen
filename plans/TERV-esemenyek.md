@@ -27,7 +27,7 @@ De az idegenrendészeti ügyintézés nem állapot, hanem **folyamat**:
 
 - a kérelmek egymás után következnek (első engedély → meghosszabbítás → …),
   és minden megszerzett engedély új azonosítót hoz
-- nem csak kérelmek vannak: ki- és bejelentések, szálláshely-változás bejelentése,
+- nem csak kérelmek vannak: ki- és bejelentések, szálláshelyváltozás bejelentése,
   munkáltatói igazolások, határidők
 - ma mindezt fejben vagy külön táblázatban kell követni
 
@@ -148,7 +148,7 @@ Amit ez egy definícióval megold:
 6. **Figyelmeztetés** — az `alert: true` státusz kiemelten jelenik meg
 
 **Kiinduló típusok** (seed adatként, szerkeszthetően): tartózkodási engedély
-igénylés / meghosszabbítás / letelepedés, szálláshely-változás bejelentése,
+igénylés / meghosszabbítás / letelepedés, szálláshelyváltozás bejelentése,
 munkaviszony be- és kijelentése, adatváltozás bejelentése.
 
 ### JAVÍTVA — a határidőkről szinte minden feltevésem hibás volt
@@ -186,7 +186,7 @@ Ezért van kétféle megbízhatóság (`deadlineKind`):
 | Ügy | Határidő | Mitől fut |
 |---|---|---|
 | Kérelmek | 70 nap | OIF-érkeztetés |
-| Szálláshely-változás | 3 nap | költözés napja |
+| Szálláshelyváltozás | 3 nap | költözés napja |
 | Munkaviszony megkezdése / megszűnése | 5 nap | a tény napja |
 | Adatváltozás | 5 nap | *(nincs jogszabállyal megerősítve)* |
 
@@ -367,7 +367,7 @@ láncolás, napi összefoglaló).
 **Megválaszolva:**
 
 1. ~~Milyen ügytípusok vannak, és mik a valós határidőik?~~ → Kérelmek 70 nap
-   az OIF-érkeztetéstől; szálláshely-változás 3 nap a költözéstől; munkaviszony
+   az OIF-érkeztetéstől; szálláshelyváltozás 3 nap a költözéstől; munkaviszony
    be- és kijelentés 5 nap a ténytől. A benyújtási ablak −90 / −40 / −10 nap
    az engedély lejáratához képest.
 

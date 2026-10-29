@@ -761,7 +761,7 @@ A „Nincs még ügye” listából kimarad, akinél a Nyilvántartásban jelöl
 
 Az **Új ügy** gomb két csempét kínál: **Egy dolgozó ügyintézése** (a
 megszokott űrlap) és **Tömeges ügyintézés**. Egyelőre egy tömeges típus van, a
-**szálláshely-változás** — ugyanaz az új cím több dolgozónál:
+**szálláshelyváltozás** — ugyanaz az új cím több dolgozónál:
 
 1. **Dolgozók** — ugyanaz a választó, mint a Dokumentumok fülön.
 2. **Új szálláshely** — a séma „Magyarországi szálláshely” csoportjának mezői +
@@ -822,7 +822,7 @@ iktatószámmal igazolható — arra lehet hivatkozni.
 
 | Bejelentés | Határidő |
 |---|---|
-| Szálláshely-változás | a költözéstől 3 nap |
+| Szálláshelyváltozás | a költözéstől 3 nap |
 | Munkaviszony megkezdése | a ténytől 5 nap |
 | Munkaviszony megszűnése | a ténytől 5 nap |
 

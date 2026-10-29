@@ -55,6 +55,15 @@ const CaseForm = (() => {
             </select>
           </label>
 
+          <label class="cf-field" id="cf-purpose-wrap">
+            <span>Tartózkodási cél${szerkesztes ? '' : ' <strong>(kötelező)</strong>'}</span>
+            <select id="cf-purpose" class="field-input">
+              <option value="">— válassz —</option>
+              ${CaseTypes.purposes().map(p => `<option value="${escHtml(p.key)}" ${c && c.purpose === p.key ? 'selected' : ''}>${escHtml(p.label)}</option>`).join('')}
+            </select>
+            <small>Ebből lesz az ügy neve, pl. „Nemzeti Kártya meghosszabbítása”.</small>
+          </label>
+
           <label class="cf-field">
             <span id="cf-trigger-label">${escHtml(CaseTypes.triggerLabel(valasztottTipus))}</span>
             ${dateFieldHtml({ id: 'cf-trigger', value: c && c.triggerDate || '' })}
@@ -105,6 +114,7 @@ const CaseForm = (() => {
     function frissit() {
       const tk = tipusEl.value;
       q('cf-trigger-label').textContent = CaseTypes.triggerLabel(tk);
+      q('cf-purpose-wrap').style.display = CaseTypes.needsPurpose(tk) ? '' : 'none';
 
       // A határidő a kezdő dátumból számolódik, ha nem írták felül kézzel
       if (!dueKezzel) {
@@ -143,8 +153,16 @@ const CaseForm = (() => {
     frissit();
 
     q('cf-save').addEventListener('click', () => {
+      const celKell = CaseTypes.needsPurpose(tipusEl.value);
+      // Új ügynél kötelező; a régi, cél nélküli ügy szerkesztése nem akad meg rajta.
+      if (celKell && !szerkesztes && !q('cf-purpose').value) {
+        toast('Add meg a tartózkodási célt', 'warn');
+        q('cf-purpose').focus();
+        return;
+      }
       const adat = {
         type:        tipusEl.value,
+        purpose:     celKell ? (q('cf-purpose').value || null) : null,
         triggerDate: triggerEl.value || null,
         dueAt:       dueEl.value || null,
         ehNumber:    q('cf-eh').value,
@@ -179,7 +197,7 @@ const CaseForm = (() => {
     const kovetkezo = statuszok[Math.min(jelenlegi + 1, statuszok.length - 1)];
 
     showDialog({
-      title: `Státusz rögzítése — ${CaseTypes.label(c.type)}`,
+      title: `Státusz rögzítése — ${CaseTypes.title(c)}`,
       body: `
         <div class="cf-grid">
           <label class="cf-field">

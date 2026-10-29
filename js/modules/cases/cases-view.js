@@ -70,6 +70,11 @@ const CasesModule = (() => {
     // rajzol újra: az `onChange`-ek nem tüntethetik el a félig kitöltött lépést.
     tomeges: false,
     kotegJelolt: new Set(),   // a Tömeges ügyek nézet kijelölt kötegei (törléshez)
+    // Az Ügyek lista két további szűrője, a fenti szűrővel együtt hatnak.
+    // Nem mentődnek (a többi szűrő sem).
+    tomegesLatszik: true,     // a „Tömeges” kapcsoló: látszanak-e a kötegek ügyei
+    tipusok: new Set(),       // ügytípus-szűrő; üres = mind
+    tipusNyitva: false,       // a legördülő nyitva marad az újrarajzolás után
   };
 
   /** A görgető dobozok — újrarajzoláskor ezek helyzete marad meg. */
@@ -215,6 +220,8 @@ const CasesModule = (() => {
         return s === state.szuro;
       });
     }
+    if (!state.tomegesLatszik) lista = lista.filter(c => !c.batchId);
+    if (state.tipusok.size)    lista = lista.filter(c => state.tipusok.has(c.type));
 
     return rendez(lista);
   }
@@ -330,13 +337,28 @@ const CasesModule = (() => {
           data-id="${escHtml(c.id)}" tabindex="0">
         <td class="cv-td--nev">
           <span class="cv-t__nev">${escHtml(dolgozoNeve(c.employeeId))}</span>
-          <span class="cv-t__tip">${escHtml(CaseTypes.label(c.type))}${c.batchId
+          <span class="cv-t__tip">${escHtml(CaseTypes.title(c))}${c.batchId
             ? ' <span class="cv-batch" title="Tömeges ügyintézés része">Tömeges</span>' : ''}</span>
         </td>
-        <td class="cv-td--allapot">${escHtml(CaseTypes.statusLabel(c.type, c.status))}</td>
+        <td class="cv-td--allapot">${escHtml(CaseRepo.allapotSzoveg(c))}</td>
         <td class="cv-td--id">${azonositoCella(c)}</td>
         <td class="cv-td--due">${escHtml(CaseRepo.deadlineText(c))}</td>
       </tr>`;
+  }
+
+  /** Többválasztós ügytípus-szűrő: natív <details> + jelölőnégyzetek. */
+  function tipusSzuroHtml() {
+    const db = state.tipusok.size;
+    return `
+      <details class="cv-tipusszuro" id="cv-tipusszuro" ${state.tipusNyitva ? 'open' : ''}>
+        <summary class="cv-filter ${db ? 'is-active' : ''}">Ügytípus: ${db ? db + ' kiválasztva' : 'mind'}</summary>
+        <div class="cv-tipusszuro__lista">
+          ${CaseTypes.all().map(t => `
+            <label><input type="checkbox" data-tipus="${escHtml(t.key)}"
+                          ${state.tipusok.has(t.key) ? 'checked' : ''}> ${escHtml(t.label.hu)}</label>`).join('')}
+          ${db ? '<button type="button" class="btn btn-ghost btn-sm" id="cv-tipus-mind">Mind</button>' : ''}
+        </div>
+      </details>`;
   }
 
   function ugyekHtml() {
@@ -352,6 +374,10 @@ const CasesModule = (() => {
               <button class="cv-filter ${state.szuro === f.key ? 'is-active' : ''}"
                       data-filter="${f.key}">${f.label}</button>`).join('')}
             ${allapotSzurokHtml()}
+            <button type="button" class="cv-filter cv-filter--kapcsolo ${state.tomegesLatszik ? 'is-active' : ''}"
+                    id="cv-tomeges-kapcs" aria-pressed="${state.tomegesLatszik}"
+                    title="Bekapcsolva a tömeges ügyek is látszanak">Tömeges</button>
+            ${tipusSzuroHtml()}
           </div>
         </div>
         <div class="cv-table-wrap">
@@ -583,12 +609,12 @@ const CasesModule = (() => {
     // miatt eddig vissza kellett lépni a listára.
     const kotegDb = c.batchId ? CaseRepo.batch(c.batchId).length : 0;
     const alcim = [
-      CaseTypes.label(c.type),
+      CaseTypes.title(c),
       kotegDb ? `tömeges (${kotegDb} dolgozó)` : '',
-      CaseTypes.statusLabel(c.type, c.status),
+      CaseRepo.allapotSzoveg(c),
       c.ehNumber   ? (onCimkezett('EH', c.ehNumber) ? c.ehNumber : `EH ${c.ehNumber}`) : '',
       c.fileNumber ? `ikt. ${c.fileNumber}` : '',
-      CaseRepo.deadlineText(c),
+      c.closedAt ? '' : CaseRepo.deadlineText(c),
     ].filter(Boolean).join(' · ');
 
     const torzs = state.lap === 'eh'
@@ -686,7 +712,7 @@ const CasesModule = (() => {
       body: `
         <p style="font-size:13px;margin-bottom:10px">
           Biztosan véglegesen törlöd <b>${escHtml(nev)}</b>
-          „${escHtml(CaseTypes.label(c.type))}" ügyét?
+          „${escHtml(CaseTypes.title(c))}" ügyét?
         </p>
         <ul class="sv-warn-list">
           <li><b>${db}</b> idővonal-bejegyzés elvész — köztük a rögzített
@@ -909,6 +935,20 @@ const CasesModule = (() => {
         else valt('ugyek');
       });
     });
+
+    const tomegesKapcs = q('#cv-tomeges-kapcs');
+    if (tomegesKapcs) tomegesKapcs.addEventListener('click', () => {
+      state.tomegesLatszik = !state.tomegesLatszik;
+      render();
+    });
+    const tipusSzuro = q('#cv-tipusszuro');
+    if (tipusSzuro) tipusSzuro.addEventListener('toggle', () => { state.tipusNyitva = tipusSzuro.open; });
+    container.querySelectorAll('[data-tipus]').forEach(cb => cb.addEventListener('change', () => {
+      if (cb.checked) state.tipusok.add(cb.dataset.tipus); else state.tipusok.delete(cb.dataset.tipus);
+      render();
+    }));
+    const tipusMind = q('#cv-tipus-mind');
+    if (tipusMind) tipusMind.addEventListener('click', () => { state.tipusok.clear(); render(); });
 
     container.querySelectorAll('[data-sort]').forEach(th => {
       th.addEventListener('click', () => {

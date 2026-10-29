@@ -7,13 +7,16 @@
  * a felületről lehet szerkeszteni, a kód csak értelmezi őket. Ha egy eljárás
  * megváltozik, típust szerkesztünk, nem kódot írunk.
  *
- * Az itteni lista SEED adat – az élő definíciók a data/docgen-config.json-ban
- * élnek, és a CaseTypes.loadFrom() tölti be őket.
+ * A típusok a KÓDBÓL jönnek (ez a lista): címke, státuszok, határnapok.
+ * A docgen-config.json-ból csak a felületen szerkeszthető rész, a típushoz
+ * rendelt sablonok (`templates`) töltődnek rá. Korábban a teljes típus a
+ * configba íródott, és onnan olvasódott — így egy átnevezés a kódban sosem ért
+ * el a már mentett configig (plans/TERV-kimenet-es-ugyek.md 4.3).
  */
 
 /** Az ügy kimenete – ez zárja le, és ezt kell tudni visszakeresni. */
 const CASE_OUTCOMES = [
-  { key: 'megadva',        label: 'Megadva',                          positive: true },
+  { key: 'megadva',        label: 'Engedélyezve',                     positive: true },
   { key: 'elutasitva',     label: 'Elutasítva' },
   // Az eljárás lezárul anélkül, hogy a hatóság a kérelem tartalmát vizsgálta
   // volna (pl. a kérelmező visszavonta, vagy okafogyottá vált).
@@ -23,6 +26,23 @@ const CASE_OUTCOMES = [
   { key: 'elutasitva_ervn', label: 'Elutasítva érdemi vizsgálat nélkül' },
   { key: 'visszavonva',    label: 'Visszavonva (általunk)' },
 ];
+
+/**
+ * Tartózkodási cél — kiadási és meghosszabbítási kérelemnél ez adja az ügy
+ * nevét („Nemzeti Kártya meghosszabbítása”). Csak a jellemzően intézett célok;
+ * bővíteni egy sorral lehet (plans/TERV-kimenet-es-ugyek.md 4.4).
+ */
+const CASE_PURPOSES = [
+  { key: 'vendegmunkas',   label: 'Vendégmunkás-tartózkodási engedély' },
+  { key: 'nemzeti_kartya', label: 'Nemzeti Kártya' },
+  { key: 'eu_kek_kartya',  label: 'EU Kék Kártya' },
+  { key: 'csaladi',        label: 'Családi együttélés biztosítása céljából kiadott tartózkodási engedély' },
+];
+
+/** Mely típusnál kell cél, és mi kerül a cél neve után.
+ *  ponytail: két kulccsal megadva, nem típus-tulajdonsággal — ha több típus kér
+ *  célt, ez a tábla bővül. */
+const PURPOSE_SUFFIX = { rp_elso: 'kiadása', rp_hosszabbitas: 'meghosszabbítása' };
 
 /**
  * Kérelmek ügyintézési határideje: az összevont kérelmezési eljárásban
@@ -116,7 +136,7 @@ const SEED_CASE_TYPES = {
     {
       key: 'rp_elso',
       kind: 'kerelem',
-      label: { hu: 'Tartózkodási engedély – első kérelem', en: 'Residence permit – first application' },
+      label: { hu: 'Tartózkodási engedély kiadása', en: 'Residence permit – first application' },
       triggerLabel: 'OIF érkeztetés napja (iktatószám megkapása)',
       statuses: applicationStatuses(),
       defaultDurationDays: DEFAULT_APPLICATION_DAYS,
@@ -154,7 +174,7 @@ const SEED_CASE_TYPES = {
     {
       key: 'szallashely_valtozas',
       kind: 'bejelentes',
-      label: { hu: 'Szálláshely-változás bejelentése', en: 'Change of accommodation' },
+      label: { hu: 'Szálláshelyváltozás bejelentése', en: 'Change of accommodation' },
       triggerLabel: 'Költözés napja',
       statuses: notificationStatuses(),
       defaultDurationDays: 3,
@@ -230,7 +250,15 @@ const CaseTypes = (() => {
     const out = { version: Number(raw.version) || 1, types: [] };
     const latott = new Set();
 
-    for (const t of (raw.types || [])) {
+    // A seed-típusok mindig a seedből, a mentett configból csak a sablonjuk; a
+    // seedben nem szereplő (régi, kézzel felvett) típus változatlanul marad.
+    const tarolt = new Map((raw.types || []).filter(t => t && t.key).map(t => [t.key, t]));
+    const forras = SEED_CASE_TYPES.types.map(s => tarolt.has(s.key)
+      ? Object.assign({}, s, { templates: tarolt.get(s.key).templates || s.templates })
+      : s)
+      .concat((raw.types || []).filter(t => t && !SEED_CASE_TYPES.types.some(s => s.key === t.key)));
+
+    for (const t of forras) {
       if (!t || !t.key || latott.has(t.key)) continue;
       latott.add(t.key);
 
@@ -312,6 +340,16 @@ const CaseTypes = (() => {
   }
 
   function outcomes() { return CASE_OUTCOMES.slice(); }
+
+  function purposes() { return CASE_PURPOSES.slice(); }
+  function needsPurpose(typeKey) { return Object.prototype.hasOwnProperty.call(PURPOSE_SUFFIX, typeKey); }
+
+  /** Az ügy neve: célnál „<cél> meghosszabbítása / kiadása”, egyébként a típus. */
+  function title(c) {
+    if (!c) return '';
+    const cel = CASE_PURPOSES.find(p => p.key === c.purpose);
+    return cel && needsPurpose(c.type) ? `${cel.label} ${PURPOSE_SUFFIX[c.type]}` : label(c.type);
+  }
 
   function outcomeLabel(key) {
     const o = CASE_OUTCOMES.find(x => x.key === key);
@@ -433,7 +471,7 @@ const CaseTypes = (() => {
     useBackend, load, loadFrom, save, get,
     all, version, byKey, label,
     statusesOf, statusLabel, isTerminal, firstStatus,
-    outcomes, outcomeLabel,
+    outcomes, outcomeLabel, purposes, needsPurpose, title,
     suggestDueDate, triggerLabel, isAdvisoryDeadline, isoDate,
     submissionWindow, windowPhase, SUBMISSION_WINDOW_DEFAULT,
   };

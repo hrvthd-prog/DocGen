@@ -1275,6 +1275,84 @@ atest('a törölt EH szám a dokumentumból is eltűnik', async () => {
   assertEq(CaseRepo.docTags(emp.id)['EH szám'], '');
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+asection('Ügynév, tartózkodási cél, Állapot (plans/TERV-kimenet-es-ugyek.md 4–5.)');
+
+atest('az ügy neve a célból: „<cél> meghosszabbítása / kiadása”', async () => {
+  assertEq(CaseTypes.title({ type: 'rp_hosszabbitas', purpose: 'vendegmunkas' }),
+           'Vendégmunkás-tartózkodási engedély meghosszabbítása');
+  assertEq(CaseTypes.title({ type: 'rp_hosszabbitas', purpose: 'nemzeti_kartya' }),
+           'Nemzeti Kártya meghosszabbítása');
+  assertEq(CaseTypes.title({ type: 'rp_elso', purpose: 'eu_kek_kartya' }), 'EU Kék Kártya kiadása');
+  assertEq(CaseTypes.title({ type: 'rp_elso' }), 'Tartózkodási engedély kiadása', 'cél nélkül a típus neve');
+  assertEq(CaseTypes.title({ type: 'szallashely_valtozas', purpose: 'vendegmunkas' }),
+           'Szálláshelyváltozás bejelentése', 'bejelentésnek nincs célja');
+});
+
+atest('a régi configban tárolt címke helyett a kódbeli, a sablonok megmaradnak', async () => {
+  try {
+    CaseTypes.loadFrom({ version: 1, types: [
+      { key: 'szallashely_valtozas', label: { hu: 'Szálláshely-változás bejelentése' }, templates: ['lakcim.docx'] },
+      { key: 'rp_elso', label: { hu: 'Tartózkodási engedély – első kérelem' } },
+    ] });
+    assertEq(CaseTypes.label('szallashely_valtozas'), 'Szálláshelyváltozás bejelentése');
+    assertEq(CaseTypes.label('rp_elso'), 'Tartózkodási engedély kiadása');
+    assertEq(CaseTypes.byKey('szallashely_valtozas').templates.join(), 'lakcim.docx');
+    assert(CaseTypes.byKey('munkaviszony_kijelentes'), 'a configból hiányzó seed-típus is megvan');
+  } finally { CaseTypes.loadFrom(null); }
+});
+
+atest('a cél tárolódik, ismeretlen célt nem fogad el, bejelentésnél nincs', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const u = CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas', purpose: 'nemzeti_kartya' });
+  assertEq(CaseRepo.get(u.id).purpose, 'nemzeti_kartya');
+  await assertThrows(() => CaseRepo.update(u.id, { purpose: 'nincs_ilyen' }), /tartózkodási cél/);
+  const b = CaseRepo.create({ employeeId: emp.id, type: 'szallashely_valtozas', purpose: 'vendegmunkas' });
+  assertEq(CaseRepo.get(b.id).purpose, null);
+});
+
+atest('a következő hosszabbítás előjegyzése átveszi a célt', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo({ expiration_of_rp: '2027-12-01' });
+  const u = CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas', purpose: 'eu_kek_kartya' });
+  CaseRepo.setStatus(u.id, 'lezarva', { outcome: 'megadva' });
+  const uj = CaseRepo.openNextCase(u.id);
+  assertEq(uj.purpose, 'eu_kek_kartya');
+});
+
+atest('Állapot: lezárt kérelemnél a kimenetel, bejelentésnél a záró státusz', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const k = CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas', purpose: 'vendegmunkas' });
+  assertEq(CaseRepo.allapotSzoveg(k), 'Előkészítés');
+  CaseRepo.setStatus(k.id, 'lezarva', { outcome: 'megadva' });
+  assertEq(CaseRepo.allapotSzoveg(CaseRepo.get(k.id)), 'Engedélyezve');
+  const b = CaseRepo.create({ employeeId: emp.id, type: 'szallashely_valtozas' });
+  CaseRepo.setStatus(b.id, 'lezarva', { outcome: 'megadva' });
+  assertEq(CaseRepo.allapotSzoveg(CaseRepo.get(b.id)), 'Tudomásul véve');
+});
+
+atest('lezárt ügy idővonala: nincs határidő, nincs benyújtási pont, a záró bejegyzés neve a kimenetel', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo({ expiration_of_rp: '2026-12-31' });
+  const u = CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas', purpose: 'vendegmunkas' });
+  CaseRepo.setStatus(u.id, 'beadva', { occurredAt: '2026-09-29' });
+  CaseRepo.update(u.id, { triggerDate: '2026-10-05' });
+  const nyitott = CaseRepo.timeline(CaseRepo.get(u.id), emp.fields, '2026-10-20');
+  assert(nyitott.some(p => p.kind === 'hatarido'), 'nyitott ügynél van határidő');
+  CaseRepo.setStatus(u.id, 'lezarva', { outcome: 'megadva', occurredAt: '2026-10-19' });
+  const tl = CaseRepo.timeline(CaseRepo.get(u.id), emp.fields, '2026-10-20');
+  assertEq(tl.filter(p => p.kind === 'hatarido' || p.kind === 'ablak').length, 0,
+    'döntés után a határidő és a régi engedély lejárata értelmetlen');
+  assertEq(tl.find(p => p.outcome).label, 'Engedélyezve');
+  sandbox.escHtml = sandbox.escHtml || (s => String(s ?? ''));   // a render a utils.js-ét hívná
+  const html = CaseTimeline.render(CaseRepo.get(u.id), emp.fields, '2026-10-20');
+  assert(!/Lezárva/.test(html), 'a fejlécben és az idővonalon ne legyen „Lezárva”');
+  assert(!/ct-window/.test(html), 'lezárt ügynél nincs benyújtási sáv');
+  assert(/Vendégmunkás-tartózkodási engedély meghosszabbítása/.test(html), 'a fejléc az ügy neve');
+});
+
 // ── Futtatás ────────────────────────────────────────────────────────────────
 (async () => {
   for (const item of queue) {

@@ -307,7 +307,7 @@ const CasesDashboard = (() => {
           ${u.cases.map(c => `
             <button class="dash-row" data-open-case="${escHtml(c.id)}" type="button">
               <span class="dash-row__main">${escHtml(nev(c.employeeId))}</span>
-              <span class="dash-row__meta">${escHtml(CaseTypes.label(c.type) || c.type)}${c.closedAt ? ' · lezárt' : ''}</span>
+              <span class="dash-row__meta">${escHtml(CaseTypes.title(c) || c.type)}${c.closedAt ? ' · lezárt' : ''}</span>
               <span class="dash-row__go">Megnyitás</span>
             </button>`).join('')}
         </div>`).join(''),

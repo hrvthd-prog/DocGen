@@ -198,7 +198,10 @@ const CaseTimeline = (() => {
   function renderPoint(p, maIso, outcomeLabel) {
     const reszletek = [];
     if (p.note)        reszletek.push(escHtml(p.note));
-    if (p.outcome)     reszletek.push(`<strong>${escHtml(outcomeLabel(p.outcome))}</strong>`);
+    // Ha a címke már maga a kimenetel (kérelem záró bejegyzése), nem ismételjük
+    if (p.outcome && p.label !== outcomeLabel(p.outcome)) {
+      reszletek.push(`<strong>${escHtml(outcomeLabel(p.outcome))}</strong>`);
+    }
     if (p.fileNumber)  reszletek.push(`iktatószám: ${escHtml(p.fileNumber)}`);
     if (p.ehNumber)    reszletek.push(`EH: ${escHtml(p.ehNumber)}`);
     if (p.user)        reszletek.push(`<span class="ct-user">${escHtml(p.user)}</span>`);
@@ -248,14 +251,14 @@ const CaseTimeline = (() => {
 
     const maIso = CaseTypes.isoDate(ma ? new Date(ma) : new Date());
     const pontok = CaseRepo.timeline(ugy, employeeFields, maIso);
-    const st = CaseRepo.submissionStatus(ugy, employeeFields, maIso);
+    // Lezárt ügynél nincs sáv: a benyújtás és a határidő már nem kérdés.
+    const st = ugy.closedAt ? null : CaseRepo.submissionStatus(ugy, employeeFields, maIso);
 
     const fejlec = `
       <div class="ct-head">
-        <div class="ct-title">${escHtml(CaseTypes.label(ugy.type))}</div>
+        <div class="ct-title">${escHtml(CaseTypes.title(ugy))}</div>
         <div class="ct-sub">
-          ${escHtml(CaseTypes.statusLabel(ugy.type, ugy.status))}
-          ${ugy.closedAt ? ` · lezárva: ${escHtml(CaseTypes.outcomeLabel(ugy.outcome))}` : ''}
+          ${escHtml(CaseRepo.allapotSzoveg(ugy))}
           ${ugy.fileNumber ? ` · iktatószám: ${escHtml(ugy.fileNumber)}` : ''}
           ${ugy.ehNumber ? ` · EH: ${escHtml(ugy.ehNumber)}` : ''}
         </div>

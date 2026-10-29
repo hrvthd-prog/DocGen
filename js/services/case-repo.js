@@ -8,6 +8,8 @@
  *     id           belső UUID
  *     employeeId   melyik dolgozóhoz tartozik
  *     type         ügytípus kulcsa (CaseTypes)
+ *     purpose      tartózkodási cél kulcsa (CaseTypes.purposes()) — kiadásnál és
+ *                  meghosszabbításnál; ebből lesz az ügy neve, egyébként null
  *     status       az ügytípus által megengedett státuszok egyike
  *     ehNumber     EH szám (hatósági ügyszám)
  *     fileNumber   iktatószám
@@ -106,6 +108,7 @@ const CaseRepo = (() => {
     if (!o.id) o.id = newId();
     o.employeeId = o.employeeId || '';
     o.type       = o.type   || '';
+    o.purpose    = o.purpose || null;
     o.status     = o.status || (o.type ? CaseTypes.firstStatus(o.type) : 'elokeszites');
     o.ehNumber   = o.ehNumber   || '';
     o.fileNumber = o.fileNumber || '';
@@ -268,6 +271,17 @@ const CaseRepo = (() => {
   }
 
   /**
+   * Az Állapot oszlop szövege. Lezárt KÉRELEMNÉL a kimenetel (Engedélyezve,
+   * Elutasítva…) — a „Lezárva” önmagában nem mond semmit. Bejelentésnél a záró
+   * státusz marad („Tudomásul véve”): ott az „Engedélyezve” félrevezető volna.
+   */
+  function allapotSzoveg(c) {
+    const t = CaseTypes.byKey(c.type);
+    if (c.closedAt && c.outcome && t && t.kind === 'kerelem') return CaseTypes.outcomeLabel(c.outcome);
+    return CaseTypes.statusLabel(c.type, c.status || CaseTypes.firstStatus(c.type));
+  }
+
+  /**
    * Mennyit csúszik a HATÓSÁG ezen az ügyön?
    *
    * `null`, ha a kérdés nem értelmes: lezárt ügy (megjött a döntés), nincs
@@ -401,8 +415,10 @@ const CaseRepo = (() => {
     const maNap = (ma ? new Date(ma) : new Date());
     const maIso = CaseTypes.isoDate(maNap);
     const pontok = [];
+    const kerelem = (CaseTypes.byKey(c.type) || {}).kind === 'kerelem';
 
-    // 1. Ami megtörtént
+    // 1. Ami megtörtént. A kérelem záró bejegyzése a kimenetel nevét viseli
+    //    („Engedélyezve”), nem a semmitmondó „Lezárva”-t.
     for (const e of c.events) {
       const nap = e.occurredAt || String(e.at).slice(0, 10);
       pontok.push({
@@ -412,7 +428,8 @@ const CaseRepo = (() => {
         recordedAt: String(e.at).slice(0, 10),
         backdated: isBackdated(e),
         eventIndex: c.events.indexOf(e),
-        label: CaseTypes.statusLabel(c.type, e.status) || e.status,
+        label: (kerelem && e.outcome) ? CaseTypes.outcomeLabel(e.outcome)
+                                      : (CaseTypes.statusLabel(c.type, e.status) || e.status),
         note: e.note || '',
         user: e.user || '',
         outcome: e.outcome || null,
@@ -426,7 +443,9 @@ const CaseRepo = (() => {
     //    Beadás után a HÁROM BENYÚJTÁSI mérföldkő tényleg nem mond semmit (a
     //    kérelem bent van), az engedély lejárata viszont annál inkább: addig
     //    tart a jelenlegi jogállás. Ezért csak azt a hármat vesszük ki.
-    const ablak = CaseTypes.submissionWindow(c.type, employeeFields);
+    //    Lezárt ügynél egyik sem: a döntés megszületett, a régi engedély
+    //    lejárata és a határidők már nem mondanak semmit.
+    const ablak = c.closedAt ? null : CaseTypes.submissionWindow(c.type, employeeFields);
     if (ablak) {
       if (!beadottE(c)) {
         pontok.push({ kind: 'ablak', date: ablak.earliest, computed: true,
@@ -443,8 +462,8 @@ const CaseRepo = (() => {
         label: 'A jelenlegi engedély lejár', windowRole: 'basis' });
     }
 
-    // 3. Ügyintézési határidő
-    if (c.dueAt) {
+    // 3. Ügyintézési határidő — csak amíg nincs döntés
+    if (c.dueAt && !c.closedAt) {
       pontok.push({
         kind: 'hatarido', date: c.dueAt, computed: true,
         label: isAdvisory(c) ? 'Határidő (tájékoztató)' : 'Ügyintézési határidő',
@@ -552,6 +571,9 @@ const CaseRepo = (() => {
   function validate(c) {
     const gondok = [];
     if (!c.employeeId) gondok.push('Az ügy nincs dolgozóhoz rendelve.');
+    if (c.purpose && !CaseTypes.purposes().some(p => p.key === c.purpose)) {
+      gondok.push(`Ismeretlen tartózkodási cél: ${c.purpose}.`);
+    }
     if (!c.type) gondok.push('Nincs megadva ügytípus.');
     else if (!CaseTypes.byKey(c.type)) gondok.push(`Ismeretlen ügytípus: ${c.type}.`);
     else if (!CaseTypes.statusesOf(c.type).some(s => s.key === c.status)) {
@@ -633,7 +655,7 @@ const CaseRepo = (() => {
    * Új ügy. A határidő javaslata a típusból és a dolgozó adataiból jön
    * (kérelmeknél alapból 70 nap), de a hívó felülírhatja.
    */
-  function create({ employeeId, type, dueAt, ehNumber = '', fileNumber = '',
+  function create({ employeeId, type, purpose = null, dueAt, ehNumber = '', fileNumber = '',
                     note = '', openedAt = null,
                     triggerDate = null, batchId = null } = {}) {
     ensureLoaded();
@@ -642,6 +664,7 @@ const CaseRepo = (() => {
       id: newId(),
       employeeId,
       type,
+      purpose: CaseTypes.needsPurpose(type) ? (purpose || null) : null,
       status: type ? CaseTypes.firstStatus(type) : 'elokeszites',
       ehNumber: String(ehNumber || '').trim(),
       fileNumber: String(fileNumber || '').trim(),
@@ -692,7 +715,7 @@ const CaseRepo = (() => {
    * mező már az új értéken állna, a képernyőn viszont továbbra is a régi
    * látszana – „mentettem, mégis megmaradt". Lásd `javitEsemenyeken`.
    */
-  function update(id, { dueAt, ehNumber, fileNumber, note, type, triggerDate } = {}) {
+  function update(id, { dueAt, ehNumber, fileNumber, note, type, triggerDate, purpose } = {}) {
     ensureLoaded();
     const c = get(id);
     if (!c) throw new Error('Nincs ilyen ügy.');
@@ -712,6 +735,7 @@ const CaseRepo = (() => {
     if (ehNumber !== undefined)   next.ehNumber = String(ehNumber || '').trim();
     if (fileNumber !== undefined) next.fileNumber = String(fileNumber || '').trim();
     if (note !== undefined)       next.note = String(note || '');
+    if (purpose !== undefined)    next.purpose = purpose || null;
     if (type !== undefined && type !== c.type) {
       next.type = type;
       // Típusváltáskor a régi státusz értelmetlenné válhat
@@ -719,6 +743,8 @@ const CaseRepo = (() => {
         next.status = CaseTypes.firstStatus(type);
       }
     }
+
+    if (!CaseTypes.needsPurpose(next.type)) next.purpose = null;
 
     const gondok = validate(next);
     if (gondok.length) throw new Error(gondok.join(' '));
@@ -1010,6 +1036,7 @@ const CaseRepo = (() => {
     const uj = create({
       employeeId: c.employeeId,
       type,
+      purpose: c.purpose,
       openedAt: ablak.earliest,
       note: `Előjegyezve a(z) ${CaseTypes.label(c.type)} lezárása után.`,
     });
@@ -1128,7 +1155,8 @@ const CaseRepo = (() => {
     useBackend, hasBackend, onChange, createFileBackend, createIdbBackend, createMemoryBackend,
     onSaveError: (fn) => { saveErrorListeners.add(fn); return () => saveErrorListeners.delete(fn); },
     load, save, scheduleSave, flush,
-    all, get, forEmployee, isOpen, daysLeft, urgency, isAdvisory, deadlineText, openCases, search,
+    all, get, forEmployee, isOpen, daysLeft, urgency, isAdvisory, deadlineText, allapotSzoveg,
+    openCases, search,
     docIdentifiers, docTags, DOC_TAGS, numberOwner, numberConflicts,
     timeline, submissionStatus, authorityDelay,
     create, update, setStatus, addEvent, updateEvent, recordProducedIdentifier,

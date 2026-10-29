@@ -1,4 +1,4 @@
-# TERV — Tömeges ügyintézés (szálláshely-változás), ügytípus-sablonok, legutóbbi változások, hiánypótló szerkesztő
+# TERV — Tömeges ügyintézés (szálláshelyváltozás), ügytípus-sablonok, legutóbbi változások, hiánypótló szerkesztő
 
 > Állapot: **megvalósítva, 2026-10-27** (a 10. fejezet a megvalósítás közbeni döntések). A kérés szövege és a döntések a 9. fejezetben.
 > A meglévő tervek, amikre épül: `TERV-esemenyek.md` 4. (ügytípus `templates`
@@ -79,7 +79,7 @@ lépést). Lépései egy oldalon, egymás alatt, a még nem elérhető lépés h
 4. **Összesítő és jóváhagyás** — párbeszéd: dolgozónként a régi → új cím
    (a számított `address` mező mindkét állapotra), a kiürülő mezők külön jelölve
    (pl. „Emelet: 3 → (törlődik)”), és ha valakinek már van nyitott
-   szálláshely-változás ügye, figyelmeztetés. „Jóváhagyom és rögzítem” gomb.
+   szálláshelyváltozás ügye, figyelmeztetés. „Jóváhagyom és rögzítem” gomb.
 5. **Rögzítés** (a jóváhagyás után, egy lépésben):
    - `EmployeeRepo.update(id, { fields: újCím, source: 'tomeges' })` mindenkire;
    - `CaseRepo.create({ employeeId, type, triggerDate, batchId, note })` mindenkire
@@ -197,7 +197,7 @@ Nincs — a második kör válaszai a 9. fejezet végén.
 
 **Kérés (2026-10-27, összefoglalva):** Ügyek → Új ügy → A) egy dolgozó (marad) /
 B) tömeges ügyintézés (nagyobb csempe) → ügytípus legördülőből (egyelőre
-Szálláshely-változás) → dolgozók client pickerrel → új cím a séma szerint →
+Szálláshelyváltozás) → dolgozók client pickerrel → új cím a séma szerint →
 összesítés és jóváhagyás → DB-írás → az Ügyekben a háttérben új (tömeges) ügy →
 generálás a modulban, kimeneti mappa tallózással, „külön mappa dolgozónként”
 gomb (amíg nincs megnyomva, minden a választott mappába). A sablonok az
