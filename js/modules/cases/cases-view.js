@@ -213,6 +213,8 @@ const CasesModule = (() => {
                                 (c.status || 'elokeszites') === kulcs);
     } else if (state.szuro === 'hiany') {
       lista = lista.filter(azonositoHianyos);
+    } else if (state.szuro === 'teendo') {
+      lista = lista.filter(c => CaseRepo.nyitottTeendok(c) > 0);
     } else if (state.szuro !== 'mind') {
       lista = lista.filter(c => {
         const s = CaseRepo.urgency(c);
@@ -330,6 +332,25 @@ const CasesModule = (() => {
     return cimke === 'EH' && /^EH/i.test(String(ertek));
   }
 
+  /** Engedélyezett ügy el nem végzett teendői — piros, ha a bejelentés késik. */
+  function teendoJelHtml(c) {
+    const n = CaseRepo.nyitottTeendok(c);
+    if (!n) return '';
+    const kesik = CaseRepo.teendoLejart(c);
+    return ` <span class="cv-teendo ${kesik ? 'is-late' : ''}"
+               title="${kesik ? 'Lejárt a munkaviszony-bejelentés határideje' : 'Engedélyezés utáni teendő'}">${n} teendő</span>`;
+  }
+
+  /** „Teendő” szűrő: csak ha van engedélyezett ügy el nem végzett teendővel. */
+  function teendoSzuroHtml() {
+    let db = 0;
+    try { db = CaseRepo.all().filter(c => CaseRepo.nyitottTeendok(c)).length; } catch { return ''; }
+    if (!db && state.szuro !== 'teendo') return '';
+    return `
+      <button class="cv-filter ${state.szuro === 'teendo' ? 'is-active' : ''}" data-filter="teendo"
+              title="Engedélyezett ügyek, ahol van még teendő">Teendő ${db}</button>`;
+  }
+
   function sorHtml(c) {
     const s = CaseRepo.urgency(c);
     return `
@@ -340,7 +361,7 @@ const CasesModule = (() => {
           <span class="cv-t__tip">${escHtml(CaseTypes.title(c))}${c.batchId
             ? ' <span class="cv-batch" title="Tömeges ügyintézés része">Tömeges</span>' : ''}</span>
         </td>
-        <td class="cv-td--allapot">${escHtml(CaseRepo.allapotSzoveg(c))}</td>
+        <td class="cv-td--allapot">${escHtml(CaseRepo.allapotSzoveg(c))}${teendoJelHtml(c)}</td>
         <td class="cv-td--id">${azonositoCella(c)}</td>
         <td class="cv-td--due">${escHtml(CaseRepo.deadlineText(c))}</td>
       </tr>`;
@@ -374,6 +395,7 @@ const CasesModule = (() => {
               <button class="cv-filter ${state.szuro === f.key ? 'is-active' : ''}"
                       data-filter="${f.key}">${f.label}</button>`).join('')}
             ${allapotSzurokHtml()}
+            ${teendoSzuroHtml()}
             <button type="button" class="cv-filter cv-filter--kapcsolo ${state.tomegesLatszik ? 'is-active' : ''}"
                     id="cv-tomeges-kapcs" aria-pressed="${state.tomegesLatszik}"
                     title="Bekapcsolva a tömeges ügyek is látszanak">Tömeges</button>
@@ -935,6 +957,15 @@ const CasesModule = (() => {
         else valt('ugyek');
       });
     });
+
+    container.querySelectorAll('[data-teendo]').forEach(cb => cb.addEventListener('change', () => {
+      try { CaseRepo.setTeendo(state.kivalasztott, cb.dataset.teendo, cb.checked); }
+      catch (e) { toast(e.message, 'error'); render(); }
+    }));
+    container.querySelectorAll('[data-teendo-gomb]').forEach(b => b.addEventListener('click', () => {
+      if (b.dataset.teendoGomb === 'sap') CaseForm.openSap({ caseId: state.kivalasztott });
+      else CaseForm.openSorozatszam({ caseId: state.kivalasztott });
+    }));
 
     const tomegesKapcs = q('#cv-tomeges-kapcs');
     if (tomegesKapcs) tomegesKapcs.addEventListener('click', () => {

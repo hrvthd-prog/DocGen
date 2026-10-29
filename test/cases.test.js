@@ -1353,6 +1353,97 @@ atest('lezárt ügy idővonala: nincs határidő, nincs benyújtási pont, a zá
   assert(/Vendégmunkás-tartózkodási engedély meghosszabbítása/.test(html), 'a fejléc az ügy neve');
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+asection('Engedélyezés után (plans/TERV-kimenet-es-ugyek.md 6.)');
+
+async function engedelyezettUgy() {
+  await tisztaAllapot();
+  const emp = ujDolgozo({ expiration_of_rp: '2026-12-01' });
+  const u = CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas', purpose: 'vendegmunkas' });
+  CaseRepo.setStatus(u.id, 'lezarva', { outcome: 'megadva', occurredAt: '2026-10-27', validUntil: '2027-12-01' });
+  return { emp, u: CaseRepo.get(u.id) };
+}
+
+atest('engedélyezés sorozatszám nélkül: az érvényesség az ügyre és a dolgozóhoz kerül', async () => {
+  const { emp, u } = await engedelyezettUgy();
+  assertEq(u.validUntil, '2027-12-01');
+  assertEq(u.producedId, null, 'sorozatszám még nincs — nem is kell');
+  assertEq(EmployeeRepo.get(emp.id).fields.expiration_of_rp, '2027-12-01',
+    'a következő hosszabbítás ablaka és a hónapmappa ebből számol');
+});
+
+atest('a teendők: öt tétel, a bejelentés határideje a döntés + 5 nap', async () => {
+  const { u } = await engedelyezettUgy();
+  const l = CaseRepo.teendok(u);
+  assertEq(l.map(t => t.key).join(), 'bejelentes,sap,okmany,masolat,taj');
+  assertEq(l[0].hatarido, '2026-11-01');
+  assertEq(CaseRepo.nyitottTeendok(u), 5);
+  assertEq(CaseRepo.teendoLejart(u, '2026-11-01'), false, 'az utolsó napon még nem késik');
+  assertEq(CaseRepo.teendoLejart(u, '2026-11-02'), true);
+});
+
+atest('pipálás: kész-nap és idővonal-bejegyzés; az okmányt csak a sorozatszám teszi késszé', async () => {
+  const { u } = await engedelyezettUgy();
+  const elotte = u.events.length;
+  CaseRepo.setTeendo(u.id, 'bejelentes', true);
+  const c = CaseRepo.get(u.id);
+  assert(c.teendok.bejelentes, 'nincs kész-nap');
+  assertEq(c.events.length, elotte + 1);
+  assertEq(CaseRepo.teendoLejart(c, '2026-12-31'), false, 'kész teendő nem késik');
+  await assertThrows(() => CaseRepo.setTeendo(u.id, 'okmany', true), /sorozatszám/);
+  CaseRepo.setTeendo(u.id, 'bejelentes', false);
+  assertEq(CaseRepo.get(u.id).teendok.bejelentes, undefined, 'visszavonható');
+});
+
+atest('sorozatszám: a lejárat a határozatból, az okmány-teendő kész', async () => {
+  const { emp, u } = await engedelyezettUgy();
+  CaseRepo.recordProducedIdentifier(u.id, { value: 'RP123456' });
+  const c = CaseRepo.get(u.id);
+  assertEq(c.producedId.expiresAt, '2027-12-01');
+  assert(c.teendok.okmany, 'az okmány-teendő nem lett kész');
+  assertEq(EmployeeRepo.get(emp.id).fields.number_of_rp, 'RP123456');
+});
+
+atest('sorozatszám után a bejegyzés-javítás nem veszi el a kimenetelt', async () => {
+  // Régi hiba: a sorozatszám-bejegyzés a záró státuszt hordozta kimenetel nélkül,
+  // és az ujraszamolAllapot ebből olvasta vissza az ügy állapotát.
+  const { u } = await engedelyezettUgy();
+  CaseRepo.recordProducedIdentifier(u.id, { value: 'RP1' });
+  CaseRepo.updateEvent(u.id, 0, { note: 'javított megjegyzés' });
+  const c = CaseRepo.get(u.id);
+  assertEq(c.outcome, 'megadva');
+  assertEq(CaseRepo.allapotSzoveg(c), 'Engedélyezve');
+});
+
+atest('az érvényesség javítása a dolgozónál is javít', async () => {
+  const { emp, u } = await engedelyezettUgy();
+  CaseRepo.update(u.id, { validUntil: '2027-11-30' });
+  assertEq(EmployeeRepo.get(emp.id).fields.expiration_of_rp, '2027-11-30');
+});
+
+atest('nincs teendő: elutasításnál, bejelentésnél, nyitott ügynél', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const e = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso' });
+  assertEq(CaseRepo.teendok(e), null, 'nyitott');
+  CaseRepo.setStatus(e.id, 'lezarva', { outcome: 'elutasitva' });
+  assertEq(CaseRepo.teendok(CaseRepo.get(e.id)), null, 'elutasítva');
+  const b = CaseRepo.create({ employeeId: emp.id, type: 'szallashely_valtozas' });
+  CaseRepo.setStatus(b.id, 'lezarva', { outcome: 'megadva' });
+  assertEq(CaseRepo.teendok(CaseRepo.get(b.id)), null, 'bejelentés');
+});
+
+atest('az idővonal: teendőlista, érvényesség a fejlécben és a záró bejegyzésen', async () => {
+  const { emp, u } = await engedelyezettUgy();
+  sandbox.escHtml = sandbox.escHtml || (s => String(s ?? ''));
+  const html = CaseTimeline.render(u, EmployeeRepo.get(emp.id).fields, '2026-10-29');
+  assert(/Teendők az engedélyezés után\s+\(0\/5 kész\)/.test(html), 'nincs teendőlista');
+  assert(/data-teendo="bejelentes"/.test(html));
+  assert(/új engedély: 2027\. 12\. 01\.-ig/.test(html), 'a fejlécben nincs az érvényesség');
+  const zaro = CaseRepo.timeline(u, {}, '2026-10-29').find(p => p.outcome);
+  assertEq(zaro.validUntil, '2027-12-01');
+});
+
 // ── Futtatás ────────────────────────────────────────────────────────────────
 (async () => {
   for (const item of queue) {

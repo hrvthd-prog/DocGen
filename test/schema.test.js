@@ -64,7 +64,7 @@ const HR_MEZOK = [
   'hr_education_institution', 'hr_education_specialization', 'hr_degree_document_number',
   'hr_computer_skills', 'hr_language_skills', 'hr_children', 'hr_previous_employer',
   'hr_previous_employment_end',
-  'hr_department_cost_center', 'hr_direct_leader', 'hr_sg_category',
+  'hr_department_cost_center', 'hr_direct_leader', 'hr_time_admin', 'hr_k2', 'hr_sg_category',
 ];
 
 // Két HR-rovat szándékosan NINCS a sémában, mert már van rá mező:
@@ -194,7 +194,7 @@ const HATOSAGI_SORREND = [
   // nem a nyomtatványról
   'tax_number', 'TAJ', 'hr_emergency_contact_name', 'hr_emergency_contact_phone',
   'hr_bank_account', 'hr_bank_name', 'hr_department_cost_center', 'hr_direct_leader',
-  'hr_sg_category',
+  'hr_time_admin', 'hr_k2', 'hr_sg_category',
 ];
 
 test('a séma belső mezősorrendje nem csúszott el', () => {

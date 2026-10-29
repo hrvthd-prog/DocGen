@@ -164,6 +164,54 @@ function sorok(ws) {
     assertEq(s[0].length, oszlopok.length, 'a fejléc nem a profil oszlopaiból áll');
   });
 
+  section('SAP-ticket táblázat (minta: Ticket_SAP_TR.xlsx)');
+
+  await test('a minta 12 oszlopa, egy sor, „Munka1” lap; a dátumok dátumcellák', async () => {
+    await tisztaAllapot();
+    const e = EmployeeRepo.create({ fields: {
+      surname: 'Doe', forename: 'John', personnel_reg_number: '27XXX',
+      hr_time_admin: 'Jane Doe', hr_direct_leader: 'John Doe SR', hr_k2: 'John Doe JR' } });
+    const c = CaseRepo.create({ employeeId: e.id, type: 'rp_hosszabbitas', purpose: 'vendegmunkas',
+                                fileNumber: '106-3-XXX40/2026-T' });
+    CaseRepo.setStatus(c.id, 'lezarva', { outcome: 'megadva', occurredAt: '2026-10-27', validUntil: '2027-12-01' });
+    const { buffer, hianyzik } = await CaseXlsx.sap(CaseRepo.get(c.id),
+      { kilepes: '2026-10-27', belepes: '2026-10-28' });
+    assertEq(hianyzik.length, 0, 'hiányzónak jelölt: ' + hianyzik.join(', '));
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer);
+    const ws = wb.getWorksheet('Munka1');
+    assert(ws, 'nincs Munka1 lap');
+    const s = sorok(ws);
+    assertEq(s.length, 2);
+    assertEq(s[0].join('|'), 'Régi TSz|Név|Új TSZ|Kilépés|Új belépés|Időrögzítési ügyintéző|' +
+      'Felettes|K2|Új határozott idő lejárta|Dokumentum jellege|Dokumentum száma|Dokumentum dátuma');
+    const sor = ws.getRow(2);
+    assertEq(sor.getCell(1).value, '27XXX');
+    assertEq(sor.getCell(2).value, 'Doe John');
+    assertEq(sor.getCell(3).value, null, 'az Új TSZ mindig üres');
+    const nap = i => { const v = sor.getCell(i).value; return v instanceof Date ? v.toISOString().slice(0, 10) : String(v); };
+    assertEq(nap(4), '2026-10-27'); assertEq(nap(5), '2026-10-28');
+    assertEq(sor.getCell(7).value, 'John Doe SR', 'a Felettes a Közvetlen vezető');
+    assertEq(nap(9), '2027-12-01');
+    assertEq(sor.getCell(10).value, 'Határozat');
+    assertEq(sor.getCell(11).value, '106-3-XXX40/2026-T');
+    assertEq(nap(12), '2026-10-27');
+    assertEq(sor.getCell(12).numFmt, 'mm-dd-yy', 'a beépített rövid dátum (14) kell');
+  });
+
+  await test('hiányzó HR-adatnál is elkészül, de megmondja, mi üres', async () => {
+    await tisztaAllapot();
+    const e = EmployeeRepo.create({ fields: { surname: 'Kiss', forename: 'Anna' } });
+    const c = CaseRepo.create({ employeeId: e.id, type: 'rp_elso', purpose: 'nemzeti_kartya' });
+    CaseRepo.setStatus(c.id, 'lezarva', { outcome: 'megadva', occurredAt: '2026-10-27' });
+    const { hianyzik } = await CaseXlsx.sap(CaseRepo.get(c.id), {});
+    for (const o of ['Régi TSz', 'Időrögzítési ügyintéző', 'K2', 'Kilépés', 'Új határozott idő lejárta']) {
+      assert(hianyzik.includes(o), `nem jelezte üresnek: ${o}`);
+    }
+    assert(!hianyzik.includes('Új TSZ'), 'az Új TSZ üressége nem hiány');
+    assertEq(CaseXlsx.sapFilename(CaseRepo.get(c.id)), 'SAP-ticket — Kiss Anna.xlsx');
+  });
+
   console.log(`\n${'─'.repeat(60)}`);
   console.log(`${passed} sikeres, ${failed} hibás`);
   if (failed) {

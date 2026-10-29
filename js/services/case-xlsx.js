@@ -110,9 +110,67 @@ const CaseXlsx = (() => {
     return { buffer: await wb.xlsx.writeBuffer(), ugyekSzama, dolgozokSzama };
   }
 
+  // ── SAP-ticket táblázat (plans/TERV-kimenet-es-ugyek.md 6.3) ──────────────
+  // A minta: Ticket_SAP_TR.xlsx (a back office-tól). Egy lap, „Munka1”; az 1. sor
+  // szürke, keretes fejléc, alatta soronként egy dolgozó, középre zárt, keretes
+  // cellák; a dátum valódi dátumcella a beépített rövid dátumformátummal.
+  const SAP_OSZLOPOK = [
+    ['Régi TSz', 9], ['Név', 28], ['Új TSZ', 9], ['Kilépés', 10.1], ['Új belépés', 12],
+    ['Időrögzítési ügyintéző', 18], ['Felettes', 17.7], ['K2', 16.7],
+    ['Új határozott idő lejárta', 21.9], ['Dokumentum jellege', 17.7],
+    ['Dokumentum száma', 19.4], ['Dokumentum dátuma', 20.9],
+  ];
+  const UJ_TSZ = 2;          // az „Új TSZ”-t a back office adja — mindig üres
+
+  /** „2026-10-27” → Date (UTC éjfél, hogy az Excel-sorszám pontosan az a nap legyen) */
+  function napDatum(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+    return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null;
+  }
+
+  /** → { buffer, hianyzik: [üresen maradt oszlopok] } */
+  async function sap(c, { kilepes = null, belepes = null } = {}) {
+    if (typeof ExcelJS === 'undefined') throw new Error('Az ExcelJS könyvtár nem érhető el.');
+    const emp = EmployeeRepo.get(c.employeeId);
+    const v = SchemaStore.resolveValues((emp && emp.fields) || {}, 'hu');
+    const ertekek = [
+      v.personnel_reg_number || '', emp ? nevOf(emp) : '', '',
+      napDatum(kilepes), napDatum(belepes),
+      v.hr_time_admin || '', v.hr_direct_leader || '', v.hr_k2 || '',
+      napDatum(c.validUntil), 'Határozat', c.fileNumber || '', napDatum(c.closedAt),
+    ];
+    const hianyzik = SAP_OSZLOPOK.map(o => o[0]).filter((_, i) => i !== UJ_TSZ && !ertekek[i]);
+
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Munka1');
+    const keret = { top: { style: 'thin' }, left: { style: 'thin' },
+                    bottom: { style: 'thin' }, right: { style: 'thin' } };
+    // Cellánként (lásd sorBe): az addRow tömbje a vm-sandboxban néma maradna.
+    SAP_OSZLOPOK.forEach(([fej, szel], i) => {
+      ws.getColumn(i + 1).width = szel;
+      const h = ws.getRow(1).getCell(i + 1);
+      h.value = fej;
+      h.border = keret;
+      h.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } };
+      const d = ws.getRow(2).getCell(i + 1);
+      d.value = ertekek[i] || null;
+      d.border = keret;
+      d.alignment = { horizontal: 'center', vertical: 'middle' };
+      // 'mm-dd-yy' = a 14-es beépített formátum: a magyar Excel „2026. 10. 27.”-ként mutatja
+      if (ertekek[i] instanceof Date) d.numFmt = 'mm-dd-yy';
+    });
+    return { buffer: await wb.xlsx.writeBuffer(), hianyzik };
+  }
+
+  /** A fájlnév a dokumentumtípus-elöl szabállyal. */
+  function sapFilename(c) {
+    const nev = nevOf(EmployeeRepo.get(c.employeeId)).replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim();
+    return `SAP-ticket — ${nev}.xlsx`;
+  }
+
   function suggestFilename() {
     return `ugyek-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.xlsx`;
   }
 
-  return { build, toBuffer, suggestFilename };
+  return { build, toBuffer, suggestFilename, sap, sapFilename, SAP_OSZLOPOK };
 })();

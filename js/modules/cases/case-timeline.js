@@ -202,6 +202,7 @@ const CaseTimeline = (() => {
     if (p.outcome && p.label !== outcomeLabel(p.outcome)) {
       reszletek.push(`<strong>${escHtml(outcomeLabel(p.outcome))}</strong>`);
     }
+    if (p.validUntil)  reszletek.push(`érvényes: ${escHtml(huDatum(p.validUntil))}-ig`);
     if (p.fileNumber)  reszletek.push(`iktatószám: ${escHtml(p.fileNumber)}`);
     if (p.ehNumber)    reszletek.push(`EH: ${escHtml(p.ehNumber)}`);
     if (p.user)        reszletek.push(`<span class="ct-user">${escHtml(p.user)}</span>`);
@@ -239,6 +240,33 @@ const CaseTimeline = (() => {
       </li>`;
   }
 
+  /** Az engedélyezés utáni teendők (CaseRepo.teendok) — pipálható lista. */
+  function teendokHtml(ugy, maIso) {
+    const lista = CaseRepo.teendok(ugy);
+    if (!lista) return '';
+    const ir = irhat();
+    const gomb = (kulcs, felirat) => ir
+      ? `<button type="button" class="btn btn-ghost btn-sm" data-teendo-gomb="${kulcs}">${felirat}</button>` : '';
+    return `
+      <div class="ct-todo">
+        <div class="ct-todo__head">Teendők az engedélyezés után
+          (${lista.filter(t => t.kesz).length}/${lista.length} kész)</div>
+        ${lista.map(t => {
+          const kesik = !t.kesz && t.hatarido && t.hatarido < maIso;
+          return `
+          <div class="ct-todo__row ${t.kesz ? 'is-done' : ''} ${kesik ? 'is-late' : ''}">
+            <label><input type="checkbox" data-teendo="${t.key}" ${t.kesz ? 'checked' : ''}
+                          ${t.key === 'okmany' || !ir ? 'disabled' : ''}> ${escHtml(t.label)}</label>
+            ${t.kesz ? `<span class="ct-todo__due">kész: ${escHtml(huDatum(t.kesz))}</span>`
+              : t.hatarido ? `<span class="ct-todo__due">határidő: ${escHtml(huDatum(t.hatarido))}
+                               (${escHtml(napSzoveg(t.hatarido, maIso))})</span>` : ''}
+            ${t.key === 'sap' ? gomb('sap', 'SAP-táblázat') : ''}
+            ${t.key === 'okmany' && !t.kesz ? gomb('okmany', 'Sorozatszám rögzítése') : ''}
+          </div>`;
+        }).join('')}
+      </div>`;
+  }
+
   /**
    * Teljes idővonal egy ügyhöz.
    *
@@ -259,6 +287,7 @@ const CaseTimeline = (() => {
         <div class="ct-title">${escHtml(CaseTypes.title(ugy))}</div>
         <div class="ct-sub">
           ${escHtml(CaseRepo.allapotSzoveg(ugy))}
+          ${ugy.validUntil ? ` · új engedély: ${escHtml(huDatum(ugy.validUntil))}-ig` : ''}
           ${ugy.fileNumber ? ` · iktatószám: ${escHtml(ugy.fileNumber)}` : ''}
           ${ugy.ehNumber ? ` · EH: ${escHtml(ugy.ehNumber)}` : ''}
         </div>
@@ -269,6 +298,7 @@ const CaseTimeline = (() => {
     }
 
     return fejlec
+      + teendokHtml(ugy, maIso)
       + renderWindowBar(st, maIso)
       + `<ul class="ct-list">${
           pontok.map(p => renderPoint(p, maIso, CaseTypes.outcomeLabel)).join('')

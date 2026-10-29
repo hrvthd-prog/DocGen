@@ -20,6 +20,9 @@
  *     closedAt     lezárás ideje, amíg nyitott: null
  *     outcome      a lezárás eredménye (CaseTypes.outcomes())
  *     producedId   ha az ügy azonosítót hozott: { type, value }
+ *     validUntil   engedélyezésnél: az új engedély érvényessége a határozat szerint
+ *                  (a sorozatszám csak az okmánnyal jön, hetekkel később)
+ *     teendok      engedélyezés utáni teendők: { kulcs: kész-nap } (lásd TEENDOK)
  *     note         szabad szöveg
  *     batchId      tömeges ügyintézésnél a közös kötegazonosító, egyébként null
  *                  (a köteg = az azonos batchId-jú ügyek; TERV-tomeges-ugyintezes.md)
@@ -118,6 +121,8 @@ const CaseRepo = (() => {
     o.closedAt   = o.closedAt || null;
     o.outcome    = o.outcome  || null;
     o.producedId = o.producedId || null;
+    o.validUntil = o.validUntil || null;
+    o.teendok    = o.teendok || {};
     o.note       = o.note || '';
     o.batchId    = o.batchId || null;
     o.events     = Array.isArray(o.events) ? o.events.map(normalizeEvent) : [];
@@ -429,7 +434,9 @@ const CaseRepo = (() => {
         backdated: isBackdated(e),
         eventIndex: c.events.indexOf(e),
         label: (kerelem && e.outcome) ? CaseTypes.outcomeLabel(e.outcome)
-                                      : (CaseTypes.statusLabel(c.type, e.status) || e.status),
+             : e.status ? (CaseTypes.statusLabel(c.type, e.status) || e.status)
+             : 'Feljegyzés',
+        validUntil: (kerelem && e.outcome === 'megadva') ? c.validUntil : null,
         note: e.note || '',
         user: e.user || '',
         outcome: e.outcome || null,
@@ -715,7 +722,8 @@ const CaseRepo = (() => {
    * mező már az új értéken állna, a képernyőn viszont továbbra is a régi
    * látszana – „mentettem, mégis megmaradt". Lásd `javitEsemenyeken`.
    */
-  function update(id, { dueAt, ehNumber, fileNumber, note, type, triggerDate, purpose } = {}) {
+  function update(id, { dueAt, ehNumber, fileNumber, note, type, triggerDate, purpose,
+                        validUntil } = {}) {
     ensureLoaded();
     const c = get(id);
     if (!c) throw new Error('Nincs ilyen ügy.');
@@ -736,6 +744,7 @@ const CaseRepo = (() => {
     if (fileNumber !== undefined) next.fileNumber = String(fileNumber || '').trim();
     if (note !== undefined)       next.note = String(note || '');
     if (purpose !== undefined)    next.purpose = purpose || null;
+    if (validUntil !== undefined) next.validUntil = validUntil || null;
     if (type !== undefined && type !== c.type) {
       next.type = type;
       // Típusváltáskor a régi státusz értelmetlenné válhat
@@ -750,7 +759,9 @@ const CaseRepo = (() => {
     if (gondok.length) throw new Error(gondok.join(' '));
     szamokEllenor(c, { ehNumber, fileNumber });
 
+    const regiLejarat = c.validUntil;
     Object.assign(c, next, { updatedAt: nowIso(), updatedBy: currentUserName() });
+    if (c.validUntil && c.validUntil !== regiLejarat) lejaratADolgozohoz(c);
     javitEsemenyeken(c, 'ehNumber',   regiEh,  c.ehNumber);
     javitEsemenyeken(c, 'fileNumber', regiIkt, c.fileNumber);
     // Üresről felvitt iktatószám = most kaptuk meg. (Javításnál nem: ott a
@@ -820,7 +831,7 @@ const CaseRepo = (() => {
    * megmondani, hogy az ügy megadással vagy elutasítással zárult. A hatósági
    * ügyintézésnél pont ez a legfontosabb adat.
    */
-  function setStatus(id, status, { note = '', outcome = null,
+  function setStatus(id, status, { note = '', outcome = null, validUntil = null,
                                    ehNumber, fileNumber, occurredAt = null } = {}) {
     ensureLoaded();
     const c = get(id);
@@ -853,6 +864,10 @@ const CaseRepo = (() => {
     c.closedAt = zaro ? (occurredAt || today()) : null;
     c.updatedAt = nowIso();
     c.updatedBy = currentUserName();
+    if (zaro && outcome === 'megadva' && validUntil) {
+      c.validUntil = validUntil;
+      lejaratADolgozohoz(c);
+    }
 
     c.events.push(normalizeEvent({
       at: nowIso(), occurredAt, status, outcome: c.outcome, note,
@@ -983,6 +998,9 @@ const CaseRepo = (() => {
 
     const tipus = type || (CaseTypes.byKey(c.type) || {}).producesIdentifier;
     if (!tipus) throw new Error('Ez az ügytípus nem hoz azonosítót.');
+    // A lejárat alapból a határozatból rögzített érvényesség; ha a kártyán más
+    // áll, a beírt érték nyer (azt látjuk a kezünkben).
+    expiresAt = expiresAt || c.validUntil || null;
 
     EmployeeRepo.addIdentifier(c.employeeId, {
       type: tipus, value: ertek, validFrom: validFrom || today(),
@@ -1000,11 +1018,84 @@ const CaseRepo = (() => {
     }
 
     c.producedId = { type: tipus, value: ertek, expiresAt: expiresAt || null };
+    c.teendok    = Object.assign({}, c.teendok, { okmany: validFrom || today() });
     c.updatedAt  = nowIso();
     c.updatedBy  = currentUserName();
+    // Státusz nélküli feljegyzés: ha a záró státuszt hordozná kimenetel nélkül,
+    // egy későbbi bejegyzés-javítás (ujraszamolAllapot) ebből olvasná vissza
+    // az állapotot, és a lezárt ügy elvesztené a kimenetelét.
     c.events.push(normalizeEvent({
-      at: nowIso(), occurredAt: validFrom || today(), status: c.status,
+      at: nowIso(), occurredAt: validFrom || today(), status: '',
       note: `Új azonosító rögzítve: ${ertek}` + (expiresAt ? ` (érvényes: ${expiresAt})` : ''),
+      user: c.updatedBy, ehNumber: c.ehNumber, fileNumber: c.fileNumber,
+    }));
+    scheduleSave();
+    emit();
+    return c;
+  }
+
+  /** Az engedélyezett ügy új lejárata a dolgozó adatai közé is: ebből számol a
+   *  következő meghosszabbítás ablaka és az új hónapmappa. */
+  function lejaratADolgozohoz(c) {
+    const mezo = EXPIRY_FIELD_MAP[(CaseTypes.byKey(c.type) || {}).producesIdentifier];
+    if (mezo && c.validUntil) {
+      EmployeeRepo.update(c.employeeId, { fields: { [mezo]: c.validUntil }, source: 'ugy' });
+    }
+  }
+
+  // ── Az engedélyezés utáni teendők (plans/TERV-kimenet-es-ugyek.md 6.2) ────
+  // ponytail: fix lista; ha az eljárás változik, ez a tömb változik. Az `okmany`
+  // nem pipálható: a sorozatszám rögzítése teszi késszé.
+  const TEENDOK = [
+    { key: 'bejelentes', label: 'Munkaviszony megkezdésének bejelentése beküldve', napok: 5 },
+    { key: 'sap',        label: 'SAP-ticket leadva a back office-nak' },
+    { key: 'okmany',     label: 'Okmány megérkezett, sorozatszám rögzítve' },
+    { key: 'masolat',    label: 'Másolat a digitális és a fizikai személyi anyagban' },
+    { key: 'taj',        label: 'TAJ-hosszabbítás intézve' },
+  ];
+
+  /** Engedélyezett, azonosítót hozó kérelem — csak ennek vannak teendői. */
+  function engedelyezett(c) {
+    const t = CaseTypes.byKey(c.type);
+    return !!(c && c.closedAt && c.outcome === 'megadva' && t && t.kind === 'kerelem' && t.producesIdentifier);
+  }
+
+  /** → [{ key, label, kesz (nap | null), hatarido (nap | null) }], vagy null */
+  function teendok(c) {
+    if (!engedelyezett(c)) return null;
+    return TEENDOK.map(t => ({
+      key: t.key, label: t.label,
+      kesz: (c.teendok || {})[t.key] || null,
+      hatarido: t.napok ? CaseTypes.isoDate(new Date(Date.parse(c.closedAt) + t.napok * 86400000)) : null,
+    }));
+  }
+
+  function nyitottTeendok(c) {
+    const l = teendok(c);
+    return l ? l.filter(t => !t.kesz).length : 0;
+  }
+
+  /** Van-e lejárt határidejű, el nem végzett teendő? (a munkaviszony-bejelentés) */
+  function teendoLejart(c, ma = null) {
+    const l = teendok(c);
+    const m = ma || today();
+    return !!l && l.some(t => !t.kesz && t.hatarido && t.hatarido < m);
+  }
+
+  function setTeendo(id, key, kesz) {
+    ensureLoaded();
+    const c = get(id);
+    if (!c) throw new Error('Nincs ilyen ügy.');
+    const t = TEENDOK.find(x => x.key === key);
+    if (!t) throw new Error(`Ismeretlen teendő: ${key}.`);
+    if (key === 'okmany') throw new Error('Ez a sorozatszám rögzítésével lesz kész.');
+    if (!engedelyezett(c)) throw new Error('Teendő csak engedélyezett ügynél van.');
+    c.teendok = Object.assign({}, c.teendok);
+    if (kesz) c.teendok[key] = today(); else delete c.teendok[key];
+    c.updatedAt = nowIso();
+    c.updatedBy = currentUserName();
+    c.events.push(normalizeEvent({
+      at: nowIso(), status: '', note: `${kesz ? 'Kész' : 'Visszavonva'}: ${t.label}`,
       user: c.updatedBy, ehNumber: c.ehNumber, fileNumber: c.fileNumber,
     }));
     scheduleSave();
@@ -1160,6 +1251,7 @@ const CaseRepo = (() => {
     docIdentifiers, docTags, DOC_TAGS, numberOwner, numberConflicts,
     timeline, submissionStatus, authorityDelay,
     create, update, setStatus, addEvent, updateEvent, recordProducedIdentifier,
+    teendok, nyitottTeendok, teendoLejart, setTeendo,
     openNextCase, hasOpenCaseOfType, batch, newId, isBackdated, summary, EXPIRY_FIELD_MAP,
     destroy, destroyForEmployee, suggestRenewals,
     _validate: validate,

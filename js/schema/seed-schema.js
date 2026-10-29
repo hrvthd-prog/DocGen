@@ -473,6 +473,16 @@ const SEED_SCHEMA = {
       label: { hu: 'Közvetlen vezető', en: 'Direct Leader (filled by HR)' },
       hint: { en: 'FILLED BY HR — please leave empty.' } },
 
+    // A SAP-ticket táblázatához (plans/TERV-kimenet-es-ugyek.md 6.3); a
+    // „Felettes” oszlop a Közvetlen vezető.
+    { key: 'hr_time_admin', group: 'hr_belso', type: 'text',
+      label: { hu: 'Időrögzítési ügyintéző', en: 'Time Recording Administrator (filled by HR)' },
+      hint: { en: 'FILLED BY HR — please leave empty.' } },
+
+    { key: 'hr_k2', group: 'hr_belso', type: 'text',
+      label: { hu: 'K2', en: 'K2 (filled by HR)' },
+      hint: { en: 'FILLED BY HR — please leave empty.' } },
+
     { key: 'hr_sg_category', group: 'hr_belso', type: 'text',
       label: { hu: 'SG kategória', en: 'SG Category (filled by HR)' },
       hint: { en: 'FILLED BY HR — please leave empty.' } },

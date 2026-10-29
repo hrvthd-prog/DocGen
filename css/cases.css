@@ -689,3 +689,20 @@
 /* Tömeges ügyek nézet: kijelölés törléshez */
 .cv-th--cb, .cv-td--cb { width: 34px; text-align: center; }
 .cv-td--cb input, .cv-th--cb input { cursor: pointer; }
+
+/* ── Engedélyezés utáni teendők (plans/TERV-kimenet-es-ugyek.md 6.2) ──────── */
+.ct-todo {
+  margin: 8px 0 12px; padding: 8px 12px; border: 1px solid var(--c-border);
+  border-radius: 8px; background: var(--c-card);
+}
+.ct-todo__head { font-weight: 600; font-size: 12.5px; margin-bottom: 6px; }
+.ct-todo__row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px; padding: 3px 0; }
+.ct-todo__row label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.ct-todo__row.is-done label { color: var(--c-muted); text-decoration: line-through; }
+.ct-todo__due { font-size: 11px; color: var(--c-muted); }
+.ct-todo__row.is-late .ct-todo__due { color: var(--c-red); font-weight: 600; }
+.cv-teendo {
+  font-size: 10.5px; padding: 0 6px; border-radius: 8px; white-space: nowrap;
+  background: #FDF3DD; color: #7A4A0E;
+}
+.cv-teendo.is-late { background: #FBE4E4; color: var(--c-red); }

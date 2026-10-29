@@ -2064,6 +2064,21 @@ const DocgenModule = (() => {
   function outputDirName() { return state.outputDir ? state.outputDir.name : ''; }
 
   /**
+   * Kész fájl (pl. SAP-táblázat) a dolgozó mappájába, ugyanazzal a szabállyal,
+   * mint a generált irat (01_Elokeszitett). `root`: a requestOutputDir() eredménye
+   * — azt a hívó a kattintásban kéri el, mert az engedély felhasználói gesztushoz
+   * kötött. Mappa nélkül letöltés. → a relatív út, vagy '' (letöltve)
+   */
+  async function mentesDolgozonak({ root, employeeId, name, buf }) {
+    if (!root) { saveAs(new Blob([buf]), name); return ''; }
+    loadFromRegistry({ silent: true });
+    const cel = await celFor(root, { employeeId, templateName: name, cel: 'prep' });
+    if (!cel) throw new Error('nem lett dolgozói mappa kiválasztva');
+    await FsService.writeToDir(cel.dir, name, buf);
+    return cel.ut.join('/');
+  }
+
+  /**
    * Generálás a Dokumentumok fül kijelölésétől függetlenül. Ugyanaz a motor
    * (sablonkeresés, jelölők, névminta, hiánynapló, PDF-lánc), csak a dolgozók,
    * a sablonok és a kimeneti mappa paraméter.
@@ -2313,6 +2328,6 @@ const DocgenModule = (() => {
     makeSchemaResolver,
     // A tömeges ügy generálása (TERV-tomeges-ugyintezes.md 4.4)
     templateNames, templatesReady, requestTemplatesDir, generateFor,
-    requestOutputDir, outputDirName,
+    requestOutputDir, outputDirName, mentesDolgozonak,
   };
 })();

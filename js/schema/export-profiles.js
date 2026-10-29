@@ -94,7 +94,9 @@ const DEFAULT_EXPORT_PROFILES = [
      * szakaszban.)
      */
     // 2026-10-27: a szálláshely jogcíme is a HR-é (a párja, az egyéb jogcím is az).
-    excludeColumns: ['topographical_number', 'legal_title_of_accommodation', 'other_accommodation'],
+    // 2026-10-29: a SAP-ticket két mezője (időrögzítési ügyintéző, K2) is.
+    excludeColumns: ['topographical_number', 'legal_title_of_accommodation', 'other_accommodation',
+                     'hr_time_admin', 'hr_k2'],
 
     /**
      * Lapvédelem az ÜRES sablonhoz.

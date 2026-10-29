@@ -88,6 +88,12 @@ const CaseForm = (() => {
                    placeholder="pl. 106-1-12345-2/2026-T">
           </label>
 
+          ${c && CaseRepo.teendok(c) ? `
+          <label class="cf-field">
+            <span>Engedély érvényes (a határozat szerint)</span>
+            ${dateFieldHtml({ id: 'cf-valid', value: c.validUntil || '' })}
+          </label>` : ''}
+
           <label class="cf-field cf-field--wide">
             <span>Megjegyzés</span>
             <textarea id="cf-note" class="field-input" rows="2">${escHtml(c && c.note || '')}</textarea>
@@ -163,6 +169,7 @@ const CaseForm = (() => {
       const adat = {
         type:        tipusEl.value,
         purpose:     celKell ? (q('cf-purpose').value || null) : null,
+        ...(q('cf-valid') ? { validUntil: q('cf-valid').value || null } : {}),
         triggerDate: triggerEl.value || null,
         dueAt:       dueEl.value || null,
         ehNumber:    q('cf-eh').value,
@@ -221,6 +228,12 @@ const CaseForm = (() => {
             </select>
           </label>
 
+          <label class="cf-field" id="cs-valid-wrap" style="display:none">
+            <span>Engedély érvényes <strong>(a határozat szerint)</strong></span>
+            ${dateFieldHtml({ id: 'cs-valid' })}
+            <small>A sorozatszám az okmánnyal jön — az később, a teendők között.</small>
+          </label>
+
           <label class="cf-field">
             <span>EH szám</span>
             <input type="text" id="cs-eh" class="field-input" value="${escHtml(c.ehNumber || '')}">
@@ -247,18 +260,29 @@ const CaseForm = (() => {
     const q = s => document.getElementById(s);
     const statusEl = q('cs-status');
 
+    const azonositot = !!(CaseTypes.byKey(c.type) || {}).producesIdentifier;
+    const ervenyesKell = () => azonositot && CaseTypes.isTerminal(c.type, statusEl.value) &&
+                               q('cs-outcome').value === 'megadva';
     function frissit() {
       const zaro = CaseTypes.isTerminal(c.type, statusEl.value);
       q('cs-outcome-wrap').style.display = zaro ? '' : 'none';
+      q('cs-valid-wrap').style.display = ervenyesKell() ? '' : 'none';
     }
     statusEl.addEventListener('change', frissit);
+    q('cs-outcome').addEventListener('change', frissit);
     frissit();
 
     q('cs-save').addEventListener('click', () => {
+      if (ervenyesKell() && !q('cs-valid').value) {
+        toast('Add meg, meddig érvényes az új engedély (a határozatban áll)', 'warn');
+        q('cs-valid').focus();
+        return;
+      }
       try {
         CaseRepo.setStatus(caseId, statusEl.value, {
           note:       q('cs-note').value,
           outcome:    q('cs-outcome').value || null,
+          validUntil: ervenyesKell() ? q('cs-valid').value : null,
           ehNumber:   q('cs-eh').value,
           fileNumber: q('cs-file').value,
           occurredAt: q('cs-occurred').value || null,
@@ -266,7 +290,7 @@ const CaseForm = (() => {
         closeDialog();
         toast('✓ Státusz rögzítve', 'success');
         if (onSaved) onSaved(caseId);
-        ajanljAzonositot(caseId);
+        tajekoztat(caseId);
       } catch (e) {
         toast(e.message, 'error');
       }
@@ -274,22 +298,52 @@ const CaseForm = (() => {
   }
 
   /**
-   * Ha egy sikeresen lezárt kérelem azonosítót hoz, azt itt kérjük be –
-   * különben a dolgozó azonosító-történetéből kimaradna, és az xlsx-export
-   * a régi engedélyszámot vinné tovább.
+   * Engedélyezés után: mi a teendő, és mikorra. A munkaviszony megkezdését a
+   * döntéstől számított 5 napon belül be kell jelenteni — ezt mondjuk ki elsőként.
+   * Utána a következő meghosszabbítás előjegyzése (ha az ügy hozott lejáratot).
    */
-  function ajanljAzonositot(caseId) {
+  function tajekoztat(caseId) {
+    const lista = CaseRepo.teendok(CaseRepo.get(caseId));
+    if (!lista) return;
+    const bej = lista.find(t => t.key === 'bejelentes');
+    showDialog({
+      title: 'Engedélyezve — a teendők',
+      body: `
+        <p style="font-size:12.5px;margin-bottom:8px">
+          A munkaviszony megkezdését <strong>${escHtml(CaseTimeline.huDatum(bej.hatarido))}</strong>-ig
+          be kell jelenteni (a döntéstől számított 5 nap).
+        </p>
+        <ul style="font-size:12px;margin:0 0 8px 18px">
+          ${lista.map(t => `<li>${escHtml(t.label)}</li>`).join('')}
+        </ul>
+        <p style="font-size:11.5px;color:var(--c-muted)">A lista az ügy idővonalának tetején
+          van; ott pipálható, és ott készül a SAP-táblázat is.</p>`,
+      footer: `<button class="btn btn-primary btn-sm" id="ct-info-ok">Rendben</button>`,
+    });
+    document.getElementById('ct-info-ok').addEventListener('click', () => {
+      closeDialog();
+      ajanljKovetkezot(caseId);
+    });
+  }
+
+  /**
+   * Az okmány megjött: a sorozatszám rögzítése. Enélkül a dolgozó azonosító-
+   * történetéből kimaradna, és az xlsx-export a régi engedélyszámot vinné tovább.
+   * A lejárat a határozatból rögzített érvényességgel előtöltve — ha a kártyán
+   * más áll, az nyer (ez az „érvényességi idő ellenőrzése”).
+   */
+  function openSorozatszam({ caseId } = {}) {
     const c = CaseRepo.get(caseId);
-    if (!c || !c.closedAt || c.outcome !== 'megadva' || c.producedId) return;
+    if (!c || c.producedId) return;
     const t = CaseTypes.byKey(c.type);
     if (!t || !t.producesIdentifier) return;
 
     showDialog({
-      title: 'Új azonosító rögzítése',
+      title: 'Megérkezett az okmány — sorozatszám',
       body: `
         <p style="font-size:12px;color:var(--c-muted);margin-bottom:10px">
-          Az ügy megadással zárult. Írd be az új számot – a korábbi automatikusan
-          lezárul, és az adatbekérő is ezt fogja tartalmazni.
+          Írd be az új okmány számát – a korábbi automatikusan lezárul, és az
+          adatbekérő is ezt fogja tartalmazni. Ellenőrizd az érvényességet a kártyán.
         </p>
         <div class="cf-grid">
           <label class="cf-field">
@@ -297,9 +351,11 @@ const CaseForm = (() => {
             <input type="text" id="ci-value" class="field-input" autofocus>
           </label>
           <label class="cf-field">
-            <span>Meddig érvényes?</span>
-            ${dateFieldHtml({ id: 'ci-expires' })}
-            <small>Ebből számoljuk a következő benyújtási ablakot.</small>
+            <span>Érvényes (a kártyán)</span>
+            ${dateFieldHtml({ id: 'ci-expires', value: c.validUntil || '' })}
+            <small id="ci-hint">${c.validUntil
+              ? `A határozat szerint: ${escHtml(CaseTimeline.huDatum(c.validUntil))}`
+              : 'Ebből számoljuk a következő benyújtási ablakot.'}</small>
           </label>
         </div>`,
       footer: `
@@ -307,9 +363,17 @@ const CaseForm = (() => {
         <button class="btn btn-primary btn-sm" id="ci-save">Rögzítés</button>`,
     });
 
+    const lejarEl = document.getElementById('ci-expires');
+    lejarEl.addEventListener('input', () => {
+      if (c.validUntil && lejarEl.value && lejarEl.value !== c.validUntil) {
+        document.getElementById('ci-hint').innerHTML =
+          `<strong>Eltér a határozattól</strong> (${escHtml(CaseTimeline.huDatum(c.validUntil))}) — a kártya nyer.`;
+      }
+    });
+
     document.getElementById('ci-save').addEventListener('click', () => {
       const ertek = document.getElementById('ci-value').value.trim();
-      const lejar = document.getElementById('ci-expires').value || null;
+      const lejar = lejarEl.value || null;
       if (!ertek) { toast('Az azonosító nem lehet üres', 'warn'); return; }
       try {
         CaseRepo.recordProducedIdentifier(caseId, { value: ertek, expiresAt: lejar });
@@ -363,6 +427,56 @@ const CaseForm = (() => {
         closeDialog();
         toast('✓ Következő meghosszabbítás előjegyezve', 'success');
       } catch (e) { toast(e.message, 'error'); }
+    });
+  }
+
+  /**
+   * A SAP-ticket táblázata (plans/TERV-kimenet-es-ugyek.md 6.3). A Kilépés és az
+   * Új belépés a program nem tudhatja; a minta szerint előtöltve: a döntés napja
+   * és a másnapja. A táblázat a dolgozó 01_Elokeszitett mappájába kerül.
+   */
+  function openSap({ caseId } = {}) {
+    const c = CaseRepo.get(caseId);
+    if (!c || !c.closedAt) return;
+    const masnap = CaseTypes.isoDate(new Date(Date.parse(c.closedAt) + 86400000));
+    showDialog({
+      title: 'SAP-táblázat a back office-nak',
+      body: `
+        <div class="cf-grid">
+          <label class="cf-field">
+            <span>Kilépés</span>
+            ${dateFieldHtml({ id: 'sap-ki', value: c.closedAt })}
+          </label>
+          <label class="cf-field">
+            <span>Új belépés</span>
+            ${dateFieldHtml({ id: 'sap-be', value: masnap })}
+          </label>
+        </div>
+        <p style="font-size:11.5px;color:var(--c-muted);margin-top:8px">
+          A többi oszlop a nyilvántartásból és az ügyből jön (törzsszám, közvetlen vezető,
+          időrögzítési ügyintéző, K2, érvényesség, iktatószám, döntés napja).</p>`,
+      footer: `
+        <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Mégse</button>
+        <button class="btn btn-primary btn-sm" id="sap-save">Táblázat mentése</button>`,
+    });
+    document.getElementById('sap-save').addEventListener('click', async () => {
+      // Az engedélykérés a kattintás része kell legyen: előbb kérjük, csak utána építünk.
+      const rootP = DocgenModule.requestOutputDir().catch(() => null);
+      try {
+        const { buffer, hianyzik } = await CaseXlsx.sap(c, {
+          kilepes: document.getElementById('sap-ki').value || null,
+          belepes: document.getElementById('sap-be').value || null,
+        });
+        const ut = await DocgenModule.mentesDolgozonak({
+          root: await rootP, employeeId: c.employeeId, name: CaseXlsx.sapFilename(c), buf: buffer,
+        });
+        closeDialog();
+        toast(`✓ SAP-táblázat ${ut ? 'mentve: ' + ut : 'letöltve'}`, 'success');
+        if (hianyzik.length) toast(`Üresen maradt: ${hianyzik.join(', ')}`, 'warn');
+      } catch (e) {
+        BevLogger.error('SAP_XLSX', 'A SAP-táblázat nem készült el', e.message, '');
+        toast('A SAP-táblázat nem készült el: ' + e.message, 'error');
+      }
     });
   }
 
@@ -450,5 +564,5 @@ const CaseForm = (() => {
     });
   }
 
-  return { open, openStatus, openEvent };
+  return { open, openStatus, openEvent, openSorozatszam, openSap };
 })();
