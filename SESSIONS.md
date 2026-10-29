@@ -68,6 +68,34 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-10-29 — Terv: új kimeneti mappaszerkezet, adatmappa, ügylista, engedélyezés utáni teendők; `plans/` mappa
+
+**Cél:** terv (kód nélkül) a felhasználó kéréseire: a `09_OIF_kerelmek` új
+szerkezete (01_Hosszabbitasok/<hónap>/<Név>, 02_Kiadasok/<Név>, 04_TAJ,
+03_Bejelentesek), az adatfájlok és mentések helye, ügylista-szűrők (Tömeges,
+ügytípus), tartózkodási cél, „Engedélyezve”, lezárt ügy idővonala, teendőlista,
+SAP-táblázat. Plusz ponytail-audit a teljes repóra.
+**Változás (`v10.88`):** új `plans/TERV-kimenet-es-ugyek.md`; a 11 `TERV*.md`
+`git mv`-vel a `plans/` mappába (a felhasználó a céges gépen már így tartja);
+`CLAUDE.md` és `README.md` hivatkozásai átírva. Kód nem változott.
+**Miért / döntés:** a terv 9. fejezetében 10 nyitott kérdés vár a felhasználóra
+(adatmappa: `DocGen-main\data\` javasolt; `print.html` törlése javasolt;
+szálláshely-hónapmappa; családi együttélés neve; Felettes = Közvetlen vezető?;
+SAP-minta nem érkezett meg; PDF Műhely igazítása). Indexet nem építünk a
+dolgozói mappákhoz (kézzel mozognak, elavulna) — bejárás + pontos egyezés.
+**Felmérés közben talált hibák (a tervben, még javítatlanul):**
+- a PDF-lánc kísérőfájllal csak a kimeneti mappa GYÖKERÉBEN keres
+  (`docx-pdf.vbs` `GyujtMunkat`, `merge.js` `runFromOutputDir`), a generálás
+  viszont dolgozói almappába ír → „DOCX + PDF” valószínűleg most sem készít PDF-et;
+- `makeConfigBackend.save` nem ment másolatot, és sikertelen olvasásnál `{}`-ből
+  írva törli a config többi szakaszát.
+**Tesztek:** `node test/run-all.js` zöld (kiinduláskor és a fájlmozgatás után is).
+
+**Nyitott / következő:**
+- A felhasználó válaszai a terv 9. fejezetére, utána F0 → F1 → F2 → F3 → F4.
+- **Éles próba (a mostani verzióval):** dolgozói mappás generálás „DOCX + PDF”
+  → `PDF-keszites.vbs` → készül-e PDF? (a terv szerint nem)
+
 ## 2026-10-27 (3.) — Kötegek tömeges törlése, tömeges szerkesztés a Nyilvántartásból
 
 **Cél:** a tömeges ügyek legyenek tömegesen törölhetők; a Nyilvántartásból

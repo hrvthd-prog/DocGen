@@ -16,14 +16,16 @@ Munkavállalói nyilvántartás + `.docx` dokumentumgenerálás idegenrendészet
 `file://` protokollról fut**, Chromium-alapú böngésző kell (Firefox/Safari
 nem jó — hiányzik a mappaválasztó API). SAP-kiegészítő, nem kiváltó.
 
-A *miért*-et a tervdokumentumok őrzik: `TERV.md` (alapterv),
+A *miért*-et a tervdokumentumok őrzik, mind a `plans/` mappában: `TERV.md` (alapterv),
 `TERV-esemenyek.md` (ügykövetés), `TERV-tesztanyag.md`, `TERV-adatbiztonsag.md`,
 `TERV-mappaszerkezet.md` (a PDF Műhellyel közös mappaszerkezet + `fs-service`),
 `TERV-fiokok.md` (felhasználói fiókok, négy jogosultsági szint — **még nincs
 megvalósítva**),
 `TERV-pdf-nyomtatvany.md` (kitölthető PDF-sablonok; példa: NEAK NYT.52),
 `TERV-tomeges-ugyintezes.md` (tömeges ügy, ügytípus-sablonok, hiánypótló
-szerkesztő, legutóbbi változások).
+szerkesztő, legutóbbi változások),
+`TERV-kimenet-es-ugyek.md` (09_OIF_kerelmek mappaszerkezet, adatmappa helye,
+ügylista-szűrők, engedélyezés utáni teendők, SAP-táblázat).
 A használat: `README.md`.
 
 ## Hol fut?

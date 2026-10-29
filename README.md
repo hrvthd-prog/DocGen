@@ -1047,7 +1047,7 @@ Budapest és a „mai nap”. **A meghatalmazás szövegét érdemes jogásszal 
 Amit a nyilvántartásban üres, az a hiányzó-adat panelen jelenik meg; ami a
 legkisebb betűvel sem fér a mezőbe, az „(nem fér el)” jelzéssel. Mező nélküli
 PDF-re a generálás egyetlen érthető hibát ad. A döntések:
-[TERV-pdf-nyomtatvany.md](TERV-pdf-nyomtatvany.md), 11. fejezet.
+[TERV-pdf-nyomtatvany.md](plans/TERV-pdf-nyomtatvany.md), 11. fejezet.
 
 ### Ha szerkeszted a `.vbs` fájlokat
 
@@ -1252,8 +1252,8 @@ változik, azokat módosítjuk, nem a JavaScriptet.
 
 ## Tervek
 
-- [TERV.md](TERV.md) — az alapok: nyilvántartás, séma, xlsx, docgen, PDF
-- [TERV-esemenyek.md](TERV-esemenyek.md) — ügykövetés és státusz-betekintő
-- [TERV-tesztanyag.md](TERV-tesztanyag.md) — próbasablonok és körbe-teszt
-- [TERV-adatbiztonsag.md](TERV-adatbiztonsag.md) — sérült fájl, visszaállítás, kiadás
-- [TERV-pdf-nyomtatvany.md](TERV-pdf-nyomtatvany.md) — kitölthető PDF-sablonok (példa: NEAK NYT.52)
+- [TERV.md](plans/TERV.md) — az alapok: nyilvántartás, séma, xlsx, docgen, PDF
+- [TERV-esemenyek.md](plans/TERV-esemenyek.md) — ügykövetés és státusz-betekintő
+- [TERV-tesztanyag.md](plans/TERV-tesztanyag.md) — próbasablonok és körbe-teszt
+- [TERV-adatbiztonsag.md](plans/TERV-adatbiztonsag.md) — sérült fájl, visszaállítás, kiadás
+- [TERV-pdf-nyomtatvany.md](plans/TERV-pdf-nyomtatvany.md) — kitölthető PDF-sablonok (példa: NEAK NYT.52)
