@@ -68,6 +68,24 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-11-03 (2.) — Frissítés törzsszám alapján: közvetlen vezető, placeholder-oszlopnevek
+
+**Cél:** a közvetlen vezető is jöjjön a táblázatból; oszlopnévnek a sablonjelölő
+(placeholder) legyen használható.
+**Változás (`v10.96`):** `XlsxRead.readRows` a `{{kulcs}}` / `{{kulcs_en}}`
+fejlécet is elfogadja (a meglévő import is). `planUpdate`: a `Leaders.FIELD`
+értéke `Leaders.canonical` szerint a fiók pontos neve; nem fiók → bekerül,
+tétel-megjegyzéssel (`megj`). `updateFile`: a vezető a mezőkörbe kerül, ha a
+csoportja írható. README frissítve.
+**Miért / döntés:** a jelölő a gépi kulcs — a Beállítások chipjéről másolható,
+egyértelmű, és a mező átnevezése nem rontja el (a magyar név igen). A név
+szerinti felismerés is marad. A nem-fiók vezető nem tiltott: a TERV-fiokok 10.2
+az importnál így döntött, és a fiókok még nincsenek mind felvéve.
+**Tesztek:** `node test/run-all.js` zöld (`xlsx` +2); a CDP-próba +3 lépés
+(placeholderes vezető-oszlop, figyelmeztetés, beírás) — 18/18, JS-hiba nélkül.
+
+**Nyitott / következő:** lásd az előző bejegyzést (éles próba SAP-exporttal).
+
 ## 2026-11-03 — Frissítés törzsszám alapján (SAP-export → meglévő dolgozók)
 
 **Cél:** tömeges adatfeltöltés meglévő dolgozókhoz egy táblázatból (SAP-export),

@@ -562,16 +562,19 @@ Nyilvántartás → **Frissítés törzsszám alapján…**: **meglévő** dolgo
 egy táblázatból, dolgozónként más-más értékkel. A táblázat felépítése:
 
 - **1. sor: oszlopnevek, a 2. sortól adat.** Kell egy törzsszám-oszlop
-  („Személyügyi törzsszám” vagy „Törzsszám”); a régi, lezárt törzsszám is
-  ráismer a dolgozóra.
-- **Csak a felismert nevű oszlopok számítanak**: a mező magyar vagy angol neve,
-  a gépi kulcsa vagy egy dokumentum-jelölője (Beállítások → mező). Ami nem kell,
-  azt az oszlopnév nélkül hagyd, vagy nevezd másként — kimarad. Új mezőt előbb a
-  Beállításokban kell felvenni.
-- Ugyanaz a mezőkör frissíthető, mint a tömeges szerkesztésben (név,
-  születési dátum, azonosítók, közvetlen vezető nem). A név-oszlop ettől még
-  hasznos: ha eltér a nyilvántartásétól, a tétel figyelmeztetést kap (elírt
-  törzsszám ellen).
+  (`{{personnel_reg_number}}`, „Személyügyi törzsszám” vagy „Törzsszám”); a
+  régi, lezárt törzsszám is ráismer a dolgozóra.
+- **Csak a felismert nevű oszlopok számítanak.** Legjobb oszlopnév a mező
+  **sablonjelölője**, pl. `{{hr_direct_leader}}` — Beállításokban a mező
+  melletti chipre kattintva vágólapra kerül, és a mező átnevezése sem rontja el.
+  Jó még a mező magyar vagy angol neve és a dokumentum-jelölői is. Ami nem kell,
+  azt nevezd másként — kimarad. Új mezőt előbb a Beállításokban kell felvenni.
+- Ugyanaz a mezőkör frissíthető, mint a tömeges szerkesztésben, **plusz a
+  közvetlen vezető** (név, születési dátum, azonosítók nem). A vezetőnél a
+  vezetői fiók pontos neve kerül be (ékezet- és kisbetű-függetlenül ráismer);
+  ami nem fiók, az is bekerül, de figyelmeztetést kap — amíg nincs ilyen nevű
+  fiók, a vezető nem látja a dolgozót. A név-oszlop is hasznos: ha eltér a
+  nyilvántartásétól, a tétel figyelmeztetést kap (elírt törzsszám ellen).
 
 Az előnézet tételenként mutatja: dolgozó, mező, jelenlegi → új érték. Az **üres
 mező kitöltése alapból kijelölt, a felülírás nem** — azt pipáld be, amelyiket

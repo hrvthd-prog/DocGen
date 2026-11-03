@@ -193,7 +193,13 @@ const RegistryXlsxIO = (() => {
         // Átlagos táblázat: fejléc az 1. sorban, adat a 2.-tól — nem az adatbekérő profilja
         olvasas = XlsxRead.readRows(buf, { schema: SchemaStore.get(), keyRow: 1, firstDataRow: 2 });
         if (!olvasas.rows.length) throw new Error('nincs benne adatsor.');
-        terv = XlsxRead.planUpdate(olvasas.rows, { mezok: BulkEdit.szerkesztheto().map(f => f.key) });
+        const mezok = BulkEdit.szerkesztheto().map(f => f.key);
+        // A közvetlen vezető a tömeges szerkesztésből kimarad (saját, fiókválasztós eszköze
+        // van), táblázatból viszont tölthető — ugyanazzal a jogosultsággal
+        let vezeto = null;
+        try { vezeto = SchemaStore.field(Leaders.FIELD); } catch { vezeto = null; }
+        if (vezeto && Auth.canWriteGroup(vezeto.group)) mezok.push(Leaders.FIELD);
+        terv = XlsxRead.planUpdate(olvasas.rows, { mezok });
       } catch (e) {
         toast('A fájl nem olvasható: ' + e.message, 'error');
         return;
@@ -223,7 +229,8 @@ const RegistryXlsxIO = (() => {
         <td>${escHtml(x.nev)}${x.figyelem ? `<br><span class="xio-dup">⚠ ${escHtml(x.figyelem)}</span>` : ''}</td>
         <td>${escHtml(cimke(x.key))}</td>
         <td>${x.from ? `<span class="xio-upd">felülírás:</span> ${ertek(x.key, x.from)}` : '—'}</td>
-        <td><b>${ertek(x.key, x.to)}</b>${x.hiba ? `<br>${escHtml(x.hiba)}` : ''}</td>
+        <td><b>${ertek(x.key, x.to)}</b>${x.hiba ? `<br>${escHtml(x.hiba)}` : ''}${
+          x.megj ? `<br><span class="xio-dup">⚠ ${escHtml(x.megj)}</span>` : ''}</td>
       </tr>`).join('');
 
     showDialog({

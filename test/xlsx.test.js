@@ -898,6 +898,36 @@ atest('érvénytelen érték hibát kap, nem kerül csendben be', async () => {
   assert(p.tetelek[0].hiba, 'nem jelezte az ismeretlen értéket');
 });
 
+atest('a sablonjelölő ({{kulcs}}, {{kulcs_en}}) is oszlopnév', async () => {
+  const buf = await sapTabla([['{{personnel_reg_number}}', '{{ hr_k2 }}', '{{hr_time_admin_en}}', '{{nincs_ilyen}}'],
+                              ['111', 'a', 'b', 'c']]);
+  const olv = XlsxRead.readRows(buf, { schema: SchemaStore.get(), keyRow: 1, firstDataRow: 2 });
+  assertEq(olv.rows[0].fields.personnel_reg_number, '111');
+  assertEq(olv.rows[0].fields.hr_k2, 'a');
+  assertEq(olv.rows[0].fields.hr_time_admin, 'b');
+  assertEq(olv.unknownColumns.join(), '{{nincs_ilyen}}');
+});
+
+atest('közvetlen vezető: a fiók pontos neve megy be, a nem fiók jelezve', async () => {
+  EmployeeRepo.useBackend(EmployeeRepo.createMemoryBackend());
+  await EmployeeRepo.load();
+  EmployeeRepo.create({ fields: { surname: 'Kovács', forename: 'Anna' }, identifiers: [{ type: 'sap', value: '111' }] });
+  EmployeeRepo.create({ fields: { surname: 'Nagy', forename: 'Béla' }, identifiers: [{ type: 'sap', value: '222' }] });
+  // A Leaders a fiókokra támaszkodik — itt egyetlen vezetői fiók: „Vezető Péter”
+  sandbox.Leaders = { FIELD: 'hr_direct_leader',
+    canonical: n => String(n).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase() === 'vezeto peter' ? 'Vezető Péter' : '' };
+  try {
+    const buf = await sapTabla([['Törzsszám', '{{hr_direct_leader}}'], ['111', 'VEZETO PETER'], ['222', 'Ismeretlen Úr']]);
+    const olv = XlsxRead.readRows(buf, { schema: SchemaStore.get(), keyRow: 1, firstDataRow: 2 });
+    const p = XlsxRead.planUpdate(olv.rows, { mezok: ['hr_direct_leader'] });
+    assertEq(p.tetelek.length, 2);
+    assertEq(p.tetelek[0].to, 'Vezető Péter', 'nem a fiók pontos neve');
+    assertEq(p.tetelek[0].megj, '');
+    assertEq(p.tetelek[1].to, 'Ismeretlen Úr');
+    assert(/Nem vezetői fiók/.test(p.tetelek[1].megj), 'nem jelezte, hogy nem fiók');
+  } finally { delete sandbox.Leaders; }
+});
+
 atest('törzsszám-oszlop nélkül nem párosít', async () => {
   const buf = await sapTabla([['Vezetéknév', 'K2'], ['Kovács', 'x']]);
   const olv = XlsxRead.readRows(buf, { schema: SchemaStore.get(), keyRow: 1, firstDataRow: 2 });

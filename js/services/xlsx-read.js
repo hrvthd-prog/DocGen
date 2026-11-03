@@ -33,7 +33,11 @@ const XlsxRead = (() => {
     for (let c = range.s.c; c <= range.e.c; c++) {
       const key = text(ws, keyRow - 1, c);
       if (!key) continue;
-      const f = known.get(key) || matchByLabel(key, schema);
+      // A sablonjelölő is jó oszlopnév: {{kulcs}} / {{kulcs_en}} — a Beállításokban
+      // a mező chipjéről másolható, és a mező átnevezése sem rontja el
+      const jelolo = (/^\{\{\s*(.+?)\s*\}\}$/.exec(key) || [])[1];
+      const f = jelolo ? (known.get(jelolo) || known.get(jelolo.replace(/_en$/, '')))
+                       : (known.get(key) || matchByLabel(key, schema));
       if (f) oszlopok.push({ field: f, c });
       else ismeretlen.push(key);
     }
@@ -232,7 +236,7 @@ const XlsxRead = (() => {
    * figyelmeztetést kap — egy elírt törzsszám így nem írja csendben más
    * dolgozó adatát.
    *
-   * → { tetelek: [{ excelRow, emp, nev, key, from, to, hiba, figyelem }],
+   * → { tetelek: [{ excelRow, emp, nev, key, from, to, hiba, figyelem, megj }],
    *     nemTalalt: [{ excelRow, ertek }], ismetlodo: [{ excelRow, elso }], kimarado: [key] }
    */
   function planUpdate(rows, { mezok }) {
@@ -267,10 +271,17 @@ const XlsxRead = (() => {
 
       for (const key of oszlopok) {
         if (!mezok.includes(key)) continue;
-        const to = str(row.fields[key]), from = str(emp.fields[key]);
+        let to = str(row.fields[key]), megj = '';
+        // Közvetlen vezető: a fiók pontos neve megy be; ami nem fiók, bekerül, de jelezzük (TERV-fiokok.md 10.2)
+        if (to && typeof Leaders !== 'undefined' && key === Leaders.FIELD) {
+          const fiok = Leaders.canonical(to);
+          if (fiok) to = fiok;
+          else megj = 'Nem vezetői fiók — amíg nincs ilyen nevű fiók, a vezető nem látja a dolgozót';
+        }
+        const from = str(emp.fields[key]);
         if (!to || to === from) continue;
         const hiba = (SchemaStore.validateValues({ [key]: to }).find(p => p.key === key) || {}).message || '';
-        out.tetelek.push({ excelRow: row.excelRow, emp, nev, key, from, to, hiba, figyelem });
+        out.tetelek.push({ excelRow: row.excelRow, emp, nev, key, from, to, hiba, figyelem, megj });
       }
     }
     return out;
