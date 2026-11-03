@@ -556,6 +556,30 @@ program visszaolvassa a tárolóból. Nem szerkeszthető így a név, a szület�
 dátum, az azonosítók (az Azonosítók blokkból jönnek) és a közvetlen vezető
 (arra a *Közvetlen vezető…* gomb való).
 
+### Frissítés törzsszám alapján (pl. SAP-exportból)
+
+Nyilvántartás → **Frissítés törzsszám alapján…**: **meglévő** dolgozók adatai
+egy táblázatból, dolgozónként más-más értékkel. A táblázat felépítése:
+
+- **1. sor: oszlopnevek, a 2. sortól adat.** Kell egy törzsszám-oszlop
+  („Személyügyi törzsszám” vagy „Törzsszám”); a régi, lezárt törzsszám is
+  ráismer a dolgozóra.
+- **Csak a felismert nevű oszlopok számítanak**: a mező magyar vagy angol neve,
+  a gépi kulcsa vagy egy dokumentum-jelölője (Beállítások → mező). Ami nem kell,
+  azt az oszlopnév nélkül hagyd, vagy nevezd másként — kimarad. Új mezőt előbb a
+  Beállításokban kell felvenni.
+- Ugyanaz a mezőkör frissíthető, mint a tömeges szerkesztésben (név,
+  születési dátum, azonosítók, közvetlen vezető nem). A név-oszlop ettől még
+  hasznos: ha eltér a nyilvántartásétól, a tétel figyelmeztetést kap (elírt
+  törzsszám ellen).
+
+Az előnézet tételenként mutatja: dolgozó, mező, jelenlegi → új érték. Az **üres
+mező kitöltése alapból kijelölt, a felülírás nem** — azt pipáld be, amelyiket
+kéred (a fejléc pipája mindet). Az üres cella semmit nem töröl, új dolgozó nem
+jön létre, a nem található törzsszámok és a hibás értékek listázva kimaradnak.
+Jóváhagyás után a változásnaplóba „import törzsszám alapján” forrással kerül,
+és a program visszaolvassa a tárolóból.
+
 ### Legutóbbi változások
 
 Nyilvántartás → **Legutóbbi változások**: az összes dolgozó naplója egy

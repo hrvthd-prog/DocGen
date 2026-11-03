@@ -331,6 +331,11 @@ const RegistryModule = (() => {
                   Import adatbekérőből…
                   <input type="file" id="rg-import" accept=".xlsx,.xlsm" hidden>
                 </label>
+                <label class="btn btn-ghost btn-sm sv-file-btn"
+                       title="Meglévő dolgozók adatai egy táblázatból (pl. SAP-export): a törzsszám párosít, a felismert nevű oszlopok frissülnek — tételenként jóváhagyva">
+                  Frissítés törzsszám alapján…
+                  <input type="file" id="rg-update" accept=".xlsx,.xlsm" hidden>
+                </label>
                 <button class="btn btn-ghost btn-sm" id="rg-export-data">Export xlsx-be</button>
                 <button class="btn btn-ghost btn-sm" id="rg-export-template">Üres sablon letöltése</button>
                 <button class="btn btn-ghost btn-sm" id="rg-recent"
@@ -589,6 +594,13 @@ const RegistryModule = (() => {
       if (!file) return;
       if (!state.ready) { toast('A nyilvántartás még nem töltődött be.', 'error'); return; }
       RegistryXlsxIO.importFile(file, renderList);
+    });
+    document.getElementById('rg-update').addEventListener('change', ev => {
+      const file = ev.target.files[0];
+      ev.target.value = '';
+      if (!file) return;
+      if (!state.ready) { toast('A nyilvántartás még nem töltődött be.', 'error'); return; }
+      RegistryXlsxIO.updateFile(file, renderList);
     });
     document.getElementById('rg-export-data').addEventListener('click', () => {
       // A szűrt (látható) halmazt exportáljuk – amit a felhasználó épp lát

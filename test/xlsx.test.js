@@ -838,6 +838,74 @@ atest('hiányos sor kimarad, nem hoz létre féloldalas rekordot', async () => {
   assertEq(EmployeeRepo.count(), 0);
 });
 
+// ════════════════════════════════════════════════════════════════════════════
+asection('Adatfrissítés törzsszám alapján (SAP-export)');
+
+const FRISSITHETO = ['hr_k2', 'hr_time_admin', 'sex'];
+
+async function sapTabla(sorok) {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Sheet1');
+  sorok.forEach((s, i) => { ws.getRow(i + 1).values = s; });
+  return wb.xlsx.writeBuffer();
+}
+
+atest('meglévő dolgozót frissít; üres cella nem töröl, új dolgozó nem jön létre', async () => {
+  EmployeeRepo.useBackend(EmployeeRepo.createMemoryBackend());
+  await EmployeeRepo.load();
+  const a = EmployeeRepo.create({ fields: { surname: 'Kovács', forename: 'Anna', hr_k2: 'régi', hr_time_admin: 'Marad' },
+                                  identifiers: [{ type: 'sap', value: 'SAP-111' }] });
+  EmployeeRepo.addIdentifier(a.id, { type: 'sap', value: 'SAP-222' });
+  const b = EmployeeRepo.create({ fields: { surname: 'Nagy', forename: 'Béla' },
+                                  identifiers: [{ type: 'sap', value: 'SAP-333' }] });
+
+  const buf = await sapTabla([
+    ['Személyügyi törzsszám', 'Vezetéknév', 'K2', 'Időrögzítési ügyintéző', 'SAP belső oszlop'],
+    ['SAP-111', 'Kovacs', 'új', '', 'x'],          // régi szám, ékezet nélküli név
+    ['SAP-333', 'Másik', '', 'Tóth Ági', 'x'],      // eltérő név → figyelmeztetés
+    ['SAP-999', '', 'k', '', 'x'],                  // ismeretlen
+    ['SAP-222', '', 'más', '', 'x'],                // ugyanaz a dolgozó, mint a 2. sor
+    [null, '', 'k', '', 'x'],                       // nincs törzsszám
+  ]);
+  const olv = XlsxRead.readRows(buf, { schema: SchemaStore.get(), keyRow: 1, firstDataRow: 2 });
+  assertEq(olv.rows.length, 5, 'a fejléc utáni első adatsor kimaradt');
+  assertEq(olv.unknownColumns.join(), 'SAP belső oszlop');
+
+  const p = XlsxRead.planUpdate(olv.rows, { mezok: FRISSITHETO });
+  assertEq(p.tetelek.length, 2, JSON.stringify(p.tetelek.map(t => t.key)));
+  const ta = p.tetelek.find(t => t.emp.id === a.id);
+  assertEq(ta.key, 'hr_k2');  assertEq(ta.from, 'régi');  assertEq(ta.to, 'új');
+  assertEq(ta.figyelem, '', 'az ékezet nélküli név nem eltérés');
+  const tb = p.tetelek.find(t => t.emp.id === b.id);
+  assertEq(tb.key, 'hr_time_admin');  assertEq(tb.from, '');  assertEq(tb.to, 'Tóth Ági');
+  assert(tb.figyelem.includes('Másik'), 'nem jelezte az eltérő nevet');
+
+  assertEq(p.nemTalalt.map(n => n.ertek).join('|'), 'SAP-999|');
+  assertEq(p.ismetlodo.length, 1);  assertEq(p.ismetlodo[0].elso, 2);
+  assertEq(p.kimarado.join(), 'surname', 'a név nem frissülhet');
+  assertEq(EmployeeRepo.count(), 2, 'új dolgozó jött létre');
+  assertEq(EmployeeRepo.get(a.id).fields.hr_k2, 'régi', 'a terv módosított');
+});
+
+atest('érvénytelen érték hibát kap, nem kerül csendben be', async () => {
+  EmployeeRepo.useBackend(EmployeeRepo.createMemoryBackend());
+  await EmployeeRepo.load();
+  EmployeeRepo.create({ fields: { surname: 'Kovács', forename: 'Anna' }, identifiers: [{ type: 'sap', value: '111' }] });
+  const buf = await sapTabla([['Törzsszám', 'Neme'], ['111', 'egyéb']]);
+  const olv = XlsxRead.readRows(buf, { schema: SchemaStore.get(), keyRow: 1, firstDataRow: 2 });
+  const p = XlsxRead.planUpdate(olv.rows, { mezok: FRISSITHETO });
+  assertEq(p.tetelek.length, 1);
+  assert(p.tetelek[0].hiba, 'nem jelezte az ismeretlen értéket');
+});
+
+atest('törzsszám-oszlop nélkül nem párosít', async () => {
+  const buf = await sapTabla([['Vezetéknév', 'K2'], ['Kovács', 'x']]);
+  const olv = XlsxRead.readRows(buf, { schema: SchemaStore.get(), keyRow: 1, firstDataRow: 2 });
+  let hiba = null;
+  try { XlsxRead.planUpdate(olv.rows, { mezok: FRISSITHETO }); } catch (e) { hiba = e; }
+  assert(hiba && /törzsszám/.test(hiba.message), 'nem jelezte a hiányzó törzsszám-oszlopot');
+});
+
 // ── Futtatás ────────────────────────────────────────────────────────────────
 // ════════════════════════════════════════════════════════════════════════════
 // Az xlsx-kiírás időkorlátja

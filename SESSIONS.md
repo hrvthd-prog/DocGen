@@ -68,6 +68,42 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-11-03 — Frissítés törzsszám alapján (SAP-export → meglévő dolgozók)
+
+**Cél:** tömeges adatfeltöltés meglévő dolgozókhoz egy táblázatból (SAP-export),
+törzsszám szerinti párosítással; a táblázatnak nem minden oszlopa kell.
+**Változás (`v10.95`):** Nyilvántartás → új **Frissítés törzsszám alapján…** gomb.
+`XlsxRead.planUpdate` (a párosítás, semmit nem ír) + `RegistryXlsxIO.updateFile`
+(előnézet tételenkénti pipával); az írás a `BulkEdit.alkalmaz` (visszaolvasással),
+naplóforrás `import_frissites`. README: új alfejezet a Tömeges szerkesztés után.
+**Miért / döntés:**
+- A meglévő import erre nem jó: az üres cella törölt volna, a hiányzó név miatt
+  „hiányos” sorként kidobta volna, ismeretlen számmal új dolgozót hozhatott volna
+  létre, és az adatot a 4. sortól olvassa (az adatbekérő profilja). Ezért külön
+  út: fejléc az 1. sorban, adat a 2.-tól.
+- A felhasználó döntései: az oszlopneveket ő igazítja (nincs oszlop → mező
+  párosító felület; a felismerés a meglévő `matchByLabel`: kulcs, HU/EN név,
+  jelölők); a felülírásról **tételenként** dönt → a kitöltés alapból kijelölt, a
+  felülírás nem; új mező a Beállításokban vehető fel (ehhez nem kellett kód).
+- A mezőkör a tömeges szerkesztésé (`BulkEdit.szerkesztheto`: név, szül. dátum,
+  azonosítók, közvetlen vezető nem; jogosultság szerint). Ha az azonosítókat
+  (TAJ, adószám…) is így kellene tölteni, az `addIdentifier` útján lehetne — nem
+  kérték.
+- A név-oszlop csak ellenőriz: eltérő név → figyelmeztetés (ékezet nélkül
+  hasonlít), az elírt törzsszám ellen. Ugyanaz a dolgozó többször → csak az első
+  sora számít.
+**Tesztek:** `node test/run-all.js` zöld (`xlsx` +3). Headless Chrome + CDP, próba
+mód (eldobható, nincs a repóban): 15 lépés — gomb, előnézet, alapértelmezett
+pipák, nem található / ismétlődő / eltérő név / hibás érték, írás, napló, „mind”
+pipa a felülírásra; JS-hiba nélkül.
+
+**Nyitott / következő:**
+- **Éles próba a céges gépen** egy valódi SAP-exporttal: ha minden sor „nem
+  található”, a törzsszám alakja eltér (pl. a számként tárolt cellából elvesznek
+  a vezető nullák) — ezt most nem kezeljük, mert nem tudjuk, előfordul-e.
+- A DocGen-exportot (3 fejlécsor) is el lehet itt olvasni, de a 2–3. sora „nem
+  található” sorként jelenik meg; erre a mostani adatbekérő-import való.
+
 ## 2026-10-29 (3.) — SAP-táblázat: a Kilépés és az Új belépés nincs előtöltve
 
 **Cél:** a felhasználó javítása: a Kilépés NEM a döntés napja; mindkét dátum

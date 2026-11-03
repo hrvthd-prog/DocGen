@@ -220,5 +220,61 @@ const XlsxRead = (() => {
     return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
   }
 
-  return { readRows, plan, apply, _toIsoDate: toIsoDate, _identifiersFrom: identifiersFrom };
+  /**
+   * Adatfrissítés törzsszám alapján (pl. SAP-exportból) — semmit nem módosít.
+   *
+   * A sort a törzsszám párosítja, az azonosító-történettel együtt (a régi szám
+   * is talál). Név szerint nem: a táblázatban nem kell, hogy legyen név. Új
+   * dolgozó nem jön létre, és az üres cella nem töröl. Csak a `mezok` közötti
+   * mezők frissülnek; a többi felismert oszlop kimarad.
+   *
+   * Ha a táblázatban van név is, és eltér a nyilvántartásétól, a tétel
+   * figyelmeztetést kap — egy elírt törzsszám így nem írja csendben más
+   * dolgozó adatát.
+   *
+   * → { tetelek: [{ excelRow, emp, nev, key, from, to, hiba, figyelem }],
+   *     nemTalalt: [{ excelRow, ertek }], ismetlodo: [{ excelRow, elso }], kimarado: [key] }
+   */
+  function planUpdate(rows, { mezok }) {
+    const KULCS = EmployeeRepo.IDENTIFIER_FIELD_MAP.sap;
+    const str = x => String(x == null ? '' : x).trim();
+    const nevNorm = s => str(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').toLowerCase();
+    const oszlopok = rows.length ? Object.keys(rows[0].fields) : [];
+    if (!oszlopok.includes(KULCS)) {
+      throw new Error('nincs benne törzsszám-oszlop („Személyügyi törzsszám” vagy „Törzsszám”).');
+    }
+
+    const out = { tetelek: [], nemTalalt: [], ismetlodo: [],
+                  kimarado: oszlopok.filter(k => k !== KULCS && !mezok.includes(k)) };
+    const elsoSor = new Map();   // dolgozó → az első sora a fájlban
+
+    for (const row of rows) {
+      const tsz = str(row.fields[KULCS]);
+      const emp = tsz ? EmployeeRepo.findByIdentifier(tsz, 'sap') : null;
+      if (!emp) { out.nemTalalt.push({ excelRow: row.excelRow, ertek: tsz }); continue; }
+      if (elsoSor.has(emp.id)) {
+        out.ismetlodo.push({ excelRow: row.excelRow, elso: elsoSor.get(emp.id) });
+        continue;
+      }
+      elsoSor.set(emp.id, row.excelRow);
+
+      const nev = [emp.fields.surname, emp.fields.forename].filter(Boolean).join(' ') || '(névtelen)';
+      const elter = ['surname', 'forename'].filter(k =>
+        str(row.fields[k]) && nevNorm(row.fields[k]) !== nevNorm(emp.fields[k]));
+      const figyelem = elter.length
+        ? `A táblázatban más név áll: ${[row.fields.surname, row.fields.forename].filter(Boolean).join(' ')}`
+        : '';
+
+      for (const key of oszlopok) {
+        if (!mezok.includes(key)) continue;
+        const to = str(row.fields[key]), from = str(emp.fields[key]);
+        if (!to || to === from) continue;
+        const hiba = (SchemaStore.validateValues({ [key]: to }).find(p => p.key === key) || {}).message || '';
+        out.tetelek.push({ excelRow: row.excelRow, emp, nev, key, from, to, hiba, figyelem });
+      }
+    }
+    return out;
+  }
+
+  return { readRows, plan, apply, planUpdate, _toIsoDate: toIsoDate, _identifiersFrom: identifiersFrom };
 })();

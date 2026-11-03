@@ -180,5 +180,137 @@ const RegistryXlsxIO = (() => {
     });
   }
 
-  return { exportTemplate, exportData, importFile };
+  // ── Adatfrissítés törzsszám alapján ────────────────────────────────────────
+
+  /**
+   * Meglévő dolgozók mezőinek frissítése egy táblázatból (pl. SAP-exportból).
+   * Csak a felismert nevű oszlopok számítanak; tételenként jóváhagyandó.
+   */
+  function updateFile(file, onDone) {
+    file.arrayBuffer().then(buf => {
+      let olvasas, terv;
+      try {
+        // Átlagos táblázat: fejléc az 1. sorban, adat a 2.-tól — nem az adatbekérő profilja
+        olvasas = XlsxRead.readRows(buf, { schema: SchemaStore.get(), keyRow: 1, firstDataRow: 2 });
+        if (!olvasas.rows.length) throw new Error('nincs benne adatsor.');
+        terv = XlsxRead.planUpdate(olvasas.rows, { mezok: BulkEdit.szerkesztheto().map(f => f.key) });
+      } catch (e) {
+        toast('A fájl nem olvasható: ' + e.message, 'error');
+        return;
+      }
+      showUpdateDialog(olvasas, terv, onDone);
+    });
+  }
+
+  function showUpdateDialog(olvasas, terv, onDone) {
+    const t = terv.tetelek;
+    const dolgozok = new Set(t.map(x => x.emp.id)).size;
+    const hibas = t.filter(x => x.hiba).length;
+    const felulir = t.filter(x => x.from && !x.hiba).length;
+    const cimke = k => SchemaStore.field(k).label.hu;
+    // Enum és dátum olvasható alakban, mint a tömeges szerkesztés összesítőjében
+    const ertek = (k, x) => {
+      const f = SchemaStore.field(k);
+      return x ? escHtml(f.type === 'text' ? x : (SchemaStore.renderValue(f, x, 'hu') || x)) : '—';
+    };
+    const lista = (cim, elemek) => elemek.length
+      ? `<br>${cim}: <b>${escHtml(elemek.join(', '))}</b>` : '';
+
+    const sorok = t.map((x, i) => `
+      <tr class="${x.hiba ? 'xio-invalid' : ''}">
+        <td><input type="checkbox" data-xu="${i}" ${x.hiba ? 'disabled' : (x.from ? '' : 'checked')}></td>
+        <td>${x.excelRow}</td>
+        <td>${escHtml(x.nev)}${x.figyelem ? `<br><span class="xio-dup">⚠ ${escHtml(x.figyelem)}</span>` : ''}</td>
+        <td>${escHtml(cimke(x.key))}</td>
+        <td>${x.from ? `<span class="xio-upd">felülírás:</span> ${ertek(x.key, x.from)}` : '—'}</td>
+        <td><b>${ertek(x.key, x.to)}</b>${x.hiba ? `<br>${escHtml(x.hiba)}` : ''}</td>
+      </tr>`).join('');
+
+    showDialog({
+      title: 'Frissítés törzsszám alapján — előnézet',
+      body: `
+        <div class="xio-wrap">
+          <p class="ef-hint">
+            Munkalap: <b>${escHtml(olvasas.sheetName)}</b> · ${olvasas.rows.length} sor beolvasva.
+            ${lista('Nem található törzsszám (kimarad)',
+              terv.nemTalalt.map(n => `${n.ertek || '(üres)'} — ${n.excelRow}. sor`))}
+            ${lista('Ugyanaz a dolgozó többször (csak az első sora számít)',
+              terv.ismetlodo.map(n => `${n.excelRow}. sor (= ${n.elso}. sor)`))}
+            ${lista('Itt nem frissíthető oszlop (kimarad)', terv.kimarado.map(k =>
+              cimke(k) + (k === 'surname' || k === 'forename' ? ' — csak névellenőrzés' : '')))}
+            ${lista('Ismeretlen oszlop (kimarad)', olvasas.unknownColumns)}
+          </p>
+          <div class="xio-summary">
+            <span><b>${dolgozok}</b> dolgozó</span>
+            <span><b>${t.length - felulir - hibas}</b> üres mező kitöltése</span>
+            <span class="xio-warn"><b>${felulir}</b> felülírás</span>
+            ${hibas ? `<span class="xio-warn"><b>${hibas}</b> hibás érték (nem írható be)</span>` : ''}
+            ${terv.nemTalalt.length ? `<span class="xio-warn"><b>${terv.nemTalalt.length}</b> nem található</span>` : ''}
+          </div>
+          ${t.length ? `
+          <div class="data-table-wrap xio-table">
+            <table class="data-table">
+              <thead><tr><th><input type="checkbox" id="xu-mind" title="Mind / egyik sem"></th>
+                <th>Sor</th><th>Dolgozó</th><th>Mező</th><th>Jelenlegi</th><th>Új</th></tr></thead>
+              <tbody>${sorok}</tbody>
+            </table>
+          </div>
+          <p class="ef-hint">A felülírások alapból nincsenek kijelölve — pipáld be, amelyiket kéred.
+            Az üres cella semmit nem töröl; új dolgozó nem jön létre.</p>`
+          : '<p>Nincs mit frissíteni: minden kitöltött cella egyezik a nyilvántartással.</p>'}
+        </div>`,
+      footer: `
+        <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Mégse</button>
+        <button class="btn btn-primary btn-sm" id="xu-apply" ${t.length ? '' : 'disabled'}>Kijelöltek rögzítése</button>`,
+    });
+
+    const pipak = [...document.querySelectorAll('#dialog-overlay [data-xu]')].filter(c => !c.disabled);
+    const mind = document.getElementById('xu-mind');
+    if (mind) mind.addEventListener('change', () => pipak.forEach(c => { c.checked = mind.checked; }));
+
+    const gomb = document.getElementById('xu-apply');
+    gomb.addEventListener('click', async () => {
+      // Dolgozónként egy írás — a BulkEdit.alkalmaz sor-alakjában
+      const perDolgozo = new Map();
+      for (const c of pipak.filter(c => c.checked)) {
+        const x = t[c.dataset.xu];
+        if (!perDolgozo.has(x.emp.id)) perDolgozo.set(x.emp.id, { emp: x.emp, nev: x.nev, uj: {}, valtozasok: [] });
+        const s = perDolgozo.get(x.emp.id);
+        s.uj[x.key] = x.to;
+        s.valtozasok.push(x);
+      }
+      if (!perDolgozo.size) { toast('Nincs kijelölt tétel.', 'error'); return; }
+
+      gomb.disabled = true;
+      gomb.textContent = 'Rögzítés…';
+      let r;
+      try {
+        r = await BulkEdit.alkalmaz([...perDolgozo.values()], 'import_frissites');
+      } catch (e) {
+        gomb.disabled = false;
+        gomb.textContent = 'Kijelöltek rögzítése';
+        toast('A mentés nem sikerült: ' + e.message, 'error');
+        return;
+      }
+      BevLogger.info('IMPORT_FRISSITES', `Frissítés törzsszám alapján: ${perDolgozo.size} dolgozó`,
+        `hibak=${r.hibak.length}, nemMentett=${r.nemMentett.length}`, '');
+      if (onDone) onDone();
+      if (!r.hibak.length && !r.nemMentett.length) {
+        closeDialog();
+        toast(`✓ ${perDolgozo.size} dolgozó adata frissítve, és visszaolvasva`, 'success');
+        return;
+      }
+      showDialog({
+        title: 'A frissítés részben sikerült',
+        body: `
+          ${r.hibak.length ? `<p>Nem módosult:</p><ul>${r.hibak.map(h =>
+            `<li><b>${escHtml(h.nev)}</b>: ${escHtml(h.uzenet)}</li>`).join('')}</ul>` : ''}
+          ${r.nemMentett.length ? `<p>⚠ Visszaolvasáskor eltérés — ezek NEM kerültek a tárolóba:
+            ${r.nemMentett.map(escHtml).join(', ')}. Ellenőrizd az adatmappát, és töltsd újra.</p>` : ''}`,
+        footer: '<button class="btn btn-primary btn-sm" onclick="closeDialog()">Rendben</button>',
+      });
+    });
+  }
+
+  return { exportTemplate, exportData, importFile, updateFile };
 })();

@@ -24,6 +24,7 @@ const EmployeeHistory = (() => {
   const SOURCE_LABEL = {
     urlap:  'űrlap',
     import: 'import',
+    import_frissites: 'import törzsszám alapján',
     ugy:    'ügy',
     tomeges: 'tömeges művelet',
     fiok:   'fiók átnevezése',
