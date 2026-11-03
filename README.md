@@ -570,11 +570,15 @@ egy táblázatból, dolgozónként más-más értékkel. A táblázat felépít�
   Jó még a mező magyar vagy angol neve és a dokumentum-jelölői is. Ami nem kell,
   azt nevezd másként — kimarad. Új mezőt előbb a Beállításokban kell felvenni.
 - Ugyanaz a mezőkör frissíthető, mint a tömeges szerkesztésben, **plusz a
-  közvetlen vezető** (név, születési dátum, azonosítók nem). A vezetőnél a
-  vezetői fiók pontos neve kerül be (ékezet- és kisbetű-függetlenül ráismer);
-  ami nem fiók, az is bekerül, de figyelmeztetést kap — amíg nincs ilyen nevű
-  fiók, a vezető nem látja a dolgozót. A név-oszlop is hasznos: ha eltér a
-  nyilvántartásétól, a tétel figyelmeztetést kap (elírt törzsszám ellen).
+  közvetlen vezető** (név, születési dátum, azonosítók nem). A név-oszlop is
+  hasznos: ha eltér a nyilvántartásétól, a tétel figyelmeztetést kap (elírt
+  törzsszám ellen).
+- **Fiókhoz kötött mezők — közvetlen vezető (`{{hr_direct_leader}}`) és HRBP
+  (`{{hr_hrbp}}`):** a fiók pontos neve kerül be (ékezet- és
+  kisbetű-függetlenül ráismer: vezetőnél vezetői, HRBP-nél „HR Business
+  Partner” szintű fiók). Ami nem fiók, az **is bekerül**, csak figyelmeztetést
+  kap — a táblázat adata nem vész el, a fiók utólag is felvehető. (Nem fiók
+  vezetőnél: amíg nincs ilyen nevű fiók, a vezető nem látja a dolgozót.)
 
 Az előnézet tételenként mutatja: dolgozó, mező, jelenlegi → új érték. Az **üres
 mező kitöltése alapból kijelölt, a felülírás nem** — azt pipáld be, amelyiket

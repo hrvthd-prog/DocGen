@@ -232,6 +232,9 @@ const XlsxRead = (() => {
    * dolgozó nem jön létre, és az üres cella nem töröl. Csak a `mezok` közötti
    * mezők frissülnek; a többi felismert oszlop kimarad.
    *
+   * `fiokMezok`: { mezőkulcs: { canonical(nev) → fiók pontos neve vagy '', megj } }
+   * — a fiókhoz kötött mezők (közvetlen vezető, HRBP).
+   *
    * Ha a táblázatban van név is, és eltér a nyilvántartásétól, a tétel
    * figyelmeztetést kap — egy elírt törzsszám így nem írja csendben más
    * dolgozó adatát.
@@ -239,7 +242,7 @@ const XlsxRead = (() => {
    * → { tetelek: [{ excelRow, emp, nev, key, from, to, hiba, figyelem, megj }],
    *     nemTalalt: [{ excelRow, ertek }], ismetlodo: [{ excelRow, elso }], kimarado: [key] }
    */
-  function planUpdate(rows, { mezok }) {
+  function planUpdate(rows, { mezok, fiokMezok = {} }) {
     const KULCS = EmployeeRepo.IDENTIFIER_FIELD_MAP.sap;
     const str = x => String(x == null ? '' : x).trim();
     const nevNorm = s => str(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').toLowerCase();
@@ -272,11 +275,12 @@ const XlsxRead = (() => {
       for (const key of oszlopok) {
         if (!mezok.includes(key)) continue;
         let to = str(row.fields[key]), megj = '';
-        // Közvetlen vezető: a fiók pontos neve megy be; ami nem fiók, bekerül, de jelezzük (TERV-fiokok.md 10.2)
-        if (to && typeof Leaders !== 'undefined' && key === Leaders.FIELD) {
-          const fiok = Leaders.canonical(to);
-          if (fiok) to = fiok;
-          else megj = 'Nem vezetői fiók — amíg nincs ilyen nevű fiók, a vezető nem látja a dolgozót';
+        // Fiókhoz kötött mező (vezető, HRBP): a fiók pontos neve megy be; ami nem
+        // fiók, az is bekerül — nem dobjuk el, csak jelezzük (TERV-fiokok.md 10.2)
+        const fm = fiokMezok[key];
+        if (to && fm) {
+          const fiok = fm.canonical(to);
+          if (fiok) to = fiok; else megj = fm.megj;
         }
         const from = str(emp.fields[key]);
         if (!to || to === from) continue;

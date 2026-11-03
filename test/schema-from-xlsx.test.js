@@ -129,7 +129,7 @@ const FORMANYOMTATVANY_MEZOK = [
   'hr_education_completion_date', 'hr_education_institution', 'hr_education_specialization',
   'hr_emergency_contact_name', 'hr_emergency_contact_phone',
   'hr_language_skills', 'hr_previous_employer', 'hr_previous_employment_end',
-  'hr_sg_category', 'hr_time_admin', 'hr_k2',
+  'hr_sg_category', 'hr_time_admin', 'hr_k2', 'hr_hrbp',
 ].sort();
 
 test('a kiinduló séma megegyezik a fájllal – csak a formanyomtatvány-mezők újak', () => {

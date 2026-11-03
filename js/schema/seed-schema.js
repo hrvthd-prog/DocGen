@@ -473,6 +473,12 @@ const SEED_SCHEMA = {
       label: { hu: 'Közvetlen vezető', en: 'Direct Leader (filled by HR)' },
       hint: { en: 'FILLED BY HR — please leave empty.' } },
 
+    // A dolgozó HR Business Partnere — HRBP szintű fiók neve; táblázatból a
+    // „Frissítés törzsszám alapján” tölti, a nem fiók nevet jelezve.
+    { key: 'hr_hrbp', group: 'hr_belso', type: 'text',
+      label: { hu: 'HRBP', en: 'HR Business Partner (filled by HR)' },
+      hint: { en: 'FILLED BY HR — please leave empty.' } },
+
     // A SAP-ticket táblázatához (plans/TERV-kimenet-es-ugyek.md 6.3); a
     // „Felettes” oszlop a Közvetlen vezető.
     { key: 'hr_time_admin', group: 'hr_belso', type: 'text',

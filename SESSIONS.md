@@ -68,6 +68,33 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-11-03 (3.) — HRBP-hozzárendelés a törzsszámos frissítéssel
+
+**Cél:** a dolgozók HRBP-je is táblázatból jöjjön, a vezetőével azonos
+módszerrel: fiók nélküli névnél jelzés, de az adat ne vesszen el.
+**Változás (`v10.97`):** új seed-mező `hr_hrbp` („HRBP”, `hr_belso`, a Közvetlen
+vezető után; az adatbekérőből kizárva, mint a `hr_time_admin`/`hr_k2`). A
+`planUpdate` vezetős különesete általános lett: `fiokMezok` paraméter (mező →
+`canonical` + figyelmeztetés); az `updateFile` adja a vezetőét (`Leaders.canonical`)
+és a HRBP-ét (`hrbpFiok`: a beépített `hrbp` szintű fiókok). Teszt-mezőlisták
+(`schema`, `schema-from-xlsx`) bővítve; README.
+**Miért / döntés:**
+- Mező kellett: a HRBP eddig csak szint volt, dolgozóhoz semmi nem kötötte. A
+  seedbe került, mert az `addMissingSeedFields` a mentett sémába is felhozza.
+- HRBP-fiók = `role === 'hrbp'` (ponytail-megjegyzéssel): ha saját HRBP-szint is
+  lesz, a szintek listája kell oda.
+- A HRBP-mező a dolgozói űrlapon sima szövegmező (a vezetőé fiókválasztó) — nem
+  kérték; a láthatóságot sem köti (a HRBP amúgy is mindent olvas).
+**Tesztek:** `node test/run-all.js` zöld. CDP-próba +4 lépés memóriabeli fiók-
+háttérrel (HRBP- és vezetői fiók): „HARBE PIROSKA” → „Hárbé Piroska”, „vezeto
+peter” → „Vezető Péter”, nem fiók → jelzés + beírás — 21/21, JS-hiba nélkül.
+
+**Nyitott / következő:**
+- Ha a céges gépen már van **kézzel felvett HRBP-mező**, a frissítés után kettő
+  lesz (a kézi kulcsát nem ismerjük) — az adatot át kell vinni a `hr_hrbp`-be
+  (`SchemaStore.renameFieldKey`), és a kézit törölni.
+- Lásd az első mai bejegyzést (éles próba SAP-exporttal).
+
 ## 2026-11-03 (2.) — Frissítés törzsszám alapján: közvetlen vezető, placeholder-oszlopnevek
 
 **Cél:** a közvetlen vezető is jöjjön a táblázatból; oszlopnévnek a sablonjelölő

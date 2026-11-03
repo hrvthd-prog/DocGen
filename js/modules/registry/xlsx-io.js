@@ -182,6 +182,19 @@ const RegistryXlsxIO = (() => {
 
   // ── Adatfrissítés törzsszám alapján ────────────────────────────────────────
 
+  const HRBP_FIELD = 'hr_hrbp';
+
+  /**
+   * A HRBP-fiók pontos neve (ékezet- és kisbetű-függetlenül), vagy ''.
+   * ponytail: HRBP = a beépített `hrbp` szintű fiók; ha saját HRBP-szint is
+   * lesz, ide a szintek listája kell.
+   */
+  function hrbpFiok(nev) {
+    const f = Auth.fold(nev);
+    const a = f && Auth.accounts().find(x => x.role === 'hrbp' && Auth.fold(x.name) === f);
+    return a ? a.name : '';
+  }
+
   /**
    * Meglévő dolgozók mezőinek frissítése egy táblázatból (pl. SAP-exportból).
    * Csak a felismert nevű oszlopok számítanak; tételenként jóváhagyandó.
@@ -199,7 +212,12 @@ const RegistryXlsxIO = (() => {
         let vezeto = null;
         try { vezeto = SchemaStore.field(Leaders.FIELD); } catch { vezeto = null; }
         if (vezeto && Auth.canWriteGroup(vezeto.group)) mezok.push(Leaders.FIELD);
-        terv = XlsxRead.planUpdate(olvasas.rows, { mezok });
+        terv = XlsxRead.planUpdate(olvasas.rows, { mezok, fiokMezok: {
+          [Leaders.FIELD]: { canonical: Leaders.canonical,
+            megj: 'Nem vezetői fiók — amíg nincs ilyen nevű fiók, a vezető nem látja a dolgozót' },
+          [HRBP_FIELD]: { canonical: hrbpFiok,
+            megj: 'Nem HRBP-fiók — nincs ilyen nevű, HR Business Partner szintű fiók' },
+        } });
       } catch (e) {
         toast('A fájl nem olvasható: ' + e.message, 'error');
         return;

@@ -908,24 +908,34 @@ atest('a sablonjelölő ({{kulcs}}, {{kulcs_en}}) is oszlopnév', async () => {
   assertEq(olv.unknownColumns.join(), '{{nincs_ilyen}}');
 });
 
-atest('közvetlen vezető: a fiók pontos neve megy be, a nem fiók jelezve', async () => {
+atest('fiókhoz kötött mező (vezető, HRBP): a fiók pontos neve megy be, a nem fiók jelezve, de megmarad', async () => {
   EmployeeRepo.useBackend(EmployeeRepo.createMemoryBackend());
   await EmployeeRepo.load();
   EmployeeRepo.create({ fields: { surname: 'Kovács', forename: 'Anna' }, identifiers: [{ type: 'sap', value: '111' }] });
   EmployeeRepo.create({ fields: { surname: 'Nagy', forename: 'Béla' }, identifiers: [{ type: 'sap', value: '222' }] });
-  // A Leaders a fiókokra támaszkodik — itt egyetlen vezetői fiók: „Vezető Péter”
-  sandbox.Leaders = { FIELD: 'hr_direct_leader',
-    canonical: n => String(n).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase() === 'vezeto peter' ? 'Vezető Péter' : '' };
-  try {
-    const buf = await sapTabla([['Törzsszám', '{{hr_direct_leader}}'], ['111', 'VEZETO PETER'], ['222', 'Ismeretlen Úr']]);
-    const olv = XlsxRead.readRows(buf, { schema: SchemaStore.get(), keyRow: 1, firstDataRow: 2 });
-    const p = XlsxRead.planUpdate(olv.rows, { mezok: ['hr_direct_leader'] });
-    assertEq(p.tetelek.length, 2);
-    assertEq(p.tetelek[0].to, 'Vezető Péter', 'nem a fiók pontos neve');
-    assertEq(p.tetelek[0].megj, '');
-    assertEq(p.tetelek[1].to, 'Ismeretlen Úr');
-    assert(/Nem vezetői fiók/.test(p.tetelek[1].megj), 'nem jelezte, hogy nem fiók');
-  } finally { delete sandbox.Leaders; }
+  // Egy-egy fiók: „Vezető Péter” (vezetői) és „Hárbé Piroska” (HRBP)
+  const fold = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const fiokbol = nev => n => fold(n) === fold(nev) ? nev : '';
+  const fiokMezok = {
+    hr_direct_leader: { canonical: fiokbol('Vezető Péter'), megj: 'Nem vezetői fiók' },
+    hr_hrbp:          { canonical: fiokbol('Hárbé Piroska'), megj: 'Nem HRBP-fiók' },
+  };
+  const buf = await sapTabla([['Törzsszám', '{{hr_direct_leader}}', 'HRBP'],
+                              ['111', 'VEZETO PETER', 'harbe piroska'],
+                              ['222', 'Ismeretlen Úr', 'Senki Sára']]);
+  const olv = XlsxRead.readRows(buf, { schema: SchemaStore.get(), keyRow: 1, firstDataRow: 2 });
+  const p = XlsxRead.planUpdate(olv.rows, { mezok: ['hr_direct_leader', 'hr_hrbp'], fiokMezok });
+  const t = (sor, key) => p.tetelek.find(x => x.excelRow === sor && x.key === key);
+
+  assertEq(p.tetelek.length, 4);
+  assertEq(t(2, 'hr_direct_leader').to, 'Vezető Péter', 'nem a vezetői fiók pontos neve');
+  assertEq(t(2, 'hr_hrbp').to, 'Hárbé Piroska', 'nem a HRBP-fiók pontos neve');
+  assertEq(t(2, 'hr_direct_leader').megj + t(2, 'hr_hrbp').megj, '');
+  assertEq(t(3, 'hr_direct_leader').to, 'Ismeretlen Úr', 'a nem fiók vezetőnév elveszett');
+  assertEq(t(3, 'hr_direct_leader').megj, 'Nem vezetői fiók');
+  assertEq(t(3, 'hr_hrbp').to, 'Senki Sára', 'a nem fiók HRBP-név elveszett');
+  assertEq(t(3, 'hr_hrbp').megj, 'Nem HRBP-fiók');
+  assertEq(t(3, 'hr_hrbp').hiba, '', 'a nem fiók név nem hiba — beírható');
 });
 
 atest('törzsszám-oszlop nélkül nem párosít', async () => {
