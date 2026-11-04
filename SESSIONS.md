@@ -68,6 +68,36 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-11-04 (4.) — Ügy → dolgozó adatlapja; az adatlap újratervezése
+
+**Cél:** (1) az Ügyek fülön az ügyből a dolgozó nevére kattintva az adatlapja
+nyíljon; (2) a dolgozói adatlap (a szerkesztés előtti, csak olvasható
+összesítő) „átláthatatlan, nehezen értelmezhető, nem áll kézre” — újratervezés.
+**Változás:** (1) `v10.101`: `cases-view.js` — a fejléc neve gomb (`#cv-emp`),
+`EmployeeSummary.open`-t hív (párbeszéd, az ügy nyitva marad). (2) `v10.102`:
+`employee-summary.js` újraírva, `registry.css` `es-*` blokk; README „Összesítő lap”.
+**Miért / döntés (2):** a régi lap 3 oszlopos rácsa soronként keverte az össze
+nem tartozó mezőket; az „Azonosítók” blokk üres „Azonosító —” sort mutatott,
+alatta külön „Hatósági azonosítók” (az ismert azonosítók értéke a saját
+mezőjükben is áll → csak az ismeretlen típus marad külön); a lényeg (lejáratok,
+nyitott ügy) görgetés után jött; a lakcím 5–10 sor. Most: fejléc (név +
+tények) → 3 csempe (engedély, útlevél: piros lejárt / borostyán ≤ 90 nap — a
+hosszabbítási ablak; legsürgősebb nyitott ügy) → témakártyák `columns: 2`-ben,
+rögzített olvasási sorrenddel (`SORREND`, ismeretlen csoport a végére) → ügyek.
+A címek a számított mezőből egy sorban (`CIM`); a „Minden mező” (a régi
+`emp_summary_empty` beállítás) az üreseket és a darabokat is mutatja. A
+párbeszéd max. 1000 px (`.es-dialog`). A relatív napszám csak közeli/lejárt
+dátumnál.
+**Tesztek:** `node test/run-all.js` zöld (az adatlapnak nincs Node-tesztje — DOM).
+Headless Chrome + CDP, próba mód, 1100 és 760 px: 10/10 — név-gomb, adatlap az
+ügy fölött, fejléc, csempék színe, kártyasorrend, egysoros cím, nincs üres
+azonosító-sor, „Minden mező”, sorra / csempére kattintva a szerkesztő a mezőnél.
+
+**Nyitott / következő:**
+- **Céges gépen:** valódi dolgozókon megnézni (hosszú nevek, sok kitöltött
+  HR-mező, kilépett dolgozó); a felhasználó visszajelzése a csoportsorrendre.
+- Lehetséges folytatás, ha kérik: az adatlap ügy-soraiból vissza az ügyre.
+
 ## 2026-11-04 (3.) — Javítás: a bejelentés a kérelem SAP-adataiból indul
 
 **Cél:** a felhasználó javította az előző bejegyzés három feltevését: (1) a

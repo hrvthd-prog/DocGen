@@ -596,13 +596,26 @@ kattintva **egyenesen a szerkesztő** nyílik, mentés (vagy *Vissza a listához
 után a lista ugyanazzal a szűrővel, ugyanott áll. Erre való: egy rossz import vagy
 elgépelés több száz dolgozó között is visszakereshető.
 
-## Összesítő lap
+## Összesítő lap (dolgozói adatlap)
 
 Egy dolgozó adatai egy csak olvasható lapon: Nyilvántartás → **dupla kattintás
-a soron**, vagy egy kijelölt sor → **Összesítő**. A szöveg kijelölhető és
-másolható; egy adatra kattintva a szerkesztő **pont annál a mezőnél** nyílik
-meg (azonosítónál az azonosító-blokknál), mentés után vissza az összesítőre.
-Az üres mezők alapból rejtve (*Üres mezők is*).
+a soron**, vagy egy kijelölt sor → **Összesítő**; az **Ügyek** fülön az ügy
+fejlécében a **dolgozó nevére kattintva** is (az ügy a háttérben nyitva marad).
+
+- **Fejléc:** név, törzsszám, állampolgárság, születési idő, munkakör; aktív /
+  kilépett, „nem hosszabbítjuk”.
+- **Három csempe:** tartózkodási engedély és útlevél (szám, lejárat — **piros**,
+  ha lejárt, **borostyán**, ha 90 napon belül lejár: ekkor nyílik a hosszabbítás
+  benyújtási ablaka is), és a legsürgősebb nyitott ügy.
+- **Kártyák témánként**, olvasási sorrendben (alapadatok, születési adatok,
+  okmányok, azonosítók, foglalkoztatás, HR, szálláshely, kapcsolat…); a címek
+  egy sorban. Alul az ügyek.
+
+A szöveg kijelölhető és másolható; egy adatra (vagy csempére) kattintva a
+szerkesztő **pont annál a mezőnél** nyílik meg (azonosítónál az
+azonosító-blokknál), mentés után vissza az adatlapra. Az üres mezők alapból
+rejtve; a lábléc **Minden mező** kapcsolója az üreseket és a cím darabjait is
+mutatja.
 
 A Nyilvántartás táblájában a cellák szövege is kijelölhető: húzás vagy dupla
 kattintás nem vált sort, csak a sima kattintás.

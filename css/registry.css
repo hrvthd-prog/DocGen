@@ -411,9 +411,22 @@
    oszlop nélkül is látsszon */
 .rg-norenewal td:nth-child(3) { box-shadow: inset 3px 0 0 var(--c-amber); }
 
-/* ── Dolgozói összesítő (EmployeeSummary) ─────────────────── */
+/* ── Dolgozói adatlap (EmployeeSummary) ─────────────────── */
+/* Fejléc → csempék → témakártyák két hasábban → ügyek. Fél képernyőn
+   (~756 CSS px) a kártyák egy hasábba, a csempék egymás alá rendeződnek. */
+.dialog-box.es-dialog { max-width: min(1000px, 90vw); }
 .es-wrap { min-width: min(720px, 80vw); }
-.es-chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+
+.es-hero {
+  display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap;
+  padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--c-border);
+}
+.es-hero__main { flex: 1 1 280px; min-width: 0; }
+.es-name  { font-size: 19px; font-weight: 700; color: var(--c-text); line-height: 1.25; }
+.es-facts { font-size: 12.5px; color: var(--c-muted); margin-top: 3px; }
+.es-hero__side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.es-hint { font-size: 10.5px; color: var(--c-muted); }
+.es-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .es-chip {
   font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 10px;
   border: 1px solid var(--c-border);
@@ -421,27 +434,53 @@
 .es-chip.is-on   { background: #E3F3E7; color: #1F6B36; border-color: #BFE3C8; }
 .es-chip.is-off  { background: var(--c-bg); color: var(--c-muted); }
 .es-chip.is-warn { background: #FDF3DD; color: #8A6410; border-color: #F0D9A6; }
-.es-empty-toggle { margin-left: auto; font-size: 12px; }
-.es-group { margin-top: 14px; }
-.es-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 0 18px;
+
+/* Ami most számít: engedély, útlevél, nyitott ügy. Bal csík = állapot. */
+.es-tiles {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px; margin-bottom: 14px;
 }
+.es-tile {
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+  padding: 8px 11px; border: 1px solid var(--c-border); border-left: 4px solid var(--c-teal);
+  border-radius: 7px; cursor: pointer;
+}
+.es-tile--case { cursor: default; border-left-color: var(--c-border); }
+.es-tile.is-soon { border-left-color: var(--c-amber); background: #FDF6E8; }
+.es-tile.is-late { border-left-color: var(--c-red);   background: #FCEDED; }
+.es-tile:not(.es-tile--case):hover { box-shadow: 0 0 0 2px rgba(61,166,140,.18); }
+.es-tile__k { font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--c-muted); }
+.es-tile__v { font-size: 15px; font-weight: 600; color: var(--c-text); overflow-wrap: anywhere; user-select: text; }
+.es-tile__m { font-size: 11.5px; color: var(--c-muted); }
+.es-tile.is-soon .es-tile__m { color: #8A5A12; }
+.es-tile.is-late .es-tile__m { color: #A33A3A; font-weight: 600; }
+
+/* Témakártyák: hasábos tördelés, hogy a különböző hosszú kártyák ne hagyjanak lyukat */
+.es-cards { columns: 2 330px; column-gap: 14px; }
+.es-card {
+  break-inside: avoid; margin-bottom: 12px;
+  padding: 9px 10px 6px; border: 1px solid var(--c-border); border-radius: 8px;
+}
+.es-card .ef-group-title { margin-bottom: 4px; padding-left: 4px; }
 .es-row {
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 8px;
-  padding: 5px 6px; border-bottom: 1px solid var(--c-bg); border-radius: 4px;
-  cursor: pointer; font-size: 12.5px;
+  display: grid; grid-template-columns: minmax(96px, 42%) minmax(0, 1fr); gap: 10px;
+  padding: 4px; border-top: 1px solid var(--c-bg); border-radius: 4px;
+  cursor: pointer; font-size: 12.5px; line-height: 1.35;
 }
+.es-card .es-row:first-of-type { border-top: 0; }
 .es-row:hover { background: rgba(61,166,140,.08); }
 .es-row:hover .es-value::after { content: ' ✎'; color: var(--c-teal); }
 .es-label { color: var(--c-muted); font-size: 11.5px; overflow-wrap: anywhere; }
 .es-value { color: var(--c-text); overflow-wrap: anywhere; user-select: text; }
 .es-none  { color: var(--c-muted); font-style: italic; }
+
+.es-cases { margin-bottom: 0; }
 .es-case {
   display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline;
-  padding: 5px 6px; font-size: 12.5px; border-bottom: 1px solid var(--c-bg);
+  padding: 5px 4px; font-size: 12.5px; border-top: 1px solid var(--c-bg);
 }
 .es-case.is-closed { opacity: .6; }
+.es-empty-toggle { margin-right: auto; font-size: 12px; }
 
 /* A szerkesztő ennél a mezőnél nyílt meg (az összesítőről) */
 .ef-focus {
