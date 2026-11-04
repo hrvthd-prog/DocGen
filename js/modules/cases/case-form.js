@@ -434,44 +434,78 @@ const CaseForm = (() => {
    * A SAP-ticket táblázata (plans/TERV-kimenet-es-ugyek.md 6.3). A Kilépés és az
    * Új belépés szabadon megadandó: egyik sem vezethető le a döntésből, ezért
    * üresen nyílnak. A táblázat a dolgozó 01_Elokeszitett mappájába kerül.
+   *
+   * Egy táblázatba több ügy is felvehető (egy nap több döntése): a többi
+   * engedélyezett, még le nem adott SAP-teendős ügy; az aznap döntöttek kijelölve.
+   * A több dolgozós táblázat letöltődik — egyik dolgozó mappájába sem való, mert
+   * az a személyi anyagba kerül, a többiek adataival együtt.
    */
   function openSap({ caseId } = {}) {
     const c = CaseRepo.get(caseId);
     if (!c || !c.closedAt) return;
+    const nap = c.closedAt.slice(0, 10);
+    const tobbi = CaseRepo.all()
+      .filter(x => x.id !== c.id && (CaseRepo.teendok(x) || []).some(t => t.key === 'sap' && !t.kesz))
+      .sort((a, b) => b.closedAt.localeCompare(a.closedAt));
+    const aznap = tobbi.filter(x => x.closedAt.slice(0, 10) === nap);
+    const masnap = tobbi.filter(x => x.closedAt.slice(0, 10) !== nap);
+    const nevek = new Map(dolgozok().map(d => [d.id, d.nev]));
+    const sor = (x, pipa) => `
+      <tr>
+        <td><input type="checkbox" data-sap-ugy="${escHtml(x.id)}" ${pipa ? 'checked' : ''}
+                   ${x === c ? 'disabled title="Ebből az ügyből nyitottad"' : ''}></td>
+        <td>${escHtml(nevek.get(x.employeeId) || '(törölt személy)')}
+          <small>döntés: ${escHtml(CaseTimeline.huDatum(x.closedAt))}${x.fileNumber ? ' · ' + escHtml(x.fileNumber) : ''}</small></td>
+        <td>${dateFieldHtml({ attrs: 'data-sap-ki aria-label="Kilépés"' })}</td>
+        <td>${dateFieldHtml({ attrs: 'data-sap-be aria-label="Új belépés"' })}</td>
+      </tr>`;
+    const tabla = (ugyek, pipa, fej = '') => `
+      <table class="sap-tabla">
+        <colgroup><col style="width:28px"><col><col style="width:150px"><col style="width:150px"></colgroup>
+        ${fej}<tbody>${ugyek.map(x => sor(x, pipa)).join('')}</tbody>
+      </table>`;
     showDialog({
       title: 'SAP-táblázat a back office-nak',
       body: `
-        <div class="cf-grid">
-          <label class="cf-field">
-            <span>Kilépés</span>
-            ${dateFieldHtml({ id: 'sap-ki' })}
-          </label>
-          <label class="cf-field">
-            <span>Új belépés</span>
-            ${dateFieldHtml({ id: 'sap-be' })}
-          </label>
-        </div>
+        ${tabla([c, ...aznap], true,
+          '<thead><tr><th></th><th>Dolgozó</th><th>Kilépés</th><th>Új belépés</th></tr></thead>')}
+        ${masnap.length ? `
+          <details class="sap-masnap">
+            <summary>Más napon döntött, SAP-ra váró ügyek (${masnap.length})</summary>
+            ${tabla(masnap, false)}
+          </details>` : ''}
         <p style="font-size:11.5px;color:var(--c-muted);margin-top:8px">
           A többi oszlop a nyilvántartásból és az ügyből jön (törzsszám, közvetlen vezető,
-          időrögzítési ügyintéző, K2, érvényesség, iktatószám, döntés napja).</p>`,
+          időrögzítési ügyintéző, K2, érvényesség, iktatószám, döntés napja).
+          ${tobbi.length ? `A listán az engedélyezett ügyek közül azok vannak, amelyeknél a
+          „SAP-ticket leadva” még nincs kipipálva. Ha egynél több ügy van kijelölve, a
+          táblázat letöltődik (egy dolgozó mappájába sem kerül, mert mindenki adata benne van).` : ''}</p>`,
       footer: `
         <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Mégse</button>
         <button class="btn btn-primary btn-sm" id="sap-save">Táblázat mentése</button>`,
     });
     document.getElementById('sap-save').addEventListener('click', async () => {
+      const tetelek = [...document.querySelectorAll('.sap-tabla tbody tr')]
+        .filter(tr => tr.querySelector('[data-sap-ugy]').checked)
+        .map(tr => ({
+          c: CaseRepo.get(tr.querySelector('[data-sap-ugy]').dataset.sapUgy),
+          kilepes: tr.querySelector('[data-sap-ki]').value || null,
+          belepes: tr.querySelector('[data-sap-be]').value || null,
+        }));
+      const egy = tetelek.length === 1;
       // Az engedélykérés a kattintás része kell legyen: előbb kérjük, csak utána építünk.
-      const rootP = DocgenModule.requestOutputDir().catch(() => null);
+      const rootP = egy ? DocgenModule.requestOutputDir().catch(() => null) : null;
       try {
-        const { buffer, hianyzik } = await CaseXlsx.sap(c, {
-          kilepes: document.getElementById('sap-ki').value || null,
-          belepes: document.getElementById('sap-be').value || null,
-        });
-        const ut = await DocgenModule.mentesDolgozonak({
-          root: await rootP, employeeId: c.employeeId, name: CaseXlsx.sapFilename(c), buf: buffer,
-        });
+        const { buffer, hianyzik } = await CaseXlsx.sap(tetelek);
+        const name = CaseXlsx.sapFilename(tetelek.map(t => t.c));
+        let ut = '';
+        if (egy) ut = await DocgenModule.mentesDolgozonak({ root: await rootP, employeeId: c.employeeId, name, buf: buffer });
+        else saveAs(new Blob([buffer]), name);
         closeDialog();
-        toast(`✓ SAP-táblázat ${ut ? 'mentve: ' + ut : 'letöltve'}`, 'success');
-        if (hianyzik.length) toast(`Üresen maradt: ${hianyzik.join(', ')}`, 'warn');
+        toast(`✓ SAP-táblázat ${ut ? 'mentve: ' + ut : 'letöltve'}${egy ? '' : ` (${tetelek.length} ügy)`}`, 'success');
+        if (hianyzik.length) {
+          toast(`Üresen maradt — ${hianyzik.map(h => `${h.nev}: ${h.oszlopok.join(', ')}`).join('; ')}`, 'warn');
+        }
       } catch (e) {
         BevLogger.error('SAP_XLSX', 'A SAP-táblázat nem készült el', e.message, '');
         toast('A SAP-táblázat nem készült el: ' + e.message, 'error');

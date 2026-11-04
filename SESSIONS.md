@@ -68,6 +68,37 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-11-04 — SAP-táblázat: több ügy egy táblázatban
+
+**Cél:** egy nap az OIF 7 egyedi ügyben döntött — ezek egy SAP-ticket
+táblázatába kerülhessenek (nem tömeges ügyintézés).
+**Változás (`v10.98`):** a SAP-párbeszéd (`CaseForm.openSap`) soronként egy ügy,
+saját Kilépés / Új belépés: a nyitó ügy, alatta kijelölve az aznap döntött,
+nyitott `sap` teendős engedélyezett ügyek; a más napiak lenyitható részben,
+kijelöletlenül. `CaseXlsx.sap` tételtömböt kap (`[{ c, kilepes, belepes }]`),
+a `hianyzik` soronként `{ nev, oszlopok }`; `sapFilename(ugyek)`. README: új
+alfejezet (Ügyek → SAP-táblázat); TERV-kimenet 6.3 + 8. fejezet.
+**Miért / döntés:**
+- Nincs új belépési pont (lista-kijelölés, tömeges panel): a meglévő gombból
+  egy kattintás, az aznapiak előre kijelölve — ez a 7 döntéses eset.
+- Több ügy → **letöltés**, nem dolgozói mappa: az a személyi anyagba kerül, a
+  többiek adatai nem lehetnek benne. Egy ügy → változatlanul `01_Elokeszitett`.
+- A más napiak azért vannak csukva: a teendőlista előtti régi engedélyezett
+  ügyek `sap` teendője mind nyitott, a fő listát elárasztanák.
+- Nem készült: „dátum mindenkinek” gomb, a `sap` teendő automatikus pipálása.
+**Tesztek:** `node test/run-all.js` zöld (`case-xlsx` +1: két sor, saját
+dátumok, hiány név szerint, „2 fő” fájlnév). Headless Chrome + CDP, próba mód
+(eldobható, nincs a repóban): 9/9 — aznapiak kijelölve, nyitó ügy tiltva, kész
+SAP-os nincs a listán, más napos külön, 3 fős letöltés helyes sorokkal, egy ügy
+a régi néven; JS-hiba nélkül.
+
+**Nyitott / következő:**
+- **Céges gépen:** egy engedélyezett ügy → SAP-táblázat → látszanak-e az aznap
+  döntött ügyek kijelölve; a „Más napon döntött…” rész hossza (ha sok régi ügy
+  van benne, azokon érdemes a „SAP-ticket leadva”-t kipipálni).
+- Ha a felhasználó kéri: közös dátum gomb, vagy a `sap` teendő pipálása az összes
+  kijelölt ügyben egy lépésben.
+
 ## 2026-11-03 (3.) — HRBP-hozzárendelés a törzsszámos frissítéssel
 
 **Cél:** a dolgozók HRBP-je is táblázatból jöjjön, a vezetőével azonos

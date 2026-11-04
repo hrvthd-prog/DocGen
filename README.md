@@ -920,6 +920,25 @@ Ha egy meghosszabbítás megadással zárul, az app bekéri az új engedélyszá
 következő ablak a régi, már lejárt engedélyből számolna. Utána egy kattintással
 előjegyezhető a következő ciklus, a saját ablakával.
 
+### SAP-táblázat — egy vagy több ügy
+
+Az engedélyezett ügy teendőlistáján a **SAP-táblázat** gomb a back office
+ticketjéhez készít xlsx-et. A párbeszéd soronként egy ügyet mutat, mindegyiknél
+saját **Kilépés** és **Új belépés** mezővel (üresen nyílnak; a többi oszlop a
+nyilvántartásból és az ügyből jön).
+
+- Felül az az ügy, amelyikből nyitottad, alatta — **kijelölve** — az ugyanazon a
+  napon döntött ügyek, amelyeknél a „SAP-ticket leadva” még nincs kipipálva.
+- A más napon döntött, még SAP-ra váró ügyek a lenyitható **„Más napon
+  döntött…”** sorban vannak, kijelöletlenül.
+- Ami nem kell, vedd ki a pipát; a kijelölt ügyek egy táblázatba kerülnek.
+- **Egy ügy** → a dolgozó `01_Elokeszitett` mappájába (`SAP-ticket — Név.xlsx`).
+  **Több ügy** → letöltés (`SAP-ticket — 7 fő, ÉÉÉÉ-HH-NN.xlsx`): egy dolgozó
+  mappájába sem kerül, mert az a személyi anyagba megy, a többiek adataival együtt.
+- Ha valamelyik sorban üres maradt egy oszlop, a táblázat elkészül, és név
+  szerint kiírja, kinél mi hiányzik.
+- A „SAP-ticket leadva” teendőt a leadás után ügyenként kell kipipálni.
+
 ## Átutalások
 
 Az **Ügyek → Átutalások** nézet váltja ki a `Procedural-Fee-Transfer-Log.xlsm`

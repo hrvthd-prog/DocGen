@@ -128,18 +128,27 @@ const CaseXlsx = (() => {
     return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null;
   }
 
-  /** → { buffer, hianyzik: [üresen maradt oszlopok] } */
-  async function sap(c, { kilepes = null, belepes = null } = {}) {
+  /**
+   * tetelek: [{ c, kilepes, belepes }] — soronként egy ügy; egy nap több döntése
+   * egy táblázatba kerülhet. → { buffer, hianyzik: [{ nev, oszlopok }] } —
+   * csak azok a sorok, ahol maradt üres oszlop.
+   */
+  async function sap(tetelek) {
     if (typeof ExcelJS === 'undefined') throw new Error('Az ExcelJS könyvtár nem érhető el.');
-    const emp = EmployeeRepo.get(c.employeeId);
-    const v = SchemaStore.resolveValues((emp && emp.fields) || {}, 'hu');
-    const ertekek = [
-      v.personnel_reg_number || '', emp ? nevOf(emp) : '', '',
-      napDatum(kilepes), napDatum(belepes),
-      v.hr_time_admin || '', v.hr_direct_leader || '', v.hr_k2 || '',
-      napDatum(c.validUntil), 'Határozat', c.fileNumber || '', napDatum(c.closedAt),
-    ];
-    const hianyzik = SAP_OSZLOPOK.map(o => o[0]).filter((_, i) => i !== UJ_TSZ && !ertekek[i]);
+    const sorok = tetelek.map(({ c, kilepes = null, belepes = null }) => {
+      const emp = EmployeeRepo.get(c.employeeId);
+      const v = SchemaStore.resolveValues((emp && emp.fields) || {}, 'hu');
+      return [
+        v.personnel_reg_number || '', emp ? nevOf(emp) : '', '',
+        napDatum(kilepes), napDatum(belepes),
+        v.hr_time_admin || '', v.hr_direct_leader || '', v.hr_k2 || '',
+        napDatum(c.validUntil), 'Határozat', c.fileNumber || '', napDatum(c.closedAt),
+      ];
+    });
+    const hianyzik = sorok.map(s => ({
+      nev: s[1],
+      oszlopok: SAP_OSZLOPOK.map(o => o[0]).filter((_, i) => i !== UJ_TSZ && !s[i]),
+    })).filter(h => h.oszlopok.length);
 
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Munka1');
@@ -152,19 +161,22 @@ const CaseXlsx = (() => {
       h.value = fej;
       h.border = keret;
       h.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } };
-      const d = ws.getRow(2).getCell(i + 1);
-      d.value = ertekek[i] || null;
-      d.border = keret;
-      d.alignment = { horizontal: 'center', vertical: 'middle' };
-      // 'mm-dd-yy' = a 14-es beépített formátum: a magyar Excel „2026. 10. 27.”-ként mutatja
-      if (ertekek[i] instanceof Date) d.numFmt = 'mm-dd-yy';
+      sorok.forEach((s, r) => {
+        const d = ws.getRow(r + 2).getCell(i + 1);
+        d.value = s[i] || null;
+        d.border = keret;
+        d.alignment = { horizontal: 'center', vertical: 'middle' };
+        // 'mm-dd-yy' = a 14-es beépített formátum: a magyar Excel „2026. 10. 27.”-ként mutatja
+        if (s[i] instanceof Date) d.numFmt = 'mm-dd-yy';
+      });
     });
     return { buffer: await wb.xlsx.writeBuffer(), hianyzik };
   }
 
-  /** A fájlnév a dokumentumtípus-elöl szabállyal. */
-  function sapFilename(c) {
-    const nev = nevOf(EmployeeRepo.get(c.employeeId)).replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim();
+  /** A fájlnév a dokumentumtípus-elöl szabállyal; több ügynél a létszám és a mai nap. */
+  function sapFilename(ugyek) {
+    if (ugyek.length > 1) return `SAP-ticket — ${ugyek.length} fő, ${CaseTypes.isoDate(new Date())}.xlsx`;
+    const nev = nevOf(EmployeeRepo.get(ugyek[0].employeeId)).replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim();
     return `SAP-ticket — ${nev}.xlsx`;
   }
 

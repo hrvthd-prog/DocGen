@@ -430,13 +430,30 @@ A teendőlista „SAP-táblázat” gombja: kis párbeszéd két dátummal (**Ki
   felhasználó javítása, 2026-10-29: a mintabeli dátumok egybeesése véletlen volt),
   ezért nincs előtöltés. A fejlécekből a záró szóközt elhagyjuk
   (`Felettes `, `Dokumentum dátuma `, `Határozat ` a mintában).
-- Kód: `CaseXlsx.sap(c, { kilepes, belepes })` a meglévő `case-xlsx.js`-ben
+- Kód: `CaseXlsx.sap(…)` (2026-11-04 óta tételtömb, lásd lent) a meglévő `case-xlsx.js`-ben
   (ExcelJS már be van töltve), a minta oszlopszélességeivel.
 - Fájlnév a dokumentumtípus-elöl szabállyal: `SAP-ticket — John Doe.xlsx`.
 - A két új mező (`hr_time_admin` Időrögzítési ügyintéző, `hr_k2` K2) a seedbe kerül (`hr_belso` csoport, „Csak HR tölti”); a meglévő
   `addMissingSeedFields` minden gépen felveszi őket a configba, kódmigráció
   nélkül. Utána a Nyilvántartás tömeges szerkesztésével tölthetők.
 - Hiányzó adatnál a táblázat elkészül, de a párbeszéd kiírja, mi üres.
+
+**Több ügy egy táblázatban (2026-11-04).** Kérés: egy nap az OIF 7 egyedi
+ügyben döntött, ezek egy ticketbe menjenek — nem tömeges ügyintézés. Ezért nem
+új belépési pont, hanem ugyanaz a párbeszéd bővült:
+- Sorok: a nyitó ügy (pipája nem vehető ki), alatta az **aznap döntött**,
+  engedélyezett ügyek, amelyeknél a `sap` teendő még nyitott — kijelölve; a
+  más napon döntöttek egy lenyitható `<details>`-ben, kijelöletlenül (a
+  teendőlista előtti régi engedélyezett ügyek is mind ide esnek, ezért nem a fő
+  listában vannak). Soronként saját Kilépés / Új belépés.
+- Kód: `CaseXlsx.sap([{ c, kilepes, belepes }, …])` → `hianyzik: [{ nev, oszlopok }]`;
+  `sapFilename(ugyek)`: egy ügynél a régi név, többnél `SAP-ticket — N fő, ÉÉÉÉ-HH-NN.xlsx`.
+- **Több ügy → letöltés**, nem dolgozói mappa: a dolgozói mappa a személyi
+  anyagba kerül, a többiek adatai abban nem lehetnek; másolat dolgozónként
+  ugyanezért nem. Közös SAP-mappa a 09_OIF_kerelmek szerkezetében nincs (a PDF
+  Műhellyel közös szerkezet, TERV-mappaszerkezet) — ha kell, ott kell bevezetni.
+- Nem készült (nem kérték): „dátum mindenkinek” gomb, a `sap` teendő automatikus
+  kipipálása a táblázat mentésekor (a teendő a *leadás*, nem a generálás).
 
 ### 6.4 TAJ-hosszabbítás
 
@@ -480,8 +497,9 @@ egy kattintással kellene generálni, a `generateFor` ezt egy hívással tudja.)
 - **Mappaindex** — 3.2.
 - **Külön mentési mappa** — napi plusz engedélykérés lenne (2.1).
 - **Mind a 23 tartózkodási cél** — a négy jellemző; a lista egy tömb, bővíthető.
-- **Szerkeszthető teendőlista, tömeges engedélyezés, több dolgozós SAP-táblázat**
-  — ha élesben kell, a meglévő tömeges ügy mintájára.
+- **Szerkeszthető teendőlista, tömeges engedélyezés** — ha élesben kell, a
+  meglévő tömeges ügy mintájára. (A több dolgozós SAP-táblázat 2026-11-04-én
+  elkészült, de nem így: a meglévő párbeszéd bővült, lásd 6.3.)
 - **A szűrők mentése** a munkamenetek között — a mostaniak sem mentődnek.
 - **Ügytípus-szerkesztő** — a típusok kódból jönnek, csak a sablon-hozzárendelés adat.
 

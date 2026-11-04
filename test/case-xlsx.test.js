@@ -174,9 +174,9 @@ function sorok(ws) {
     const c = CaseRepo.create({ employeeId: e.id, type: 'rp_hosszabbitas', purpose: 'vendegmunkas',
                                 fileNumber: '106-3-XXX40/2026-T' });
     CaseRepo.setStatus(c.id, 'lezarva', { outcome: 'megadva', occurredAt: '2026-10-27', validUntil: '2027-12-01' });
-    const { buffer, hianyzik } = await CaseXlsx.sap(CaseRepo.get(c.id),
-      { kilepes: '2026-10-27', belepes: '2026-10-28' });
-    assertEq(hianyzik.length, 0, 'hiányzónak jelölt: ' + hianyzik.join(', '));
+    const { buffer, hianyzik } = await CaseXlsx.sap([
+      { c: CaseRepo.get(c.id), kilepes: '2026-10-27', belepes: '2026-10-28' }]);
+    assertEq(hianyzik.length, 0, 'hiányzónak jelölt: ' + JSON.stringify(hianyzik));
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buffer);
     const ws = wb.getWorksheet('Munka1');
@@ -204,12 +204,44 @@ function sorok(ws) {
     const e = EmployeeRepo.create({ fields: { surname: 'Kiss', forename: 'Anna' } });
     const c = CaseRepo.create({ employeeId: e.id, type: 'rp_elso', purpose: 'nemzeti_kartya' });
     CaseRepo.setStatus(c.id, 'lezarva', { outcome: 'megadva', occurredAt: '2026-10-27' });
-    const { hianyzik } = await CaseXlsx.sap(CaseRepo.get(c.id), {});
+    const { hianyzik } = await CaseXlsx.sap([{ c: CaseRepo.get(c.id) }]);
+    assertEq(hianyzik.length, 1);
+    assertEq(hianyzik[0].nev, 'Kiss Anna');
     for (const o of ['Régi TSz', 'Időrögzítési ügyintéző', 'K2', 'Kilépés', 'Új határozott idő lejárta']) {
-      assert(hianyzik.includes(o), `nem jelezte üresnek: ${o}`);
+      assert(hianyzik[0].oszlopok.includes(o), `nem jelezte üresnek: ${o}`);
     }
-    assert(!hianyzik.includes('Új TSZ'), 'az Új TSZ üressége nem hiány');
-    assertEq(CaseXlsx.sapFilename(CaseRepo.get(c.id)), 'SAP-ticket — Kiss Anna.xlsx');
+    assert(!hianyzik[0].oszlopok.includes('Új TSZ'), 'az Új TSZ üressége nem hiány');
+    assertEq(CaseXlsx.sapFilename([CaseRepo.get(c.id)]), 'SAP-ticket — Kiss Anna.xlsx');
+  });
+
+  await test('több ügy egy táblázatban: soronként a saját adatai és dátumai', async () => {
+    await tisztaAllapot();
+    const ugy = (vez, ker, tsz, iktato) => {
+      const e = EmployeeRepo.create({ fields: { surname: vez, forename: ker, personnel_reg_number: tsz,
+        hr_time_admin: 'Ügyintéző', hr_direct_leader: 'Vezető', hr_k2: 'K2-' + tsz } });
+      const c = CaseRepo.create({ employeeId: e.id, type: 'rp_hosszabbitas', purpose: 'vendegmunkas',
+                                  fileNumber: iktato });
+      CaseRepo.setStatus(c.id, 'lezarva', { outcome: 'megadva', occurredAt: '2026-11-04', validUntil: '2028-11-04' });
+      return CaseRepo.get(c.id);
+    };
+    const a = ugy('Kiss', 'Anna', '111', 'IKT-1'), b = ugy('Nagy', 'Béla', '222', 'IKT-2');
+    const { buffer, hianyzik } = await CaseXlsx.sap([
+      { c: a, kilepes: '2026-11-30', belepes: '2026-12-01' },
+      { c: b, kilepes: '2026-12-14' }]);
+    assertEq(JSON.stringify(hianyzik), JSON.stringify([{ nev: 'Nagy Béla', oszlopok: ['Új belépés'] }]));
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer);
+    const ws = wb.getWorksheet('Munka1');
+    assertEq(sorok(ws).length, 3, 'fejléc + két sor kell');
+    const nap = (r, i) => { const v = ws.getRow(r).getCell(i).value; return v instanceof Date ? v.toISOString().slice(0, 10) : v; };
+    assertEq([nap(2, 1), nap(2, 2), nap(2, 4), nap(2, 5), nap(2, 8), nap(2, 11)].join('|'),
+      '111|Kiss Anna|2026-11-30|2026-12-01|K2-111|IKT-1');
+    assertEq([nap(3, 1), nap(3, 2), nap(3, 4), nap(3, 5), nap(3, 8), nap(3, 11)].join('|'),
+      '222|Nagy Béla|2026-12-14||K2-222|IKT-2');
+    assertEq(ws.getRow(3).getCell(4).numFmt, 'mm-dd-yy');
+    assert(ws.getRow(3).getCell(5).border, 'az üres cella is keretes, mint a mintában');
+    assert(/^SAP-ticket — 2 fő, \d{4}-\d{2}-\d{2}\.xlsx$/.test(CaseXlsx.sapFilename([a, b])),
+      'több ügy fájlneve: ' + CaseXlsx.sapFilename([a, b]));
   });
 
   console.log(`\n${'─'.repeat(60)}`);
