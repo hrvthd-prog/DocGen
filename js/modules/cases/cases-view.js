@@ -663,7 +663,9 @@ const CasesModule = (() => {
           <button class="cv-backbtn" id="cv-back" type="button"
                   title="Vissza a listához (Esc)">‹ Vissza</button>
           <div class="cv-dhead__who">
-            <span class="cv-dhead__nev">${escHtml(dolgozoNeve(c.employeeId))}</span>
+            ${emp ? `<button type="button" class="cv-dhead__nev cv-dhead__link" id="cv-emp"
+                       title="A dolgozó adatlapja">${escHtml(dolgozoNeve(c.employeeId))}</button>`
+                  : `<span class="cv-dhead__nev">${escHtml(dolgozoNeve(c.employeeId))}</span>`}
             <span class="cv-dhead__sub">${escHtml(alcim)}</span>
           </div>
           ${lepkedesHtml()}
@@ -1061,6 +1063,14 @@ const CasesModule = (() => {
           onSaved: id => megnyit(id),
         });
       }));
+
+    // A dolgozó neve az ügy fejlécében → az adatlapja (ugyanaz az összesítő,
+    // mint a Nyilvántartásban; párbeszéd, így az ügy a háttérben marad).
+    const dolgozo = q('#cv-emp');
+    if (dolgozo) dolgozo.addEventListener('click', () => {
+      const c = CaseRepo.get(state.kivalasztott);
+      if (c) EmployeeSummary.open(c.employeeId);
+    });
 
     const vissza = q('#cv-back');
     if (vissza) vissza.addEventListener('click', () => { state.kivalasztott = null; render(); });
