@@ -874,15 +874,18 @@ sorrendjében:
 1. **Bejelentés** — személyes adatok (előnév és előző név nélkül: nem kellenek).
 2. **Foglalkoztatás megkezdése** — munkáltató (név, székhely, telephely,
    cégforma, cégjegyzékszám), a tartózkodásra jogosító engedély száma (a
-   legutóbb engedélyezett kérelem **iktatószáma**, 106-…), a foglalkoztatás
-   kezdete (az ügy **Munkaviszony kezdete** napja; ha üres, a dolgozó belépési
-   dátuma, jelzéssel), FEOR, szálláshely irányítószáma és települése.
+   döntés **iktatószáma** a kérelemből — ugyanaz, mint a SAP-táblázat
+   „Dokumentum száma”), a foglalkoztatás kezdete (a SAP-táblázatnál megadott
+   **Új belépés**), FEOR, szálláshely irányítószáma és települése.
 
-A leggyorsabb út: az engedélyezett kérelem teendőlistáján a **Bejelentés az
-EH-n…** gomb. Ha még nincs bejelentés-ügy, az új ügy űrlapja nyílik (ott add meg
-a munkaviszony kezdetét), mentés után az ügy az Enter Hungary fülön nyílik. Ha
-már van, a gomb azt nyitja, és a felirata az EH-számát mutatja. A teendőt a
-beküldés után továbbra is kézzel kell kipipálni.
+**Indítás:** az engedélyezett kérelem teendőlistáján a **Bejelentés az EH-n**
+gomb. Nem kérdez semmit — ami kell, a kérelemben van: létrehozza a
+bejelentés-ügyet (a kérelemhez kötve, iktatószám nélkül, mert a bejelentés nem
+kap újat), a **határidő a döntés kiadásától** fut (+5 nap, mint a teendőé), és
+az Enter Hungary fülön nyitja meg. Ha az Új belépés még nincs megadva, szól:
+előbb a SAP-táblázat párbeszédében add meg. Ha már van bejelentés-ügy, a gomb
+azt nyitja, és a felirata az EH-számát mutatja. A teendőt a beküldés után
+továbbra is kézzel kell kipipálni.
 
 
 Az idegenrendészeti ügyintézés nem állapot, hanem folyamat: a kérelmek egymás
@@ -949,8 +952,10 @@ előjegyezhető a következő ciklus, a saját ablakával.
 
 Az engedélyezett ügy teendőlistáján a **SAP-táblázat** gomb a back office
 ticketjéhez készít xlsx-et. A párbeszéd soronként egy ügyet mutat, mindegyiknél
-saját **Kilépés** és **Új belépés** mezővel (üresen nyílnak; a többi oszlop a
-nyilvántartásból és az ügyből jön).
+saját **Kilépés** és **Új belépés** mezővel (a többi oszlop a nyilvántartásból
+és az ügyből jön). A két dátum mentéskor **ügyenként a kérelemre íródik**: a
+párbeszéd legközelebb ezekkel nyílik, és a munkaviszony-bejelentés innen veszi
+a foglalkoztatás kezdetét.
 
 - Felül az az ügy, amelyikből nyitottad, alatta — **kijelölve** — az ugyanazon a
   napon döntött ügyek, amelyeknél a „SAP-ticket leadva” még nincs kipipálva.

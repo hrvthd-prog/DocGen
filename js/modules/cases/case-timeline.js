@@ -243,7 +243,7 @@ const CaseTimeline = (() => {
   /** A bejelentés-gomb felirata: ha már van ügye, annak EH-száma is. */
   function bejelentesFelirat(ugy) {
     const b = CaseRepo.bejelentesUgye(ugy);
-    if (!b) return 'Bejelentés az EH-n…';
+    if (!b) return 'Bejelentés az EH-n';
     return escHtml(b.ehNumber ? `Bejelentés: ${b.ehNumber}` : 'Bejelentés megnyitása');
   }
 

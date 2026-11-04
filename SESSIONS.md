@@ -68,6 +68,40 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-11-04 (3.) — Javítás: a bejelentés a kérelem SAP-adataiból indul
+
+**Cél:** a felhasználó javította az előző bejegyzés három feltevését: (1) a
+munkaviszony kezdetét a SAP-táblázatnál adja meg (Új belépés), nem a
+bejelentésnél; (2) a bejelentés határideje a döntés kiadásától fut; (3) a
+bejelentés nem kap iktatószámot — az új ügy űrlapjának iktatószám-mezője
+megtévesztő volt. Kérdése: a több kolléga SAP-dátumai visszamennek-e a DB-be?
+**Válasz a kérdésre:** **nem mentek** — csak az xlsx-be. Most igen.
+**Változás (`v10.100`):** `CaseRepo.setSap` (`c.sap = { kilepes, belepes }` a
+kérelemre, csak érvényes nap), a SAP-párbeszéd ezekkel nyílik, mentéskor előbb a
+DB-be ír. `CaseRepo.bejelentesInditasa`: kérdés nélkül, `kerelemId`-vel,
+`triggerDate` = döntés napja → határidő +5 nap; a gomb nem nyit űrlapot.
+`munkaviszony_bejelentes` kezdő napja: „Döntés kiadásának napja”. EH-panel: a
+`kezdet` a kötött kérelem `sap.belepes`-e (nincs `employment_start`-tartalék), a
+`hatarozat` a kötött kérelem iktatószáma. README, TERV-enterhungary 13.1,
+TERV-kimenet 6.3.
+**Miért / döntés:**
+- A „döntés kiadásának napja” = a kérelem `closedAt`-je (a lezáráskor megadott
+  nap, a SAP-táblázat „Dokumentum dátuma”). A SAP-párbeszéd nem kérdezi külön.
+- Új belépés nélkül is elindul a bejelentés (a határidő fut), de figyelmeztet.
+- Az általános ügyűrlap iktatószám-mezője bejelentésnél is megmaradt („elvileg”
+  nem kap számot) — csak a bejelentés indítása nem kérdezi.
+**Tesztek:** `node test/run-all.js` zöld (`cases` +2: `setSap`, `bejelentesInditasa`;
+`eh-forms`: kötött / kézi kérelem, nincs tartalék). CDP, próba mód: két kolléga
+SAP-dátumai mindkét kérelemre visszaírva, újranyitáskor előtöltve; a bejelentés
+párbeszéd nélkül, határidő 11-09 (döntés 11-04 + 5), kezdet = a kolléga Új
+belépése, engedélyszám = a kérelme iktatószáma; SAP nélkül figyelmeztet. 11/11.
+
+**Nyitott / következő:**
+- **Céges gépen:** egy valódi napon (több döntés) SAP-táblázat → bejelentések.
+- A régi (11-04 délelőtti) változattal esetleg kézzel nyitott bejelentés-ügyek
+  `triggerDate`-je a munkaviszony kezdete — az új címke alatt a döntés napja
+  kellene oda; ha van ilyen, kézzel javítandó.
+
 ## 2026-11-04 (2.) — Munkaviszony-bejelentés az EH-panelen, EH-szám visszaírása
 
 **Cél:** a munkaviszony megkezdésének bejelentéséhez kellő EH-rovatok legyenek a

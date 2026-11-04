@@ -432,8 +432,10 @@ const CaseForm = (() => {
 
   /**
    * A SAP-ticket táblázata (plans/TERV-kimenet-es-ugyek.md 6.3). A Kilépés és az
-   * Új belépés szabadon megadandó: egyik sem vezethető le a döntésből, ezért
-   * üresen nyílnak. A táblázat a dolgozó 01_Elokeszitett mappájába kerül.
+   * Új belépés szabadon megadandó: egyik sem vezethető le a döntésből. Mentéskor
+   * ügyenként a kérelemre íródnak (`CaseRepo.setSap`), és legközelebb azokkal
+   * nyílik a párbeszéd; a munkaviszony-bejelentés innen veszi a foglalkoztatás
+   * kezdetét. A táblázat a dolgozó 01_Elokeszitett mappájába kerül.
    *
    * Egy táblázatba több ügy is felvehető (egy nap több döntése): a többi
    * engedélyezett, még le nem adott SAP-teendős ügy; az aznap döntöttek kijelölve.
@@ -456,8 +458,8 @@ const CaseForm = (() => {
                    ${x === c ? 'disabled title="Ebből az ügyből nyitottad"' : ''}></td>
         <td>${escHtml(nevek.get(x.employeeId) || '(törölt személy)')}
           <small>döntés: ${escHtml(CaseTimeline.huDatum(x.closedAt))}${x.fileNumber ? ' · ' + escHtml(x.fileNumber) : ''}</small></td>
-        <td>${dateFieldHtml({ attrs: 'data-sap-ki aria-label="Kilépés"' })}</td>
-        <td>${dateFieldHtml({ attrs: 'data-sap-be aria-label="Új belépés"' })}</td>
+        <td>${dateFieldHtml({ value: (x.sap || {}).kilepes, attrs: 'data-sap-ki aria-label="Kilépés"' })}</td>
+        <td>${dateFieldHtml({ value: (x.sap || {}).belepes, attrs: 'data-sap-be aria-label="Új belépés"' })}</td>
       </tr>`;
     const tabla = (ugyek, pipa, fej = '') => `
       <table class="sap-tabla">
@@ -476,7 +478,9 @@ const CaseForm = (() => {
           </details>` : ''}
         <p style="font-size:11.5px;color:var(--c-muted);margin-top:8px">
           A többi oszlop a nyilvántartásból és az ügyből jön (törzsszám, közvetlen vezető,
-          időrögzítési ügyintéző, K2, érvényesség, iktatószám, döntés napja).
+          időrögzítési ügyintéző, K2, érvényesség, iktatószám, döntés napja). A Kilépés és
+          az Új belépés ügyenként megmarad; a munkaviszony-bejelentés az Új belépést veszi
+          át foglalkoztatás-kezdetnek.
           ${tobbi.length ? `A listán az engedélyezett ügyek közül azok vannak, amelyeknél a
           „SAP-ticket leadva” még nincs kipipálva. Ha egynél több ügy van kijelölve, a
           táblázat letöltődik (egy dolgozó mappájába sem kerül, mert mindenki adata benne van).` : ''}</p>`,
@@ -496,6 +500,8 @@ const CaseForm = (() => {
       // Az engedélykérés a kattintás része kell legyen: előbb kérjük, csak utána építünk.
       const rootP = egy ? DocgenModule.requestOutputDir().catch(() => null) : null;
       try {
+        // Előbb a DB: a beírt dátum akkor se vesszen el, ha a fájl mentése elakad.
+        CaseRepo.setSap(tetelek.map(t => ({ id: t.c.id, kilepes: t.kilepes, belepes: t.belepes })));
         const { buffer, hianyzik } = await CaseXlsx.sap(tetelek);
         const name = CaseXlsx.sapFilename(tetelek.map(t => t.c));
         let ut = '';

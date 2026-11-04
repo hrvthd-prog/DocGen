@@ -54,7 +54,7 @@ const CaseEh = (() => {
     if (row.const)    return { text: row.const,    fajta: 'const' };
     if (row.employer) return { text: EhForms.employerValue(row.employer), fajta: 'ceg' };
     if (row.setting)  return { text: Settings.ehContact()[row.setting] || '', fajta: 'beallitas' };
-    if (row.fromCase) return ugybolErtek(row, ugy, emp);
+    if (row.fromCase) return ugybolErtek(row, ugy);
     if (!row.key)     return { text: '', fajta: 'kezi' };
 
     const mezo = SchemaStore.field(row.key);
@@ -79,20 +79,19 @@ const CaseEh = (() => {
     return { text, fajta: 'db', jelzes };
   }
 
-  /** Az ügyből jövő érték: meghosszabbítás-e, a határozat száma, a munkaviszony kezdete. */
-  function ugybolErtek(row, ugy, emp) {
-    const ki = (text, jelzes = []) => ({ text, fajta: 'ugy', jelzes });
+  /**
+   * Az ügyből jövő érték: meghosszabbítás-e, illetve a bejelentésnél a döntést
+   * hozó kérelemből a határozat száma (iktatószáma) és a SAP-nál megadott Új
+   * belépés. A kérelem az, amelyikből a bejelentés indult (`kerelemId`); kézzel
+   * nyitott bejelentésnél a dolgozó legutóbb engedélyezett kérelme.
+   */
+  function ugybolErtek(row, ugy) {
+    const ki = text => ({ text: text || '', fajta: 'ugy' });
     if (row.fromCase === 'hosszabbitas') return ki(ugy.type === 'rp_hosszabbitas' ? 'igen' : 'nem');
-    if (row.fromCase === 'hatarozat') {
-      // forEmployee: a legutóbb nyitott ügy elöl
-      const k = CaseRepo.forEmployee(ugy.employeeId).find(x => CaseRepo.teendok(x) && x.fileNumber);
-      return ki(k ? k.fileNumber : '');
-    }
-    if (row.fromCase === 'kezdet') {
-      if (ugy.triggerDate) return ki(ugy.triggerDate);
-      const t = String(emp.fields[row.fallback] || '');
-      return ki(t, t ? ['az ügyben nincs munkaviszony-kezdet — ez a dolgozó belépési dátuma'] : []);
-    }
+    const k = (ugy.kerelemId && CaseRepo.get(ugy.kerelemId))
+      || CaseRepo.forEmployee(ugy.employeeId).find(x => CaseRepo.teendok(x)) || {};
+    if (row.fromCase === 'hatarozat') return ki(k.fileNumber);
+    if (row.fromCase === 'kezdet')    return ki((k.sap || {}).belepes);
     return ki('');
   }
 

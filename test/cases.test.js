@@ -1407,6 +1407,32 @@ atest('bejelentés-ügy: a dolgozóé, a döntés után nyitott; a régi és a m
   assertEq(CaseRepo.bejelentesUgye(u).id, uj.id);
 });
 
+atest('SAP-dátumok a kérelemre: csak érvényes nap, csak engedélyezett ügyre', async () => {
+  const { emp, u } = await engedelyezettUgy();
+  const nyitott = CaseRepo.create({ employeeId: emp.id, type: 'rp_elso', purpose: 'vendegmunkas' });
+  CaseRepo.setSap([{ id: u.id, kilepes: '2026-11-30', belepes: '2026-12-01' },
+                   { id: nyitott.id, kilepes: '2026-11-30' }]);
+  assertEq(JSON.stringify(CaseRepo.get(u.id).sap), JSON.stringify({ kilepes: '2026-11-30', belepes: '2026-12-01' }));
+  assertEq(CaseRepo.get(nyitott.id).sap, undefined, 'nem engedélyezett ügyre nem ír');
+  CaseRepo.setSap([{ id: u.id, kilepes: '2026-1', belepes: '' }]);
+  assertEq(JSON.stringify(CaseRepo.get(u.id).sap), JSON.stringify({ kilepes: null, belepes: null }),
+    'félbehagyott / törölt dátum: üres, nem szemét');
+});
+
+atest('bejelentés indítása: kérdés nélkül, határidő a döntéstől, a kérelemhez kötve', async () => {
+  const { u } = await engedelyezettUgy();                // döntés: 2026-10-27
+  const b = CaseRepo.bejelentesInditasa(u.id);
+  assertEq(b.type, 'munkaviszony_bejelentes');
+  assertEq(b.kerelemId, u.id);
+  assertEq(b.triggerDate, '2026-10-27', 'a kezdő nap a döntés kiadása');
+  assertEq(b.dueAt, '2026-11-01', 'döntés + 5 nap — egyezik a teendő határidejével');
+  assertEq(b.dueAt, CaseRepo.teendok(u).find(t => t.key === 'bejelentes').hatarido);
+  assertEq(b.fileNumber, '', 'a bejelentés nem kap iktatószámot');
+  assertEq(CaseRepo.bejelentesInditasa(u.id).id, b.id, 'másodszor a meglévőt adja');
+  assertEq(CaseRepo.all().filter(c => c.type === 'munkaviszony_bejelentes').length, 1);
+  await assertThrows(() => CaseRepo.bejelentesInditasa(b.id), /engedélyezett/);
+});
+
 atest('sorozatszám: a lejárat a határozatból, az okmány-teendő kész', async () => {
   const { emp, u } = await engedelyezettUgy();
   CaseRepo.recordProducedIdentifier(u.id, { value: 'RP123456' });

@@ -186,20 +186,29 @@ atest('az EH-oldal címéből az EH-szám, „EH” előtaggal', () => {
   assertEq(CaseEh._ehSzamBol(''), '');
 });
 
-atest('ügyből: a határozat száma az engedélyezett kérelemből, a kezdet az ügyből', () => {
-  const kerelem = { id: 'k', fileNumber: '106-3-1/2026-T' };
+atest('ügyből: a határozat száma és az Új belépés a döntést hozó kérelemből', () => {
+  const kerelem = { id: 'k', fileNumber: '106-3-1/2026-T', sap: { kilepes: '2026-11-30', belepes: '2026-12-01' } };
+  const masik = { id: 'm', fileNumber: '106-MASIK', sap: { belepes: '2025-01-01' } };
+  const ugyek = { k: kerelem, m: masik };
   sandbox.CaseRepo = {
-    forEmployee: () => [{ id: 'b' }, kerelem, { id: 'regi', fileNumber: '106-REGI' }],
+    get: id => ugyek[id] || null,
+    forEmployee: () => [{ id: 'b' }, masik, kerelem],     // a legutóbb nyitott elöl
     teendok: x => (x.fileNumber ? [] : null),
   };
   const emp = { fields: { employment_start: '2024-01-15' } };
   const sor = eh => BEJ.find(r => r.eh === eh);
-  const bej = { id: 'b', type: 'munkaviszony_bejelentes', employeeId: 'e', triggerDate: '2026-11-10' };
-  assertEq(CaseEh._ertekOf(sor('tartrajogokmszama'), emp, {}, bej).text, '106-3-1/2026-T');
-  assertEq(CaseEh._ertekOf(sor('fogalkoztataskezdete'), emp, {}, bej).text, '2026-11-10');
-  const tartalek = CaseEh._ertekOf(sor('fogalkoztataskezdete'), emp, {}, Object.assign({}, bej, { triggerDate: null }));
-  assertEq(tartalek.text, '2024-01-15');
-  assert(tartalek.jelzes.length, 'a tartalék értéket jelezni kell');
+  const ertek = (eh, bej) => CaseEh._ertekOf(sor(eh), emp, {}, bej).text;
+  // A kérelemből indított bejelentés: a kötött kérelem adatai, nem a legutóbbié
+  const kotott = { id: 'b', type: 'munkaviszony_bejelentes', employeeId: 'e', kerelemId: 'k',
+                   triggerDate: '2026-11-04' };
+  assertEq(ertek('tartrajogokmszama', kotott), '106-3-1/2026-T');
+  assertEq(ertek('fogalkoztataskezdete', kotott), '2026-12-01', 'az Új belépés, nem a döntés napja');
+  // Kézzel nyitott (kötés nélkül): a legutóbb engedélyezett kérelem
+  const kezi = { id: 'b', type: 'munkaviszony_bejelentes', employeeId: 'e' };
+  assertEq(ertek('tartrajogokmszama', kezi), '106-MASIK');
+  // SAP-adat nélkül üres — a belépési dátum (employment_start) NEM tartalék
+  delete kerelem.sap;
+  assertEq(ertek('fogalkoztataskezdete', kotott), '');
   delete sandbox.CaseRepo;
 });
 

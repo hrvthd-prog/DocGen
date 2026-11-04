@@ -185,7 +185,9 @@ const SEED_CASE_TYPES = {
       key: 'munkaviszony_bejelentes',
       kind: 'bejelentes',
       label: { hu: 'Munkaviszony megkezdésének bejelentése', en: 'Registration of employment' },
-      triggerLabel: 'Munkaviszony kezdete',
+      // A határidő a döntés kiadásától fut, nem a munkaviszony kezdetétől
+      // (a felhasználó javítása, 2026-11-04). A kezdet a kérelem SAP-adataiban él.
+      triggerLabel: 'Döntés kiadásának napja',
       statuses: notificationStatuses(),
       defaultDurationDays: 5,
       deadlineKind: DEADLINE_KIND.ADVISORY,

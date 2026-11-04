@@ -664,7 +664,7 @@ const CaseRepo = (() => {
    */
   function create({ employeeId, type, purpose = null, dueAt, ehNumber = '', fileNumber = '',
                     note = '', openedAt = null,
-                    triggerDate = null, batchId = null } = {}) {
+                    triggerDate = null, batchId = null, kerelemId = null } = {}) {
     ensureLoaded();
     const indul = openedAt || today();
     const c = {
@@ -685,6 +685,7 @@ const CaseRepo = (() => {
       producedId: null,
       note: String(note || ''),
       batchId: batchId || null,
+      ...(kerelemId ? { kerelemId } : {}),   // bejelentésnél: melyik kérelem döntése indította
       events: [],
       createdAt: nowIso(),
       updatedAt: nowIso(),
@@ -1075,12 +1076,50 @@ const CaseRepo = (() => {
     return l ? l.filter(t => !t.kesz).length : 0;
   }
 
-  /** Az engedélyezés utáni munkaviszony-bejelentés ügye: a dolgozó legutóbbi
-   *  `munkaviszony_bejelentes` ügye, ha a döntés napján vagy utána nyílt. */
+  /**
+   * Az engedélyezés utáni munkaviszony-bejelentés ügye: ami ebből a kérelemből
+   * indult (`kerelemId`), vagy — kézzel nyitott, kötés nélküli ügynél — a
+   * dolgozó döntés napján vagy utána nyitott bejelentése.
+   */
   function bejelentesUgye(c) {
     const nap = String(c.closedAt || '').slice(0, 10);
-    return forEmployee(c.employeeId).find(x =>
-      x.type === 'munkaviszony_bejelentes' && String(x.openedAt).slice(0, 10) >= nap) || null;
+    return forEmployee(c.employeeId).find(x => x.type === 'munkaviszony_bejelentes' &&
+      (x.kerelemId ? x.kerelemId === c.id : String(x.openedAt).slice(0, 10) >= nap)) || null;
+  }
+
+  /**
+   * A bejelentés indítása az engedélyezett kérelemből, kérdés nélkül: a
+   * határidő a döntés kiadásától fut (kezdő nap = a döntés napja, +5 nap), a
+   * foglalkoztatás kezdete a kérelem SAP-adataiból jön (`c.sap.belepes`), az
+   * iktatószám a kérelemé marad — a bejelentés nem kap újat. Ha már van, azt adja.
+   */
+  function bejelentesInditasa(kerelemId) {
+    const c = get(kerelemId);
+    if (!c || !engedelyezett(c)) throw new Error('Bejelentés csak engedélyezett kérelemből indítható.');
+    return bejelentesUgye(c) || create({
+      employeeId: c.employeeId, type: 'munkaviszony_bejelentes',
+      triggerDate: String(c.closedAt).slice(0, 10), kerelemId: c.id,
+    });
+  }
+
+  /**
+   * A SAP-táblázat párbeszédében megadott Kilépés / Új belépés ügyenként a
+   * kérelemre (`c.sap`): a párbeszéd legközelebb ezekkel nyílik, és a
+   * munkaviszony-bejelentés innen veszi a foglalkoztatás kezdetét.
+   * tetelek: [{ id, kilepes, belepes }] — egy mentés, egy változás-jelzés.
+   */
+  function setSap(tetelek) {
+    ensureLoaded();
+    const nap = v => (/^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : null);
+    for (const { id, kilepes, belepes } of tetelek) {
+      const c = get(id);
+      if (!c || !engedelyezett(c)) continue;
+      c.sap = { kilepes: nap(kilepes), belepes: nap(belepes) };
+      c.updatedAt = nowIso();
+      c.updatedBy = currentUserName();
+    }
+    scheduleSave();
+    emit();
   }
 
   /** Van-e lejárt határidejű, el nem végzett teendő? (a munkaviszony-bejelentés) */
@@ -1259,7 +1298,7 @@ const CaseRepo = (() => {
     docIdentifiers, docTags, DOC_TAGS, numberOwner, numberConflicts,
     timeline, submissionStatus, authorityDelay,
     create, update, setStatus, addEvent, updateEvent, recordProducedIdentifier,
-    teendok, nyitottTeendok, teendoLejart, setTeendo, bejelentesUgye,
+    teendok, nyitottTeendok, teendoLejart, setTeendo, bejelentesUgye, bejelentesInditasa, setSap,
     openNextCase, hasOpenCaseOfType, batch, newId, isBackdated, summary, EXPIRY_FIELD_MAP,
     destroy, destroyForEmployee, suggestRenewals,
     _validate: validate,

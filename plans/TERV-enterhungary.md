@@ -1062,3 +1062,29 @@ keresés, idővonal). A kérelemre írt második EH-szám mindezt megkerülte vo
   ha nincs, az új ügy űrlapja nyílik a típussal előtöltve.
 - **Nem készült:** a `bejelentes` teendő automatikus pipálása (a teendő a
   beküldés, a gép nem tudja, mikor történt).
+
+### 13.1 Javítás ugyanaznap: a bejelentés a kérelem adataiból indul
+
+A felhasználó javítása az első változat után — **három téves feltevés** volt benne:
+
+1. **A munkaviszony kezdetét nem a bejelentésnél adja meg**, hanem a
+   SAP-táblázat párbeszédében (**Új belépés**). Az első változat új ügy
+   űrlapot nyitott, és ott kérte újra. Most a SAP-párbeszéd dátumai ügyenként
+   a kérelemre íródnak (`c.sap = { kilepes, belepes }`, `CaseRepo.setSap`) —
+   **addig egyáltalán nem kerültek a DB-be**, csak az xlsx-be —, és a
+   `kezdet` sor ezt olvassa. A dolgozó `employment_start`-ja (első belépés)
+   nem tartalék többé: hosszabbításnál téves érték lenne.
+2. **A határidő a döntés kiadásától fut**, nem a munkaviszony kezdetétől. A
+   `munkaviszony_bejelentes` típus kezdő napja „Döntés kiadásának napja” lett;
+   a bejelentés `triggerDate`-je a kérelem `closedAt`-je, így a határidő +5 nap
+   — ugyanaz, mint a teendőé. (A seed-típus mindig a seedből jön, a configból
+   csak a sablonok — a címke minden gépen átáll.)
+3. **Az iktatószám megtévesztő volt** az új ügy űrlapján: a bejelentés nem kap
+   újat. Nincs űrlap: a gomb (`CaseRepo.bejelentesInditasa`) kérdés nélkül
+   létrehozza az ügyet, a kérelemhez kötve (`kerelemId`), iktatószám nélkül.
+   A határozat száma a kötött kérelem iktatószáma — ugyanaz, amit a
+   SAP-táblázat „Dokumentum száma” visz. Kötés nélküli (kézzel nyitott)
+   bejelentésnél a dolgozó legutóbb engedélyezett kérelme.
+
+Ha az Új belépés még nincs megadva, a bejelentés akkor is elindul (a határidő
+fut), de figyelmeztet, és a sor „hiányzik”.

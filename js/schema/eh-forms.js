@@ -29,8 +29,8 @@
  *   fallback  másodlagos sémakulcs, ha a `key` üres
  *   employer  a EH_EMPLOYER blokk útvonala (cégadat)
  *   const     minden kérelemnél ugyanaz az érték
- *   fromCase  az ügyből jövő érték: hosszabbitas | hatarozat (az engedélyezett
- *             kérelem iktatószáma) | kezdet (az ügy kezdő napja, `fallback`-kel)
+ *   fromCase  az ügyből jövő érték: hosszabbitas | hatarozat (a döntést hozó
+ *             kérelem iktatószáma) | kezdet (a kérelem SAP-adatai közül az Új belépés)
  *   setting   a Beállítások fülön megadott érték (Settings.ehContact)
  *   manual    nincs a DB-ben, kézzel töltendő
  *   list      listás mező; az értéke a soron megjelenő tipp, vagy `true`
@@ -532,9 +532,9 @@ const EhForms = (() => {
 
     { panel: 'Egyéb adatok' },
     { eh: 'tartrajogokmszama', label: 'tartózkodásra jogosító engedély száma', req: true,
-      fromCase: 'hatarozat', note: 'a határozat száma (106-…) = a legutóbb engedélyezett kérelem iktatószáma' },
+      fromCase: 'hatarozat', note: 'a döntés iktatószáma a kérelemből — ugyanaz, mint a SAP-táblázatban' },
     { eh: 'fogalkoztataskezdete', label: 'Foglalkoztatás megkezdése', req: true,
-      fromCase: 'kezdet', fallback: 'employment_start' },
+      fromCase: 'kezdet', note: 'a SAP-táblázatnál megadott Új belépés' },
     { eh: 'feorszam', label: 'munkakör (FEOR szám)', req: true,
       key: 'feor', list: 'a 4 jegyű kód alapján keresd a listában' },
     { eh: 'sziranyitoszam', label: 'Szálláshely irányítószám', req: true, key: 'postal_code' },

@@ -836,14 +836,22 @@ const CasesModule = (() => {
 
   /**
    * Engedélyezett kérelem → a munkaviszony-bejelentés ügye az Enter Hungary
-   * fülön (ott az EH sorrendjében másolható minden adata). Ha még nincs, az
-   * új ügy űrlapja nyílik, a típussal előtöltve (a munkaviszony kezdete ott adható meg).
+   * fülön (ott az EH sorrendjében másolható minden adata). Nem kérdez: ami
+   * kell, az a kérelemben van (döntés napja, iktatószám, a SAP-nál megadott
+   * Új belépés). Ha még nincs bejelentés-ügy, most jön létre.
    */
   function bejelentesNyit(c) {
-    const nyit = id => { state.lap = 'eh'; megnyit(id); };
-    const b = CaseRepo.bejelentesUgye(c);
-    if (b) nyit(b.id);
-    else CaseForm.open({ employeeId: c.employeeId, type: 'munkaviszony_bejelentes', onSaved: nyit });
+    try {
+      const uj = !CaseRepo.bejelentesUgye(c);
+      const b = CaseRepo.bejelentesInditasa(c.id);
+      state.lap = 'eh';
+      megnyit(b.id);
+      if (uj) toast('✓ Bejelentés megnyitva — határidő: ' + CaseTimeline.huDatum(b.dueAt), 'success');
+      if (!(c.sap && c.sap.belepes)) {
+        toast('Az Új belépés még nincs megadva: a SAP-táblázat párbeszédében add meg — '
+            + 'a „Foglalkoztatás megkezdése” onnan jön.', 'warn');
+      }
+    } catch (e) { toast(e.message, 'error'); }
   }
 
   /**

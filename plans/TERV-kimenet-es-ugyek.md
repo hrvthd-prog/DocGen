@@ -452,6 +452,9 @@ A teendőlista „SAP-táblázat” gombja: kis párbeszéd két dátummal (**Ki
   anyagba kerül, a többiek adatai abban nem lehetnek; másolat dolgozónként
   ugyanezért nem. Közös SAP-mappa a 09_OIF_kerelmek szerkezetében nincs (a PDF
   Műhellyel közös szerkezet, TERV-mappaszerkezet) — ha kell, ott kell bevezetni.
+- **A Kilépés és az Új belépés mentéskor ügyenként a kérelemre íródik** (`c.sap`,
+  2026-11-04 délután): a párbeszéd ezekkel nyílik újra, és a munkaviszony-
+  bejelentés innen veszi a foglalkoztatás kezdetét (TERV-enterhungary 13.1).
 - Nem készült (nem kérték): „dátum mindenkinek” gomb, a `sap` teendő automatikus
   kipipálása a táblázat mentésekor (a teendő a *leadás*, nem a generálás).
 
