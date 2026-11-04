@@ -1075,6 +1075,14 @@ const CaseRepo = (() => {
     return l ? l.filter(t => !t.kesz).length : 0;
   }
 
+  /** Az engedélyezés utáni munkaviszony-bejelentés ügye: a dolgozó legutóbbi
+   *  `munkaviszony_bejelentes` ügye, ha a döntés napján vagy utána nyílt. */
+  function bejelentesUgye(c) {
+    const nap = String(c.closedAt || '').slice(0, 10);
+    return forEmployee(c.employeeId).find(x =>
+      x.type === 'munkaviszony_bejelentes' && String(x.openedAt).slice(0, 10) >= nap) || null;
+  }
+
   /** Van-e lejárt határidejű, el nem végzett teendő? (a munkaviszony-bejelentés) */
   function teendoLejart(c, ma = null) {
     const l = teendok(c);
@@ -1251,7 +1259,7 @@ const CaseRepo = (() => {
     docIdentifiers, docTags, DOC_TAGS, numberOwner, numberConflicts,
     timeline, submissionStatus, authorityDelay,
     create, update, setStatus, addEvent, updateEvent, recordProducedIdentifier,
-    teendok, nyitottTeendok, teendoLejart, setTeendo,
+    teendok, nyitottTeendok, teendoLejart, setTeendo, bejelentesUgye,
     openNextCase, hasOpenCaseOfType, batch, newId, isBackdated, summary, EXPIRY_FIELD_MAP,
     destroy, destroyForEmployee, suggestRenewals,
     _validate: validate,

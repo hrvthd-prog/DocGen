@@ -59,7 +59,8 @@ SchemaStore.loadFrom(JSON.parse(JSON.stringify(SEED_SCHEMA)));
 
 const FO = EhForms._FO.filter(r => r.eh);
 const BETET = EhForms._BETET.filter(r => r.eh);
-const MIND = FO.concat(BETET);
+const BEJ = EhForms._BEJELENTES.filter(r => r.eh);
+const MIND = FO.concat(BETET, BEJ);
 
 // ── A leírás épsége ─────────────────────────────────────────────────────────
 asection('Űrlapleírás');
@@ -90,7 +91,7 @@ atest('minden `employer` útvonal értéket ad', () => {
 });
 
 atest('az `eh` nevek lapon belül egyediek', () => {
-  for (const [nev, lista] of [['fő űrlap', FO], ['betétlap', BETET]]) {
+  for (const [nev, lista] of [['fő űrlap', FO], ['betétlap', BETET], ['bejelentés', BEJ]]) {
     const latott = new Set();
     for (const r of lista) {
       assert(!latott.has(r.eh), `${nev}: ismétlődő eh név: ${r.eh}`);
@@ -135,6 +136,71 @@ atest('a jogcím-szűrés kihagyja az idegen sorokat', () => {
 
 atest('jogcím nélkül csak a fő űrlap jön', () => {
   assertEq(EhForms.rows('').filter(r => r.eh).length, FO.length);
+});
+
+// ── Munkaviszony megkezdésének bejelentése ──────────────────────────────────
+asection('Munkaviszony-bejelentés');
+
+// A két mentett lap (2026-11-04: …/bejelentes, …/bejelentes-foglmegkezdes)
+// minden `*`-os rovata. Ha az EH átnevez egyet, a panel némán mást mutatna.
+const BEJ_KOTELEZO = [
+  'kerelmezocsaladnev', 'kerelmezoutonev', 'kerelmezoszulcsaladnev', 'kerelmezoszulutonev',
+  'kerelmezoanyjacsaladnev', 'kerelmezoanyjautonev', 'kerelmezoszulido', 'kerelmezoszulorszag',
+  'kerelmezoszulhely', 'kerelmezonem', 'kerelmezoap', 'csaladiallapot',
+  'munkaltatomunkaltatoneve', 'szhiranyitoszam', 'szhtelepules', 'szhkozteruletneve',
+  'szhkozteruletjellege', 'szhhazszam', 'thiranyitoszam', 'thtelepules', 'thkozteruletneve',
+  'thkozteruletjellege', 'thhazszam', 'cegformaja', 'cegjegyzekszam',
+  'tartrajogokmszama', 'fogalkoztataskezdete', 'feorszam', 'sziranyitoszam', 'sztelepules',
+];
+
+atest('minden kötelező rovat benne van, kötelezőként és adatforrással', () => {
+  for (const eh of BEJ_KOTELEZO) {
+    const r = BEJ.find(x => x.eh === eh);
+    assert(r, `hiányzik: ${eh}`);
+    assert(r.req, `nincs kötelezőnek jelölve: ${eh}`);
+    assert(r.key || r.employer || r.fromCase || r.const, `nincs adatforrása: ${eh}`);
+  }
+});
+
+atest('az előnév és az előző név nincs benne (a felhasználó kérése)', () => {
+  for (const eh of ['kerelmezonevelotag', 'kerelmezonevelotag2', 'kerelmezoelozocsaladnev', 'kerelmezoelozoutonev']) {
+    assert(!BEJ.some(r => r.eh === eh), `nem kellene: ${eh}`);
+  }
+});
+
+atest('a bejelentés-ügy a saját űrlapját kapja, jogcím nélkül; a kérelem a régit', () => {
+  assert(EhForms.sajatUrlap('munkaviszony_bejelentes'));
+  assertEq(EhForms.rowsFor('munkaviszony_bejelentes', 'c7').filter(r => r.eh).length, BEJ.length);
+  assert(!EhForms.sajatUrlap('rp_hosszabbitas'));
+  assertEq(JSON.stringify(EhForms.rowsFor('rp_hosszabbitas', 'c7')), JSON.stringify(EhForms.rows('c7')));
+});
+
+atest('cégjegyzékszám a cégkivonat alakjában', () => {
+  assert(/^\d\d-\d\d-\d{6}$/.test(EMP.cegjegyzekszam), EMP.cegjegyzekszam);
+  assert(EMP.cegforma, 'üres cégforma');
+});
+
+atest('az EH-oldal címéből az EH-szám, „EH” előtaggal', () => {
+  assertEq(CaseEh._ehSzamBol('https://enterhungary.gov.hu/eh/cases/edit/20122004/bejelentes-foglmegkezdes'), 'EH20122004');
+  assertEq(CaseEh._ehSzamBol('  EH18506859 '), 'EH18506859');
+  assertEq(CaseEh._ehSzamBol(''), '');
+});
+
+atest('ügyből: a határozat száma az engedélyezett kérelemből, a kezdet az ügyből', () => {
+  const kerelem = { id: 'k', fileNumber: '106-3-1/2026-T' };
+  sandbox.CaseRepo = {
+    forEmployee: () => [{ id: 'b' }, kerelem, { id: 'regi', fileNumber: '106-REGI' }],
+    teendok: x => (x.fileNumber ? [] : null),
+  };
+  const emp = { fields: { employment_start: '2024-01-15' } };
+  const sor = eh => BEJ.find(r => r.eh === eh);
+  const bej = { id: 'b', type: 'munkaviszony_bejelentes', employeeId: 'e', triggerDate: '2026-11-10' };
+  assertEq(CaseEh._ertekOf(sor('tartrajogokmszama'), emp, {}, bej).text, '106-3-1/2026-T');
+  assertEq(CaseEh._ertekOf(sor('fogalkoztataskezdete'), emp, {}, bej).text, '2026-11-10');
+  const tartalek = CaseEh._ertekOf(sor('fogalkoztataskezdete'), emp, {}, Object.assign({}, bej, { triggerDate: null }));
+  assertEq(tartalek.text, '2024-01-15');
+  assert(tartalek.jelzes.length, 'a tartalék értéket jelezni kell');
+  delete sandbox.CaseRepo;
 });
 
 // ── Beállításból jövő sorok ─────────────────────────────────────────────────

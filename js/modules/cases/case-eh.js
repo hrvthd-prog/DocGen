@@ -54,7 +54,7 @@ const CaseEh = (() => {
     if (row.const)    return { text: row.const,    fajta: 'const' };
     if (row.employer) return { text: EhForms.employerValue(row.employer), fajta: 'ceg' };
     if (row.setting)  return { text: Settings.ehContact()[row.setting] || '', fajta: 'beallitas' };
-    if (row.fromCase) return { text: ugybolErtek(row, ugy), fajta: 'ugy' };
+    if (row.fromCase) return ugybolErtek(row, ugy, emp);
     if (!row.key)     return { text: '', fajta: 'kezi' };
 
     const mezo = SchemaStore.field(row.key);
@@ -79,10 +79,31 @@ const CaseEh = (() => {
     return { text, fajta: 'db', jelzes };
   }
 
-  /** Az ügyből jövő érték. Ma egyetlen ilyen van: meghosszabbítás-e a kérelem. */
-  function ugybolErtek(row, ugy) {
-    if (row.fromCase !== 'hosszabbitas') return '';
-    return (ugy && ugy.type === 'rp_hosszabbitas') ? 'igen' : 'nem';
+  /** Az ügyből jövő érték: meghosszabbítás-e, a határozat száma, a munkaviszony kezdete. */
+  function ugybolErtek(row, ugy, emp) {
+    const ki = (text, jelzes = []) => ({ text, fajta: 'ugy', jelzes });
+    if (row.fromCase === 'hosszabbitas') return ki(ugy.type === 'rp_hosszabbitas' ? 'igen' : 'nem');
+    if (row.fromCase === 'hatarozat') {
+      // forEmployee: a legutóbb nyitott ügy elöl
+      const k = CaseRepo.forEmployee(ugy.employeeId).find(x => CaseRepo.teendok(x) && x.fileNumber);
+      return ki(k ? k.fileNumber : '');
+    }
+    if (row.fromCase === 'kezdet') {
+      if (ugy.triggerDate) return ki(ugy.triggerDate);
+      const t = String(emp.fields[row.fallback] || '');
+      return ki(t, t ? ['az ügyben nincs munkaviszony-kezdet — ez a dolgozó belépési dátuma'] : []);
+    }
+    return ki('');
+  }
+
+  /**
+   * „…/eh/cases/edit/20122004/bejelentes” → „EH20122004”; ami nem EH-cím, az
+   * marad. Az „EH” előtagot az EH maga is így használja (a súgó-levél tárgya
+   * a mentett oldalon: EH20122102), és az új ügy űrlapjának mintája is ez.
+   */
+  function ehSzamBol(s) {
+    const m = /\/cases\/[a-z]+\/(\d+)/i.exec(String(s || ''));
+    return m ? 'EH' + m[1] : String(s || '').trim();
   }
 
   // ── Megjelenítés ───────────────────────────────────────────────────────────
@@ -109,12 +130,23 @@ const CaseEh = (() => {
   function render(ugy, emp) {
     if (state.keziRejtve === null) state.keziRejtve = !!Settings.getUser('eh_hide_manual', false);
     const jogcim = state.jogcim[ugy.id] || '';
-    const mind   = EhForms.rows(jogcim);
+    const mind   = EhForms.rowsFor(ugy.type, jogcim);
     const sorok  = state.keziRejtve ? lathatoSorok(mind) : mind;
     const rejtve = mind.filter(r => r.manual).length;
     const feloldott = SchemaStore.resolveValues(emp.fields, 'hu');
 
-    const valaszto = `
+    // Az ügy EH-száma itt is beírható: kitöltés közben az EH-oldal címében
+    // látszik (…/cases/edit/<szám>/…), a cím egészében beilleszthető.
+    const irhat = typeof Auth === 'undefined' || Auth.can('cases.write');
+    const ehSzam = `
+      <label class="eh-jogcim eh-szam" title="Az EH-oldal címe is beilleszthető — a számot kiveszi belőle">
+        <span>EH-szám</span>
+        <input class="field-input" id="eh-szam" type="text" autocomplete="off"
+               value="${escHtml(ugy.ehNumber || '')}" placeholder="szám vagy az EH-oldal címe"
+               ${irhat ? '' : 'disabled'}>
+      </label>`;
+
+    const valaszto = EhForms.sajatUrlap(ugy.type) ? '' : `
       <label class="eh-jogcim">
         <span>Jogcím</span>
         <select class="field-select" id="eh-jogcim">
@@ -138,12 +170,13 @@ const CaseEh = (() => {
           <span class="eh-who">${escHtml(
             [feloldott.surname, feloldott.forename].filter(Boolean).join(' '))}</span>
           ${valaszto}
+          ${ehSzam}
           <span class="eh-hint" title="Tab: következő másolható mező · Enter: másol és továbblép · F2: szerkesztés · Esc: elvet">
             ${masolhato} másolható mező · Tab / Enter</span>
-          <button class="cv-filter eh-kezi${state.keziRejtve ? ' is-active' : ''}" type="button"
+          ${rejtve ? `<button class="cv-filter eh-kezi${state.keziRejtve ? ' is-active' : ''}" type="button"
                   id="eh-kezi" aria-pressed="${state.keziRejtve}"
                   title="A kézzel töltendő sorok mögött nincs adat — a panel nem tud rájuk semmit adni">
-            ${state.keziRejtve ? `${rejtve} kézi mező rejtve` : 'Kézi mezők elrejtése'}</button>
+            ${state.keziRejtve ? `${rejtve} kézi mező rejtve` : 'Kézi mezők elrejtése'}</button>` : ''}
           <button class="cv-filter eh-fokusz-btn${fokusz ? ' is-active' : ''}" type="button"
                   id="eh-fokusz" aria-pressed="${fokusz}"
                   title="${fokusz ? 'Vissza a teljes felülethez (Esc)'
@@ -226,6 +259,21 @@ const CaseEh = (() => {
     if (valaszto) valaszto.addEventListener('change', () => {
       state.jogcim[ugy.id] = valaszto.value;
       ujra();
+    });
+
+    // Mentés után a CaseRepo változás-jelzése újrarajzol; ütköző számnál
+    // (másik ügyé) a CaseRepo hibát dob — azt mondjuk ki, és visszaállunk.
+    const szam = gyoker.querySelector('#eh-szam');
+    if (szam) szam.addEventListener('change', () => {
+      const uj = ehSzamBol(szam.value);
+      if (uj === (ugy.ehNumber || '')) { szam.value = uj; return; }
+      try {
+        CaseRepo.update(ugy.id, { ehNumber: uj });
+        toast(uj ? `✓ EH-szám mentve: ${uj}` : '✓ EH-szám törölve', 'success');
+      } catch (e) {
+        szam.value = ugy.ehNumber || '';
+        toast(e.message, 'error');
+      }
     });
 
     const keziGomb = gyoker.querySelector('#eh-kezi');
@@ -362,5 +410,6 @@ const CaseEh = (() => {
     });
   }
 
-  return { render, bind, fokuszban, setFokusz, _state: state, _lathatoSorok: lathatoSorok };
+  return { render, bind, fokuszban, setFokusz, _state: state, _lathatoSorok: lathatoSorok,
+           _ehSzamBol: ehSzamBol, _ertekOf: ertekOf };
 })();

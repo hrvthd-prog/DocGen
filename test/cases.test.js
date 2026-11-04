@@ -1395,6 +1395,18 @@ atest('pipálás: kész-nap és idővonal-bejegyzés; az okmányt csak a sorozat
   assertEq(CaseRepo.get(u.id).teendok.bejelentes, undefined, 'visszavonható');
 });
 
+atest('bejelentés-ügy: a dolgozóé, a döntés után nyitott; a régi és a másé nem', async () => {
+  const { emp, u } = await engedelyezettUgy();
+  assertEq(CaseRepo.bejelentesUgye(u), null, 'még nincs');
+  const regi = CaseRepo.create({ employeeId: emp.id, type: 'munkaviszony_bejelentes' });
+  CaseRepo.get(regi.id).openedAt = '2026-01-05';      // az előző engedély bejelentése
+  const masik = ujDolgozo({});
+  CaseRepo.create({ employeeId: masik.id, type: 'munkaviszony_bejelentes' });
+  assertEq(CaseRepo.bejelentesUgye(u), null, 'a régi és a más dolgozóé nem számít');
+  const uj = CaseRepo.create({ employeeId: emp.id, type: 'munkaviszony_bejelentes', ehNumber: 'EH20122004' });
+  assertEq(CaseRepo.bejelentesUgye(u).id, uj.id);
+});
+
 atest('sorozatszám: a lejárat a határozatból, az okmány-teendő kész', async () => {
   const { emp, u } = await engedelyezettUgy();
   CaseRepo.recordProducedIdentifier(u.id, { value: 'RP123456' });

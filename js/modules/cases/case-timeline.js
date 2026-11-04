@@ -240,6 +240,13 @@ const CaseTimeline = (() => {
       </li>`;
   }
 
+  /** A bejelentés-gomb felirata: ha már van ügye, annak EH-száma is. */
+  function bejelentesFelirat(ugy) {
+    const b = CaseRepo.bejelentesUgye(ugy);
+    if (!b) return 'Bejelentés az EH-n…';
+    return escHtml(b.ehNumber ? `Bejelentés: ${b.ehNumber}` : 'Bejelentés megnyitása');
+  }
+
   /** Az engedélyezés utáni teendők (CaseRepo.teendok) — pipálható lista. */
   function teendokHtml(ugy, maIso) {
     const lista = CaseRepo.teendok(ugy);
@@ -260,6 +267,7 @@ const CaseTimeline = (() => {
             ${t.kesz ? `<span class="ct-todo__due">kész: ${escHtml(huDatum(t.kesz))}</span>`
               : t.hatarido ? `<span class="ct-todo__due">határidő: ${escHtml(huDatum(t.hatarido))}
                                (${escHtml(napSzoveg(t.hatarido, maIso))})</span>` : ''}
+            ${t.key === 'bejelentes' ? gomb('bejelentes', bejelentesFelirat(ugy)) : ''}
             ${t.key === 'sap' ? gomb('sap', 'SAP-táblázat') : ''}
             ${t.key === 'okmany' && !t.kesz ? gomb('okmany', 'Sorozatszám rögzítése') : ''}
           </div>`;

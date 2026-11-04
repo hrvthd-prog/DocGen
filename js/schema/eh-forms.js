@@ -29,7 +29,8 @@
  *   fallback  másodlagos sémakulcs, ha a `key` üres
  *   employer  a EH_EMPLOYER blokk útvonala (cégadat)
  *   const     minden kérelemnél ugyanaz az érték
- *   fromCase  az ügyből jövő érték
+ *   fromCase  az ügyből jövő érték: hosszabbitas | hatarozat (az engedélyezett
+ *             kérelem iktatószáma) | kezdet (az ügy kezdő napja, `fallback`-kel)
  *   setting   a Beállítások fülön megadott érték (Settings.ehContact)
  *   manual    nincs a DB-ben, kézzel töltendő
  *   list      listás mező; az értéke a soron megjelenő tipp, vagy `true`
@@ -60,6 +61,9 @@ const EH_EMPLOYER = {
   teaor:    '2611',                     // TEÁOR'25 főtevékenység: Elektronikai alkatrész gyártása
   foglkoztatotip: 'kedvezményes foglalkoztató, amely a Kormánnyal érvényes '
                 + 'stratégiai partnerségi megállapodással rendelkezik',
+  // A munkaviszony-bejelentés kéri (szabad szöveg mindkettő).
+  cegforma:        'Kft.',
+  cegjegyzekszam:  '19-09-503741',
 
   // Cégkivonat 5/5.: 8200 Veszprém, Házgyári út 6-8.
   // A közterület neve a JELLEG NÉLKÜL megy — a jelleg külön legördülő.
@@ -467,7 +471,88 @@ const EhForms = (() => {
       const: 'A kiállító hatóságnál', list: true, only: ['c12'] },
   ];
 
+  /**
+   * A munkaviszony megkezdésének bejelentése (2026-11-04-i mentés): két lap,
+   * `…/bejelentes` és `…/bejelentes-foglmegkezdes`. Az előnév (2×) és az előző
+   * családi/utónév szándékosan nincs benne — nem kötelező, és nem használjuk
+   * (a felhasználó kérése); a nemzetiség sem (nem kötelező, kézi lista).
+   */
+  const BEJELENTES_ROWS = [
+    { panel: '── 1. LAP: BEJELENTÉS ──' },
+    { panel: 'A kérelmező személyes adatai' },
+    { eh: 'kerelmezocsaladnev', label: 'családi név (útlevél szerint)', req: true, key: 'surname' },
+    { eh: 'kerelmezoutonev', label: 'utónév (útlevél szerint)', req: true, key: 'forename' },
+    { eh: 'kerelmezoszulcsaladnev', label: 'születési családi név', req: true,
+      key: 'surname_at_birth' },
+    { eh: 'kerelmezoszulutonev', label: 'születési utónév', req: true, key: 'forename_at_birth' },
+    { eh: 'kerelmezoanyjacsaladnev', label: 'anyja családi neve', req: true,
+      key: 'mothers_surname_at_birth' },
+    { eh: 'kerelmezoanyjautonev', label: 'anyja utóneve', req: true,
+      key: 'mothers_forename_at_birth' },
+    { eh: 'kerelmezoszulido', label: 'születési idő', req: true, key: 'date_of_birth' },
+    { eh: 'kerelmezoszulorszag', label: 'születési ország', req: true,
+      key: 'place_of_birth_country', list: true, dict: true },
+    { eh: 'kerelmezoszulhely', label: 'születési város', req: true, key: 'place_of_birth_locality' },
+    { eh: 'kerelmezonem', label: 'neme', req: true, key: 'sex', list: true },
+    { eh: 'kerelmezoap', label: 'állampolgárság', req: true,
+      key: 'citizenship', list: 'melléknévi alakot kér: Szerbia → Szerb' },
+    { eh: 'csaladiallapot', label: 'családi állapot', req: true, key: 'marital_status', list: true },
+
+    { panel: '── 2. LAP: FOGLALKOZTATÁS MEGKEZDÉSE ──' },
+    { panel: 'Magyarországi munkáltató adatai' },
+    { eh: 'munkaltatomunkaltatoneve', label: 'név', req: true, employer: 'nev' },
+    { panel: 'székhely címe' },
+    { eh: 'szhiranyitoszam', label: 'irányítószám', req: true, employer: 'szekhely.iranyitoszam' },
+    { eh: 'szhtelepules', label: 'település', req: true, employer: 'szekhely.telepules' },
+    { eh: 'szhkozteruletneve', label: 'közterület neve', req: true,
+      employer: 'szekhely.kozteruletneve' },
+    { eh: 'szhkozteruletjellege', label: 'közterület jellege', req: true,
+      employer: 'szekhely.kozteruletjellege', list: true },
+    { eh: 'szhhazszam', label: 'házszám/helyrajzi szám', req: true, employer: 'szekhely.hazszam' },
+    { eh: 'szhepulet', label: 'épület', employer: 'szekhely.epulet' },
+    { eh: 'szhlepcsohaz', label: 'lépcsőház', employer: 'szekhely.lepcsohaz' },
+    { eh: 'szhemelet', label: 'emelet', employer: 'szekhely.emelet', list: true },
+    { eh: 'szhajto', label: 'ajtó', employer: 'szekhely.ajto' },
+    { eh: 'levelezesicimje', label: 'levelezési címe', const: 'üresen', list: true,
+      note: 'nem kötelező; ha mégis kell, ugyanaz, mint a telephely címe' },
+    { panel: 'telephely címe' },
+    { eh: 'thiranyitoszam', label: 'irányítószám', req: true, employer: 'munkavegzes.iranyitoszam' },
+    { eh: 'thtelepules', label: 'település', req: true, employer: 'munkavegzes.telepules' },
+    { eh: 'thkozteruletneve', label: 'közterület neve', req: true,
+      employer: 'munkavegzes.kozteruletneve' },
+    { eh: 'thkozteruletjellege', label: 'közterület jellege', req: true,
+      employer: 'munkavegzes.kozteruletjellege', list: true },
+    { eh: 'thhazszam', label: 'házszám/helyrajzi szám', req: true, employer: 'munkavegzes.hazszam' },
+    { eh: 'thepulet', label: 'épület', employer: 'munkavegzes.epulet' },
+    { eh: 'thlepcsohaz', label: 'lépcsőház', employer: 'munkavegzes.lepcsohaz' },
+    { eh: 'themelet', label: 'emelet', employer: 'munkavegzes.emelet', list: true },
+    { eh: 'thajto', label: 'ajtó', employer: 'munkavegzes.ajto' },
+    { eh: 'cegformaja', label: 'cégforma', req: true, employer: 'cegforma' },
+    { eh: 'cegjegyzekszam', label: 'cégjegyzékszám', req: true, employer: 'cegjegyzekszam' },
+
+    { panel: 'Egyéb adatok' },
+    { eh: 'tartrajogokmszama', label: 'tartózkodásra jogosító engedély száma', req: true,
+      fromCase: 'hatarozat', note: 'a határozat száma (106-…) = a legutóbb engedélyezett kérelem iktatószáma' },
+    { eh: 'fogalkoztataskezdete', label: 'Foglalkoztatás megkezdése', req: true,
+      fromCase: 'kezdet', fallback: 'employment_start' },
+    { eh: 'feorszam', label: 'munkakör (FEOR szám)', req: true,
+      key: 'feor', list: 'a 4 jegyű kód alapján keresd a listában' },
+    { eh: 'sziranyitoszam', label: 'Szálláshely irányítószám', req: true, key: 'postal_code' },
+    { eh: 'sztelepules', label: 'Szálláshely település', req: true, key: 'locality' },
+  ];
+
+  /** Ügytípus → saját EH-űrlap. Ami nincs itt, az kérelem: fő űrlap + betétlap. */
+  const TIPUS_URLAP = { munkaviszony_bejelentes: BEJELENTES_ROWS };
+
   // ── Lekérdezés ─────────────────────────────────────────────────────────────
+
+  /** Az ügy sorai: a típus saját űrlapja, vagy a kérelemé (rows). */
+  function rowsFor(tipus, jogcim) {
+    return TIPUS_URLAP[tipus] ? TIPUS_URLAP[tipus].slice() : rows(jogcim);
+  }
+
+  /** Van-e saját űrlapja (akkor nincs jogcímválasztó). */
+  function sajatUrlap(tipus) { return !!TIPUS_URLAP[tipus]; }
 
   /**
    * Egy kérelem sorai: a fő űrlap, majd — ha van jogcím — a betétlap.
@@ -501,8 +586,8 @@ const EhForms = (() => {
     return (v && v[mezo] != null) ? v[mezo] : '';
   }
 
-  return { JOGCIMEK, rows, labelOf, employerValue, EMPLOYER: EH_EMPLOYER,
-           _FO: FO_ROWS, _BETET: BETET_ROWS };
+  return { JOGCIMEK, rows, rowsFor, sajatUrlap, labelOf, employerValue, EMPLOYER: EH_EMPLOYER,
+           _FO: FO_ROWS, _BETET: BETET_ROWS, _BEJELENTES: BEJELENTES_ROWS };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { EhForms, EH_EMPLOYER };

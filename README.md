@@ -859,6 +859,31 @@ fejlécében áll. Kilépés: ugyanaz a gomb, vagy **Esc** (mezőn kívül). A v
 felhasználónként megmarad. Mentés és jogcímváltás után a nézet ott marad, ahol
 volt — nem ugrik a lap tetejére.
 
+**EH-szám a panel fejlécében.** Az ügy EH-száma kitöltés közben itt is
+beírható, nem kell érte az Idővonalra visszalépni. Az EH-oldal címe is
+beilleszthető egészben (`…/eh/cases/edit/20122004/…`) — a mező `EH20122004`-et
+ment belőle. Más ügy számát nem veszi át: hibát ír, és visszaáll.
+
+### Munkaviszony megkezdésének bejelentése
+
+Engedélyezés után 5 napon belül be kell jelenteni a munkaviszony megkezdését.
+A bejelentés **külön ügy** (Munkaviszony megkezdésének bejelentése), saját
+EH-számmal; az **Enter Hungary** fülén a bejelentés két EH-lapja áll, az EH
+sorrendjében:
+
+1. **Bejelentés** — személyes adatok (előnév és előző név nélkül: nem kellenek).
+2. **Foglalkoztatás megkezdése** — munkáltató (név, székhely, telephely,
+   cégforma, cégjegyzékszám), a tartózkodásra jogosító engedély száma (a
+   legutóbb engedélyezett kérelem **iktatószáma**, 106-…), a foglalkoztatás
+   kezdete (az ügy **Munkaviszony kezdete** napja; ha üres, a dolgozó belépési
+   dátuma, jelzéssel), FEOR, szálláshely irányítószáma és települése.
+
+A leggyorsabb út: az engedélyezett kérelem teendőlistáján a **Bejelentés az
+EH-n…** gomb. Ha még nincs bejelentés-ügy, az új ügy űrlapja nyílik (ott add meg
+a munkaviszony kezdetét), mentés után az ügy az Enter Hungary fülön nyílik. Ha
+már van, a gomb azt nyitja, és a felirata az EH-számát mutatja. A teendőt a
+beküldés után továbbra is kézzel kell kipipálni.
+
 
 Az idegenrendészeti ügyintézés nem állapot, hanem folyamat: a kérelmek egymás
 után következnek, és közben be- meg kijelentéseket is határidőre kell tenni.

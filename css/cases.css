@@ -362,7 +362,8 @@
 }
 .eh-jogcim { display: flex; flex-direction: column; gap: 3px; flex: 1 1 260px; min-width: 0; }
 .eh-jogcim > span { font-size: 11px; color: var(--c-muted); }
-.eh-hint { font-size: 10px; color: var(--c-muted); padding-bottom: 5px; cursor: help; }
+.eh-hint { font-size: 10px; color: var(--c-muted); padding-bottom: 5px; cursor: help; margin-right: auto; }
+.eh-szam { flex: 0 1 190px; }
 /* A kézi sorok rejtése a fejléc jobb szélére kerül, a többitől elhúzva. */
 .eh-kezi { margin-left: auto; margin-bottom: 4px; }
 .eh-fokusz-btn { margin-bottom: 4px; }

@@ -68,6 +68,39 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-11-04 (2.) — Munkaviszony-bejelentés az EH-panelen, EH-szám visszaírása
+
+**Cél:** a munkaviszony megkezdésének bejelentéséhez kellő EH-rovatok legyenek a
+programban (a felhasználó két mentett EH-lapja alapján), és a bejelentés
+EH-száma legyen visszaírható. Előnév (2×) és előző családi/utónév nem kell.
+**Változás (`v10.99`):** `eh-forms.js`: `BEJELENTES_ROWS` (39 rovat, két lap) +
+`rowsFor(tipus, jogcim)`, `cegforma` / `cegjegyzekszam` az `EH_EMPLOYER`-ben.
+`case-eh.js`: a `munkaviszony_bejelentes` ügy EH-fülén a bejelentés űrlapja
+(jogcímválasztó nélkül); új `fromCase`: `hatarozat`, `kezdet`; **EH-szám mező a
+panel fejlécében** minden ügynél (EH-oldal címe is beilleszthető → `EH<szám>`).
+Kérelem teendőlistája: „Bejelentés az EH-n…” gomb (`CaseRepo.bejelentesUgye`).
+README, TERV-enterhungary 13.
+**Miért / döntés:**
+- A bejelentés **külön ügy** (a meglévő típus): saját EH-szám egyediség-
+  ellenőrzéssel, kereséssel. A kérelemre írt második szám mindezt megkerülte volna.
+- A „tartózkodásra jogosító engedély száma” (EH-minta `106-…`) = az engedélyezett
+  kérelem **iktatószáma**: a bejelentéskor még nincs kártya, csak határozat.
+- Az EH-szám `EH` előtagja: az EH saját súgó-levelének tárgya a mentett oldalon
+  `EH20122102`, az új ügy űrlapjának mintája is `EH…`.
+- A nemzetiség is kimaradt (nem kötelező, kézi lista, a képernyőn nem látszott).
+**Tesztek:** `node test/run-all.js` zöld (`eh-forms` +6: kötelező rovatok
+forrással, kihagyott mezők, `rowsFor`, cégjegyzékszám, URL → EH-szám, ügyből jövő
+értékek; `cases` +1: `bejelentesUgye`). Headless Chrome + CDP, próba mód
+(eldobható): teendő-gomb → új ügy űrlap a típussal → EH-fül 39 rovattal,
+határozat/kezdet/cégadat helyes, URL-ből `EH20122004`, ütköző szám visszadobva,
+második kattintás a meglévőt nyitja; kérelemnél a jogcímválasztó marad. JS-hiba nincs.
+
+**Nyitott / következő:**
+- **Céges gépen:** egy valódi bejelentésen végigmenni — a `cégforma` (`Kft.`)
+  elfogadható-e, és a „tartózkodásra jogosító engedély száma” tényleg a
+  határozat iktatószáma-e (az EH-minta erre utal, megerősítés nincs).
+- Ha kérik: a `bejelentes` teendő pipálása a bejelentés-ügy beküldésekor.
+
 ## 2026-11-04 — SAP-táblázat: több ügy egy táblázatban
 
 **Cél:** egy nap az OIF 7 egyedi ügyben döntött — ezek egy SAP-ticket

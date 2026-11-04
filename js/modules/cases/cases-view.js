@@ -835,6 +835,18 @@ const CasesModule = (() => {
   }
 
   /**
+   * Engedélyezett kérelem → a munkaviszony-bejelentés ügye az Enter Hungary
+   * fülön (ott az EH sorrendjében másolható minden adata). Ha még nincs, az
+   * új ügy űrlapja nyílik, a típussal előtöltve (a munkaviszony kezdete ott adható meg).
+   */
+  function bejelentesNyit(c) {
+    const nyit = id => { state.lap = 'eh'; megnyit(id); };
+    const b = CaseRepo.bejelentesUgye(c);
+    if (b) nyit(b.id);
+    else CaseForm.open({ employeeId: c.employeeId, type: 'munkaviszony_bejelentes', onSaved: nyit });
+  }
+
+  /**
    * „Új ügy” → két út: egy dolgozó (a megszokott űrlap) vagy tömeges
    * ügyintézés. A két csempe egyforma (2026-10-27: a felhasználó kérte).
    */
@@ -964,6 +976,7 @@ const CasesModule = (() => {
     }));
     container.querySelectorAll('[data-teendo-gomb]').forEach(b => b.addEventListener('click', () => {
       if (b.dataset.teendoGomb === 'sap') CaseForm.openSap({ caseId: state.kivalasztott });
+      else if (b.dataset.teendoGomb === 'bejelentes') bejelentesNyit(CaseRepo.get(state.kivalasztott));
       else CaseForm.openSorozatszam({ caseId: state.kivalasztott });
     }));
 

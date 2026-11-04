@@ -1029,3 +1029,36 @@ Az **üresen maradó panelcímeket** is elhagyjuk (36 → 21): cím alatt semmiv
 a rejtés félkésznek látszana. A másolható mezők száma nem változik — a kézi
 sorok eleve nem voltak sem másolhatók, sem a Tab-láncban —, tehát a rejtés
 **tisztán megjelenítés**, semmilyen munkafolyamatot nem rövidít le.
+
+## 13. Munkaviszony megkezdésének bejelentése (2026-11-04)
+
+**Kérés:** a bejelentés EH-rovatai (két mentett lap: `…/bejelentes` és
+`…/bejelentes-foglmegkezdes`) legyenek a programban, és a bejelentés EH-száma
+legyen visszaírható.
+
+**Döntés: a bejelentés külön ügy marad** — a meglévő `munkaviszony_bejelentes`
+ügytípus. Saját EH-száma van; ez a modell már tudta (egyediség-ellenőrzés,
+keresés, idővonal). A kérelemre írt második EH-szám mindezt megkerülte volna.
+
+- `eh-forms.js`: `BEJELENTES_ROWS` (39 rovat) és `rowsFor(tipus, jogcim)` — a
+  típus saját űrlapja, egyébként a kérelemé. Saját űrlapnál nincs jogcímválasztó.
+- **Kimarad** (a felhasználó kérése): előnév (2×), előző családi/utónév — nem
+  kötelező, a születési név fedi. A nemzetiség sem (nem kötelező, kézi lista; a
+  felhasználó képernyőjén nem is látszott).
+- Új `fromCase`-ek: `hatarozat` — a „tartózkodásra jogosító engedély száma”
+  (EH-minta: `106-…`) a dolgozó legutóbb engedélyezett kérelmének
+  **iktatószáma**: a bejelentés idején (döntés + 5 nap) még nincs kártya, csak
+  határozat. `kezdet` — az ügy kezdő napja (típuscímke: „Munkaviszony
+  kezdete”), tartalék a dolgozó `employment_start`-ja, jelzéssel.
+- Cégadat: `cegforma: 'Kft.'`, `cegjegyzekszam: '19-09-503741'` az `EH_EMPLOYER`-ben.
+  A telephely a munkavégzés helye (Budapest); a levelezési cím jelölőnégyzete
+  üresen (nem kötelező).
+- **EH-szám a panel fejlécében, minden ügynél.** Az EH-oldal címe beilleszthető;
+  a szám `EH` előtaggal mentődik — a mentett oldalon az EH saját súgó-levelének
+  tárgya `EH20122102`, a cím `…/cases/edit/20122102/…`. `CaseRepo.update`
+  menti, tehát az ütköző számot ugyanúgy visszadobja.
+- Kapcsolat a kérelemmel: a teendőlista „bejelentés” sorában gomb
+  (`CaseRepo.bejelentesUgye`: a dolgozó döntés után nyitott bejelentés-ügye);
+  ha nincs, az új ügy űrlapja nyílik a típussal előtöltve.
+- **Nem készült:** a `bejelentes` teendő automatikus pipálása (a teendő a
+  beküldés, a gép nem tudja, mikor történt).
