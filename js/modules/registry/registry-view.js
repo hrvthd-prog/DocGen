@@ -90,6 +90,8 @@ const RegistryModule = (() => {
     EmployeeRepo.useBackend(h.employees);
     CaseRepo.useBackend(h.cases);
     TransferRepo.useBackend(h.transfers);
+    Hosszabbitas.useBackend(h.hosszNaplo);
+    Hosszabbitas.useConfigBackend(h.hosszCfg);
     // A fiókok és a szintek a KÖZÖS mappában élnek, külön fájlban — nem
     // localStorage-ban, mert az böngészőprofilonként külön (TERV-fiokok.md 3.2).
     Auth.useBackend(Auth.createFileBackend(dirHandle));
@@ -115,6 +117,7 @@ const RegistryModule = (() => {
     await SchemaStore.load();
     await ExportProfiles.load();
     await CaseTypes.load();
+    await Hosszabbitas.loadConfig();
 
     /**
      * Sérült adatfájlnál NEM indulunk el üresen.
@@ -144,9 +147,20 @@ const RegistryModule = (() => {
 
     state.corruptError = null;
     state.ready = true;
+    await hosszabbitasNaplo();
     await migrateLegacyKeys();
     renderSidebar();
     renderList();
+  }
+
+  /**
+   * A K2-döntésnapló betöltése. Sérült naplónál nem állunk meg (a nyilvántartás
+   * attól még használható), de a modul nem ír bele — felülírná
+   * (TERV-hosszabbitasi-dontesek.md 3.4).
+   */
+  async function hosszabbitasNaplo() {
+    try { await Hosszabbitas.load(); }
+    catch (e) { toast('A hosszabbítási döntésnapló nem olvasható: ' + e.message, 'error'); }
   }
 
   async function useIdbBackend() {
@@ -159,13 +173,17 @@ const RegistryModule = (() => {
     EmployeeRepo.useBackend(h.employees);
     CaseRepo.useBackend(h.cases);
     TransferRepo.useBackend(h.transfers);
+    Hosszabbitas.useBackend(h.hosszNaplo);
+    Hosszabbitas.useConfigBackend(h.hosszCfg);
     await SchemaStore.load();
     await ExportProfiles.load();
     await CaseTypes.load();
+    await Hosszabbitas.loadConfig();
     try { await Roles.load(); } catch { Roles.loadFrom(null); }
     await EmployeeRepo.load();
     await CaseRepo.load();
     await TransferRepo.load();
+    await hosszabbitasNaplo();
     state.ready = true;
     await migrateLegacyKeys();
     renderSidebar();
@@ -301,6 +319,9 @@ const RegistryModule = (() => {
       employees: dir ? EmployeeRepo.createFileBackend(dir) : EmployeeRepo.createIdbBackend(),
       cases:     dir ? CaseRepo.createFileBackend(dir)     : CaseRepo.createIdbBackend(),
       transfers: dir ? TransferRepo.createFileBackend(dir) : TransferRepo.createIdbBackend(),
+      // K2-döntések: a napló külön fájl (sok író, NTFS), a sávhatárok a configban
+      hosszNaplo: dir ? Hosszabbitas.createFileBackend(dir) : CaseRepo.createIdbBackend('hosszabbitas'),
+      hosszCfg:   dir ? makeConfigBackend(dir, 'hosszabbitas') : makeIdbConfigBackend('hosszabbitas'),
     };
   }
 
@@ -977,7 +998,7 @@ const RegistryModule = (() => {
     for (const [kulcs, h] of Object.entries(forras)) {
       const adat = await h.load();
       const meglevo = await cel[kulcs].load();
-      const tarolo = ['employees', 'cases', 'transfers'].includes(kulcs);
+      const tarolo = ['employees', 'cases', 'transfers', 'hosszNaplo'].includes(kulcs);
       if (!adat || (tarolo ? !rekord(adat) || rekord(meglevo) : meglevo)) continue;
       await cel[kulcs].save(adat);
       vitt.push(kulcs);

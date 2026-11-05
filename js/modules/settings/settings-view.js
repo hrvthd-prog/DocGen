@@ -119,6 +119,8 @@ const SettingsModule = (() => {
 
           ${Auth.can('settings.ehcontact') ? ehKapcsolatKartya() : ''}
 
+          ${sema ? HosszabbitasModule.beallitasKartya() : ''}
+
           ${verzioKartya()}
         </div>
       </div>`;
@@ -141,6 +143,7 @@ const SettingsModule = (() => {
       renderDictionary();
       bindSzintKartya();
       bindFiokKartya();
+      HosszabbitasModule.bindBeallitas();
     }
   }
 
@@ -424,7 +427,8 @@ const SettingsModule = (() => {
         if (!a) return;
         promptDialog('A fiók új neve:', a.name, (v) => {
           const regi = a.name;
-          const n = csapatMeret(regi, true);
+          let n = 0;
+          try { n = Leaders.cascadeCount(regi); } catch { n = 0; }
           // A dolgozók mezője a vezető NEVÉT hordozza: átnevezéskor követi (10.2).
           const atnevez = () => fut(async () => {
             const r = await Auth.rename(b.dataset.id, v);
@@ -433,7 +437,7 @@ const SettingsModule = (() => {
           });
           if (!n || Auth.fold(regi) === Auth.fold(v)) { atnevez(); return; }
           megerosit('Átnevezés',
-            `<b>${n} dolgozó</b> „Közvetlen vezető” mezője is átíródik
+            `<b>${n} dolgozó</b> „Közvetlen vezető” / „K2” mezője is átíródik
              <b>${escHtml(regi)}</b> → <b>${escHtml(v)}</b> (a kilépetteké is). A
              változás a dolgozók előzményeiben megjelenik.`,
             'Átnevezés', atnevez);
@@ -523,8 +527,9 @@ const SettingsModule = (() => {
         </div>
         <div class="ws-card-body">
           <p class="sv-intro">
-            Vezetői fiók az, amelyik csak a saját dolgozói ügyállását látja (pl. „Csak
-            megtekintő”). A <b>felettes</b> a beosztott vezetők teljes ágát is látja; a
+            Vezetői fiók az, amelyik csak a saját dolgozói ügyállását látja (pl. „Vezető”,
+            korábban „Csak megtekintő”). Ugyanezek közül választható a dolgozó <b>K2</b>-je
+            is, aki a hosszabbításról dönt. A <b>felettes</b> a beosztott vezetők teljes ágát is látja; a
             <b>helyettes</b> a megadott időszakban a helyettesített vezetőét. A dolgozók
             felől ugyanez: Nyilvántartás → sorok kijelölése → <b>Közvetlen vezető…</b>
           </p>

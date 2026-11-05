@@ -28,7 +28,7 @@ const CaseForm = (() => {
 
   // ── Új ügy / szerkesztés ───────────────────────────────────────────────────
 
-  function open({ caseId = null, employeeId = null, type = null, onSaved = null } = {}) {
+  function open({ caseId = null, employeeId = null, type = null, note = '', onSaved = null } = {}) {
     const szerkesztes = !!caseId;
     const c = szerkesztes ? CaseRepo.get(caseId) : null;
     if (szerkesztes && !c) { toast('Az ügy nem található', 'error'); return; }
@@ -96,7 +96,7 @@ const CaseForm = (() => {
 
           <label class="cf-field cf-field--wide">
             <span>Megjegyzés</span>
-            <textarea id="cf-note" class="field-input" rows="2">${escHtml(c && c.note || '')}</textarea>
+            <textarea id="cf-note" class="field-input" rows="2">${escHtml(c ? c.note || '' : note)}</textarea>
           </label>
         </div>
 
@@ -148,7 +148,7 @@ const CaseForm = (() => {
       return {
         korai:   'Még nem adható be',
         idealis: 'Beadható',
-        siess:   'Sürgős – közeleg a legvégső nap',
+        siess:   'Határidőn túl – csak vis maior, közeleg a legvégső nap',
         lekesve: 'A benyújtási határidő lejárt',
       }[f] || '';
     }

@@ -1063,6 +1063,31 @@ const CasesModule = (() => {
           onSaved: id => megnyit(id),
         });
       }));
+    // K2-döntések (TERV-hosszabbitasi-dontesek.md 3.8): az ügy a döntésre hivatkozik
+    container.querySelectorAll('[data-k2-start]').forEach(el =>
+      sorAktival(el, () => {
+        if (!irhat()) return;
+        const emp = EmployeeRepo.get(el.dataset.k2Start);
+        const d = emp && Hosszabbitas.allapot(emp).dontes;
+        CaseForm.open({
+          employeeId: el.dataset.k2Start, type: 'rp_hosszabbitas',
+          note: d ? `K2-döntés: hosszabbít — ${d.rogzitette}${d.minoseg !== 'k2'
+            ? ` (${Hosszabbitas.MINOSEG[d.minoseg]}, ${d.k2} nevében)` : ''}, ${String(d.at).slice(0, 10)}.` : '',
+          onSaved: id => megnyit(id),
+        });
+      }));
+    const jeloles = (id, ertek) => {
+      if (!irhat()) return;
+      try {
+        EmployeeRepo.setNoRenewal(id, ertek, { source: 'k2' });
+        toast(ertek ? '✓ Jelölve: nem hosszabbítjuk' : '✓ A jelölés visszavéve', 'success');
+      } catch (e) { toast(e.message, 'error'); }
+      render();
+    };
+    container.querySelectorAll('[data-k2-nr]').forEach(el =>
+      sorAktival(el, () => jeloles(el.dataset.k2Nr, true)));
+    container.querySelectorAll('[data-k2-nr-off]').forEach(el =>
+      sorAktival(el, () => jeloles(el.dataset.k2NrOff, false)));
 
     // A dolgozó neve az ügy fejlécében → az adatlapja (ugyanaz az összesítő,
     // mint a Nyilvántartásban; párbeszéd, így az ügy a háttérben marad).

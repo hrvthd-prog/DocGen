@@ -114,6 +114,17 @@ const CasesDashboard = (() => {
                                          { belul: HORIZONT, ma });
     } catch { hianyzo = []; }
 
+    // 1/b. A K2-döntések teendői (TERV-hosszabbitasi-dontesek.md 3.8). Akiről a
+    //      K2 már döntött, az nem „hiányzó ügy”: az Igen külön blokkban
+    //      indítható (a horizonttól függetlenül), a Nem átvételre vár.
+    let k2 = { indithato: [], atvetel: [], visszavetel: [], visszavonas: [] };
+    if (typeof Hosszabbitas !== 'undefined') {
+      try { k2 = Hosszabbitas.teendok(ma || undefined); } catch { /* marad üres */ }
+    }
+    const dontott = new Set([...k2.indithato, ...k2.atvetel, ...k2.visszavetel]
+      .map(a => a.emp.id));
+    hianyzo = hianyzo.filter(j => !dontott.has(j.employee.id));
+
     // 2. Benyújtási ablak a nyitott ügyeken.
     const ablak = { korai: [], idealis: [], siess: [], lekesve: [] };
     const vanAblaka = new Set();
@@ -188,10 +199,12 @@ const CasesDashboard = (() => {
       azonositoHiany,
       utkozes,
       vezetoNelkul,
+      k2,
       ugyekSzama: ugyek.length,
       // Van-e egyáltalán teendő? Ebből lesz a „minden rendben" állapot.
       vanTeendo: !!(szamok.lejart || hianyzo.length || csuszas.length || utkozes.length ||
-                    SURGETO_FAZIS.some(f => ablak[f].length) || hataridoNelkul.length),
+                    SURGETO_FAZIS.some(f => ablak[f].length) || hataridoNelkul.length ||
+                    Object.values(k2).some(l => l.length)),
     };
   }
 
@@ -221,6 +234,8 @@ const CasesDashboard = (() => {
         ${allapotHtml(d)}
         ${d.vanTeendo ? '' : rendbenHtml(d)}
         ${utkozesHtml(d)}
+        ${k2TeendoHtml(d)}
+        ${indithatoHtml(d)}
         ${hianyzoHtml(d)}
         ${csuszasHtml(d)}
         ${ablakHtml(d)}
@@ -336,22 +351,76 @@ const CasesDashboard = (() => {
 
   function hianyzoHtml(d) {
     if (!d.hianyzo.length) return '';
+    const sav = n => (typeof Hosszabbitas !== 'undefined' && Hosszabbitas.sav(n))
+      ? ` · ${Hosszabbitas.savLabel(Hosszabbitas.sav(n))}` : '';
     return blokk(
-      `Nincs még ügye — ${d.hianyzo.length}`,
-      `Lejáró tartózkodási engedély, amihez nem indult meghosszabbítás.
-       A benyújtási ablak ${HORIZONT} nappal a lejárat előtt nyílik.`,
+      `Nincs még ügye — K2 döntésre vár — ${d.hianyzo.length}`,
+      `Lejáró tartózkodási engedély, amihez nem indult meghosszabbítás, és a K2
+       még nem döntött (Hosszabbítások fül). A benyújtási ablak ${HORIZONT} nappal
+       a lejárat előtt nyílik.`,
       `<div class="dash-list">
         ${d.hianyzo.map(j => `
           <button class="dash-row" data-new-for="${escHtml(j.employee.id)}" type="button"
                   title="Meghosszabbítási ügy nyitása">
             <span class="dash-row__main">${escHtml(nev(j.employee.id))}</span>
             <span class="dash-row__meta ${j.daysLeft < 0 ? 'is-late' : ''}">
-              ${escHtml(napSzoveg(j.daysLeft))}
+              ${escHtml(napSzoveg(j.daysLeft) + sav(j.daysLeft))}
             </span>
             <span class="dash-row__go">Ügy nyitása</span>
           </button>`).join('')}
       </div>`,
       'dash-block--red');
+  }
+
+  /** „Indítható — a K2 jóváhagyta”: a horizonttól függetlenül, mert az Igen
+   *  általában ~120 napnál születik, és az előkészítés heteket vesz igénybe. */
+  function indithatoHtml(d) {
+    const l = d.k2.indithato;
+    if (!l.length) return '';
+    return blokk(
+      `Indítható — a K2 jóváhagyta — ${l.length}`,
+      `A K2 a hosszabbítás mellett döntött, ügy még nincs. Egy kattintással megnyílik
+       a hosszabbítási ügy, a döntésre hivatkozva.`,
+      `<div class="dash-list">
+        ${l.map(a => `
+          <button class="dash-row" data-k2-start="${escHtml(a.emp.id)}" type="button"
+                  title="Meghosszabbítási ügy nyitása a döntés alapján">
+            <span class="dash-row__main">${escHtml(nev(a.emp.id))}</span>
+            <span class="dash-row__meta ${a.napok < 0 ? 'is-late' : ''}">
+              ${escHtml(`${napSzoveg(a.napok)} · jóváhagyta: ${a.dontes.rogzitette}, ${String(a.dontes.at).slice(0, 10)}`)}
+            </span>
+            <span class="dash-row__go">Ügy nyitása</span>
+          </button>`).join('')}
+      </div>`,
+      'dash-block--green');
+  }
+
+  /** A „Nem” döntések átvétele és a módosítások következményei. */
+  function k2TeendoHtml(d) {
+    const { atvetel, visszavetel, visszavonas } = d.k2;
+    const n = atvetel.length + visszavetel.length + visszavonas.length;
+    if (!n) return '';
+    const sor = (a, attr, meta, go) => `
+      <button class="dash-row" ${attr} type="button">
+        <span class="dash-row__main">${escHtml(nev(a.emp.id))}</span>
+        <span class="dash-row__meta">${escHtml(meta)}</span>
+        <span class="dash-row__go">${go}</span>
+      </button>`;
+    const nap = a => `${a.dontes.rogzitette}, ${String(a.dontes.at).slice(0, 10)}`;
+    return blokk(
+      `K2-döntés — teendő — ${n}`,
+      `A „Nem hosszabbít” döntést a „nem hosszabbítjuk” jelölés veszi át (innen
+       indulnak a kilépés teendői). A K2 nem ír a nyilvántartásba, ezért ez a te
+       kattintásod.`,
+      `<div class="dash-list">
+        ${visszavonas.map(a => sor(a, `data-open-case="${escHtml(a.ugy.id)}"`,
+          `A K2 visszavonta (${nap(a)}) — a kérelem visszavonása?`, 'Ügy megnyitása')).join('')}
+        ${visszavetel.map(a => sor(a, `data-k2-nr-off="${escHtml(a.emp.id)}"`,
+          `A K2 Igenre módosított (${nap(a)}) — a jelölés visszavétele`, 'Visszavétel')).join('')}
+        ${atvetel.map(a => sor(a, `data-k2-nr="${escHtml(a.emp.id)}"`,
+          `Nem hosszabbít (${nap(a)})`, 'Átvétel')).join('')}
+      </div>`,
+      'dash-block--amber');
   }
 
   function ablakHtml(d) {

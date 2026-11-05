@@ -5,7 +5,7 @@
  *
  * Két részből áll:
  *   1. Benyújtási sáv – csak ott, ahol számítható (meghosszabbítás). Egy
- *      pillantással megmutatja, hol tartunk a −90 / −40 / −10 napos ablakban.
+ *      pillantással megmutatja, hol tartunk a −90 / −45 / −15 napos ablakban.
  *   2. Függőleges idővonal – a megtörtént események és a még hátralévő
  *      mérföldkövek időrendben.
  *
@@ -105,7 +105,7 @@ const CaseTimeline = (() => {
          { iso: st.dueAt,       label: 'ügyintézési határidő' },
          { iso: a.basis,        label: 'engedély lejár' }]
       : [{ iso: a.earliest, label: 'legkorábbi' },
-         { iso: a.latest,   label: 'ajánlott' },
+         { iso: a.latest,   label: 'határidő' },
          { iso: a.final,    label: 'legvégső' },
          { iso: a.basis,    label: 'engedély lejár' }];
 

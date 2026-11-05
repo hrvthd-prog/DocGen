@@ -215,6 +215,8 @@ const RegistryXlsxIO = (() => {
         terv = XlsxRead.planUpdate(olvasas.rows, { mezok, fiokMezok: {
           [Leaders.FIELD]: { canonical: Leaders.canonical,
             megj: 'Nem vezetői fiók — amíg nincs ilyen nevű fiók, a vezető nem látja a dolgozót' },
+          [Leaders.K2_FIELD]: { canonical: Leaders.canonical,
+            megj: 'Nem vezetői fiók — amíg nincs ilyen nevű fiók, a K2 nem dönthet a hosszabbításról' },
           [HRBP_FIELD]: { canonical: hrbpFiok,
             megj: 'Nem HRBP-fiók — nincs ilyen nevű, HR Business Partner szintű fiók' },
         } });

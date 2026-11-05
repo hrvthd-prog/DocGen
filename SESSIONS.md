@@ -68,6 +68,74 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-11-05 — K2-döntések az engedély-hosszabbításról: terv és megvalósítás
+
+**Cél:** a hosszabbításról szóló vezetői döntés (ma: HRBP → K2 → HRBP →
+ügyintéző, e-mailben és Excelben) a DocGen-be kerüljön: a K2 dönt, a
+közvetlen vezető olvas, a HRBP mindent lát és helyettesíthet, sávos lista,
+napló és offline értesítés. Előbb terv (két Ask-kör), aztán „ellenőrizd
+aprólékosan, majd egy run-ban implementáld”.
+**Változás (`v10.103`):** `plans/TERV-hosszabbitasi-dontesek.md` (terv + 9.
+fejezet: ellenőrzési javítások és eltérések). Új: `js/services/hosszabbitas.js`
+(sávok, csak hozzáfűzéses napló `data/docgen-hosszabbitas.json`, kör, ki
+dönthet, listák, ügyintézői teendők, `ertesitesek()`),
+`js/modules/hosszabbitas-view.js` („Hosszabbítások” fül, döntési ablak,
+előzmény, fejléc-csengő + Összesítő, Beállítások-kártya), `css/hosszabbitas.css`,
+`test/hosszabbitas.test.js`. Módosult: `roles.js` (4 új jog, a `megtekinto`
+seed-neve „Vezető”), `leaders.js` (`FIELDS` = közvetlen vezető + K2, az
+átnevezés mindkettőt viszi), `case-types.js` (ablak −90/−45/−15),
+`case-repo.js` feliratai, `cases-dashboard.js` + `cases-view.js` (Indítható /
+K2-döntés teendő / „Nincs még ügye — K2 döntésre vár”), `case-form.js`
+(`note` előtöltés), `registry-view.js` (napló- és config-háttér, költöztetés),
+`employee-form.js` + `xlsx-io.js` (K2 lenyíló lista, import-jelzés), `app.js`,
+`index.html`, README (új szakasz + vezetői útmutató), `TERV-fiokok.md` 4.
+(NTFS-sor).
+**Miért / döntés:** a felhasználó két kérdéskörben döntött (terv 2.): a
+`hr_k2` mező kötődik fiókhoz (a `Leaders` mintájára); közös mappa, később
+NTFS; a sávok 179–120 (a „179–20” elírás volt), és az `rp_hosszabbitas`
+ablaka **-90/-45/-15**-re áll (a 90/45/15 egy forrásból jön); a döntés
+bármikor módosítható, de futó ügynél erős, nyugtázandó jelzés jár hozzá;
+Igen/Nem + opcionális indoklás, a mezők adatként; a közvetlen vezető csak
+olvas; a K2 helyettese dönthet; az ügyintézőnél teendő + egy kattintás.
+Saját tervezői döntések: **külön, csak hozzáfűzéses
+`docgen-hosszabbitas.json`** (sok író; NTFS-ben ez az egyetlen fájl, amit a
+vezetők írnak). Párhuzamos írásnál **összefésül**, ami a TERV-adatbiztonsag 7.
+alól tudatos kivétel, mert eseménynaplónál nincs ütközés. A **kör** az utolsó
+lezárt hosszabbítási ügy óta tart, új azonosító nem kell. Az értesítéseket
+kiszámoljuk, nem tároljuk. A „Nem” döntést az ügyintéző veszi át `noRenewal`-ba,
+mert a K2 nem ír a dolgozói fájlba.
+A nyitott kérdések egy második körben lezárultak (terv 2., második
+táblázat): 10–50 vezető lesz, és mind eléri a mappát (ezért bevezető
+útmutató kell); a HRBP a saját dolgozóiról kap értesítést, egy kapcsolóval
+mindenkiéről; a jegyzet közös; az átvételt a legfőbb admin végzi (a januári
+lejárók döntései már megvannak); a napló megőrzése egyelőre korlátlan; 14
+napon belül és lejárt engedélynél csak listás jelzés van; a tartózkodási cél
+korlátja nem kell; a HRBP forrása és a tényleges nap nem kötelező.
+Az ellenőrzéskor javítva (terv 9.): az ablak-migráció felesleges (a beépített
+ügytípus ablaka mindig a seedből jön); a lezárt kör döntése 30 napig a 2.
+listán marad, különben az „Engedélyezve …-ig” sosem látszana; az
+eseményértesítések 30 napig élnek (különben másik gépen évek eseményei jönnek
+újként); az „új dolgozó került hozzád” csak K2-csere, nem első kitöltés.
+**Tesztek:** `node test/run-all.js` — minden készlet zöld (új: 37 teszt a
+`hosszabbitas.test.js`-ben; a `cases.test.js` az új ablakra frissült). Böngészőben
+(próba mód, memóriabeli adat, `.claude/launch.json` `docgen` szerver): fül,
+sávok, döntés, módosítás futó ügynél (indoklás nélkül elutasítja), nyugtázás,
+Összesítő, Áttekintés-blokkok, átvétel, Beállítások-kártya, K2-fiók szűkített
+nézete — konzolhiba nélkül.
+
+**Nyitott / következő:**
+- **Céges gépen, kézzel** (terv 6. vége): belépés K2-ként → Összesítő → döntés
+  → HRBP-ként az értesítés → K2-módosítás futó ügynél → nyugtázás →
+  ügyintézőként „Indítható” → ügy lezárása → K2-ként „Engedélyezve …-ig”; két
+  böngészőablakban egyszerre két döntés, mindkettő megmarad.
+- Az élő configban az admin nevezze át a „Csak megtekintő” szintet „Vezető”-re
+  (a seed-név csak új telepítésre hat), és ellenőrizze a szintek rácsán az új
+  jogokat (a beépített szintek frissítéskor megkapják).
+- Bevezetéskor: a HR töltse ki a `hr_k2` mezőt (Frissítés törzsszám alapján),
+  az admin rögzítse a már meghozott (januári) döntéseket forrással.
+- Nem épült meg (javaslat volt): 7.4 mutató, 7.5 kapacitás-előrejelzés, 7.8
+  egységes sávszínek, 7.9 horizont; a 2. fázis vezetői kivonata.
+
 ## 2026-11-04 (4.) — Ügy → dolgozó adatlapja; az adatlap újratervezése
 
 **Cél:** (1) az Ügyek fülön az ügyből a dolgozó nevére kattintva az adatlapja

@@ -1,0 +1,102 @@
+/* ── Hosszabbítások: K2-döntések (plans/TERV-hosszabbitasi-dontesek.md 3.2, 3.7) ──
+   A sáv színe MINDIG felirattal együtt jelenik meg (színtévesztés, nyomtatás):
+   a táblában a „Sáv” oszlop, a jelmagyarázatban a chip szövege. */
+
+.hs-sav--tajekoztato { --hs-bg: transparent; --hs-fg: var(--c-text);  --hs-jel: var(--c-border); }
+.hs-sav--kozeleg     { --hs-bg: #EEF2F7;     --hs-fg: #3E5068;        --hs-jel: #9AAAC4; }
+.hs-sav--esedekes    { --hs-bg: #FFF6D6;     --hs-fg: #7A5A00;        --hs-jel: #E2B629; }
+.hs-sav--kesesben    { --hs-bg: #FDE9D3;     --hs-fg: #8A4A0C;        --hs-jel: #E08A2E; }
+.hs-sav--utolso      { --hs-bg: #FBDCDC;     --hs-fg: #8C1F1F;        --hs-jel: var(--c-red); }
+.hs-sav--vismaior    { --hs-bg: #E9B7B7;     --hs-fg: #5E0D0D;        --hs-jel: #9E1B1B; }
+.hs-sav--nemadhato   { --hs-bg: #2B2B2B;     --hs-fg: #FFFFFF;        --hs-jel: #000000; }
+.hs-sav--lejart      { --hs-bg: #2B2B2B;     --hs-fg: #FFFFFF;        --hs-jel: #000000; }
+
+/* Sorszínezés a ClientPicker-táblában (rowClass) */
+.cp-table tbody tr[class*="hs-sav--"] td { background: var(--hs-bg); color: var(--hs-fg); }
+.cp-table tbody tr[class*="hs-sav--"] td:nth-child(3) { box-shadow: inset 4px 0 0 var(--hs-jel); }
+.cp-table tbody tr.hs-sav--lejart td { text-decoration: line-through; text-decoration-thickness: 1px; }
+.cp-table tbody tr.hs-sav--lejart td:nth-child(3) { text-decoration: none; }
+.cp-table tbody tr[class*="hs-sav--"].cp-selected td { background: #E5F4F0; color: var(--c-text); }
+
+/* Módosított döntés: narancs jel mindkét listán; nyugtázandó: piros */
+.cp-table tbody tr.hs-mod td:nth-child(3) { box-shadow: inset 4px 0 0 var(--c-amber); }
+.cp-table tbody tr.hs-eros td { background: #FBE9E9; }
+.cp-table tbody tr.hs-eros td:nth-child(3) { box-shadow: inset 4px 0 0 var(--c-red); }
+
+.hs-legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+.hs-chip {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  padding: 3px 9px; border-radius: 11px; font-size: 11px; font-weight: 600;
+  background: var(--hs-bg); color: var(--hs-fg); border: 1px solid var(--hs-jel);
+}
+.hs-chip small { font-weight: 400; opacity: .8; }
+
+.hs-szakasz {
+  margin: 4px 0 8px; padding: 6px 10px; border-radius: 6px;
+  font-size: 13px; font-weight: 700;
+}
+.hs-szakasz--igen { background: #E3F3E7; color: #1F6B36; }
+.hs-szakasz--nem  { background: #FBE9E9; color: #8C2020; margin-top: 18px; }
+.hs-korabbi { margin-left: auto; font-size: 12px; }
+
+.hs-alert {
+  margin: 0 0 12px; padding: 8px 12px; border-radius: 8px;
+  background: #FBE9E9; color: #8C2020; border-left: 4px solid var(--c-red); font-size: 12.5px;
+}
+.hs-alert--soft { background: var(--c-bg); color: var(--c-text); border-left-color: var(--c-slate); }
+
+/* Döntési ablak */
+.hs-fej {
+  margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; line-height: 1.6;
+  background: var(--hs-bg); color: var(--hs-fg); border-left: 4px solid var(--hs-jel);
+  font-size: 12.5px;
+}
+.hs-sav--tajekoztato.hs-fej { background: var(--c-bg); }
+.hs-valaszt { display: flex; gap: 10px; margin: 4px 0 12px; }
+.hs-opt {
+  flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer;
+  padding: 10px 12px; border: 2px solid var(--c-border); border-radius: 8px;
+  font-weight: 600; font-size: 13px;
+}
+.hs-opt--igen:has(input:checked) { border-color: var(--c-green); background: #E3F3E7; }
+.hs-opt--nem:has(input:checked)  { border-color: var(--c-red);   background: #FBE9E9; }
+.hs-opt:has(input:disabled) { opacity: .45; cursor: not-allowed; }
+
+/* Előzmény */
+.hs-kor { margin: 14px 0 6px; font-size: 12.5px; font-weight: 600; color: var(--c-text); }
+.hs-elozmeny { width: 100%; font-size: 12px; }
+.hs-elozmeny td { vertical-align: top; }
+.hs-elozmeny tr.hs-eros td { background: #FDF6F6; }
+
+/* Fejléc: csengő */
+.header-bell {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border: none; border-radius: 50%; cursor: pointer;
+  background: rgba(255,255,255,.08); color: rgba(255,255,255,.8);
+}
+.header-bell:hover { background: rgba(255,255,255,.18); }
+.header-bell.is-eros { color: #FFB4B4; }
+.header-bell__n {
+  position: absolute; top: -3px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 8px; background: var(--c-red); color: #fff;
+  font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
+}
+
+/* Összesítő */
+.hs-tetel { display: flex; align-items: center; gap: 8px; }
+.hs-tetel .dash-row { flex: 1; }
+.hs-tetel--surgos .dash-row__main { color: #8A4A0C; }
+.hs-tetel--eros   { background: #FBE9E9; border-radius: 6px; }
+.hs-tetel--eros .dash-row__main { color: #8C2020; font-weight: 600; }
+.hs-tetel.is-olvasott .dash-row__main { color: var(--c-muted); font-weight: 400; }
+.hs-uj {
+  display: inline-block; padding: 0 6px; border-radius: 8px; margin-right: 2px;
+  background: var(--c-green); color: #fff; font-size: 10px; font-weight: 700;
+}
+
+/* Ügyek → Áttekintés: „Indítható — a K2 jóváhagyta” */
+.dash-block--green { border-left-color: var(--c-green); }
+
+@media print {
+  .cp-table tbody tr[class*="hs-sav--"] td { background: none; color: #000; }
+}

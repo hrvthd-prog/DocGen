@@ -143,14 +143,20 @@ oda kap olvasást. Enélkül a fájlhoz hozzáférve mindent lát.
 
 ## 4. NTFS-terv a 2. fázishoz (kód nincs, az IT állítja be)
 
-| Szint | `data\` (nyilvántartás) | `Sablonok\` | munkamappa (dolgozói mappák) | `allapot\` |
-|---|---|---|---|---|
-| admin | írás | írás | írás | írás |
-| ügyintéző | írás | olvasás | írás | írás |
-| HRBP | írás¹ | olvasás | olvasás | olvasás |
-| megtekintő | **nincs** | nincs | nincs | **olvasás** |
+| Szint | `data\` (nyilvántartás) | `data\docgen-hosszabbitas.json`² | `Sablonok\` | munkamappa (dolgozói mappák) | `allapot\` |
+|---|---|---|---|---|---|
+| admin | írás | írás | írás | írás | írás |
+| ügyintéző | írás | írás | olvasás | írás | írás |
+| HRBP | írás¹ | írás | olvasás | olvasás | olvasás |
+| megtekintő (Vezető) | **nincs** | **írás** | nincs | nincs | **olvasás** |
 
 ¹ A HRBP mezőszintű korlátja NTFS-sel nem kikényszeríthető — a fájl egész.
+
+² A K2-döntésnapló (`TERV-hosszabbitasi-dontesek.md` 3.4, 3.11). A vezetőknek
+**csak erre az egy fájlra** kell írási jog. Feltétele, hogy a vezetői
+Hosszabbítások fül a nyilvántartás helyett kivonatból olvasson (név, törzsszám,
+lejárat, K2, közvetlen vezető, ügy állása — az `allapot\` mintájára); ez a
+kivonat még nincs megépítve, addig a vezetők a közös mappát használják (1. fázis).
 Ez a korlát az 1. fázis felületi szabálya marad; az NTFS annyit ad, hogy a HRBP
 egyáltalán írhat-e a fájlba. Ha a mezőszintű korlátnak valódi határ kell, az már
 kiszolgálót igényel.

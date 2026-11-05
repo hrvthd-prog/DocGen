@@ -25,7 +25,10 @@ megvalósítva**),
 `TERV-tomeges-ugyintezes.md` (tömeges ügy, ügytípus-sablonok, hiánypótló
 szerkesztő, legutóbbi változások),
 `TERV-kimenet-es-ugyek.md` (09_OIF_kerelmek mappaszerkezet, adatmappa helye,
-ügylista-szűrők, engedélyezés utáni teendők, SAP-táblázat).
+ügylista-szűrők, engedélyezés utáni teendők, SAP-táblázat),
+`TERV-hosszabbitasi-dontesek.md` (K2-döntések az engedély-hosszabbításról,
+sávok, döntésnapló, értesítések — megvalósítva v10.103-ban, az eltérések a 9.
+fejezetben).
 A használat: `README.md`.
 
 ## Hol fut?

@@ -19,6 +19,11 @@ const Leaders = (() => {
 
   /** A séma mezője. Egy helyen, hogy ne szóródjon szét a kódban. */
   const FIELD = 'hr_direct_leader';
+  /** A vezetői fiókhoz kötött mezők: a közvetlen vezető és a K2 (a hosszabbítás
+   *  döntéshozója, TERV-hosszabbitasi-dontesek.md 3.1). Mindkettő NEVET hordoz,
+   *  mindkettő lenyíló lista, és átnevezéskor mindkettő követi a fiókot. */
+  const K2_FIELD = 'hr_k2';
+  const FIELDS = [FIELD, K2_FIELD];
 
   function leaderOf(emp) { return String(((emp && emp.fields) || {})[FIELD] || '').trim(); }
 
@@ -70,21 +75,34 @@ const Leaders = (() => {
     return { valtozott, hibak };
   }
 
-  /** Fiók átnevezésekor a dolgozók mezője is követi — a kilépetteké is. */
+  /** Fiók átnevezésekor a dolgozók mezői (közvetlen vezető, K2) is követik —
+   *  a kilépetteké is. A `valtozott` a dolgozók száma, nem a mezőké. */
   function renameCascade(regi, uj) {
-    if (!Auth.fold(regi) || Auth.fold(regi) === Auth.fold(uj)) {
-      return { valtozott: 0, hibak: [] };
-    }
-    const ids = teamOf(regi, { includeExited: true }).map(e => e.id);
+    const f = Auth.fold(regi);
+    if (!f || f === Auth.fold(uj)) return { valtozott: 0, hibak: [] };
     const hibak = [];
     let valtozott = 0;
-    for (const id of ids) {
+    for (const emp of EmployeeRepo.all({ includeExited: true })) {
+      const mezok = {};
+      for (const k of FIELDS) {
+        if (Auth.fold((emp.fields || {})[k]) === f) mezok[k] = uj;
+      }
+      if (!Object.keys(mezok).length) continue;
       try {
-        EmployeeRepo.update(id, { fields: { [FIELD]: uj }, source: 'fiok' });
+        EmployeeRepo.update(emp.id, { fields: mezok, source: 'fiok' });
         valtozott++;
-      } catch (e) { hibak.push({ id, uzenet: e.message }); }
+      } catch (e) { hibak.push({ id: emp.id, uzenet: e.message }); }
     }
     return { valtozott, hibak };
+  }
+
+  /** Hány dolgozónál áll ez a név valamelyik vezetői mezőben (közvetlen vezető
+   *  vagy K2) — az átnevezés megerősítéséhez. */
+  function cascadeCount(nev) {
+    const f = Auth.fold(nev);
+    if (!f) return 0;
+    return EmployeeRepo.all({ includeExited: true })
+      .filter(e => FIELDS.some(k => Auth.fold((e.fields || {})[k]) === f)).length;
   }
 
   /** Aktív dolgozók vezető nélkül, vagy fiókkal nem egyező vezetővel. */
@@ -92,8 +110,8 @@ const Leaders = (() => {
     return EmployeeRepo.all().filter(e => !isAccountName(leaderOf(e)));
   }
 
-  return { FIELD, leaderOf, candidates, isAccountName, canonical, teamOf, assign,
-           renameCascade, orphans };
+  return { FIELD, K2_FIELD, FIELDS, leaderOf, candidates, isAccountName, canonical,
+           teamOf, assign, renameCascade, cascadeCount, orphans };
 })();
 
 if (typeof globalThis !== 'undefined' && typeof module === 'undefined') {

@@ -138,6 +138,7 @@ for (const [rel, name] of [
   ['../js/schema/case-types.js',              'CaseTypes'],
   ['../js/services/case-repo.js',             'CaseRepo'],
   ['../js/services/transfer-repo.js',         'TransferRepo'],
+  ['../js/services/hosszabbitas.js',         'Hosszabbitas'],
   ['../js/modules/registry/registry-view.js', 'RegistryModule'],
 ]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, rel), 'utf8') +

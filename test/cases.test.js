@@ -234,8 +234,8 @@ atest('a három mérföldkő az engedély lejáratából számol', async () => {
   const a = CaseTypes.submissionWindow('rp_hosszabbitas', { expiration_of_rp: '2026-12-31' });
   assertEq(a.basis,    '2026-12-31');
   assertEq(a.earliest, '2026-10-02');   // −90 nap
-  assertEq(a.latest,   '2026-11-21');   // −40 nap
-  assertEq(a.final,    '2026-12-21');   // −10 nap
+  assertEq(a.latest,   '2026-11-16');   // −45 nap
+  assertEq(a.final,    '2026-12-16');   // −15 nap
 });
 
 atest('engedély lejárata nélkül nincs ablak – nem talál ki dátumot', async () => {
@@ -253,10 +253,10 @@ atest('a négy szakasz helyesen különül el', async () => {
   const a = CaseTypes.submissionWindow('rp_hosszabbitas', { expiration_of_rp: '2026-12-31' });
   assertEq(CaseTypes.windowPhase(a, '2026-09-01'), 'korai',   'még nem nyílt meg');
   assertEq(CaseTypes.windowPhase(a, '2026-10-02'), 'idealis', 'a nyitónap már beadható');
-  assertEq(CaseTypes.windowPhase(a, '2026-11-21'), 'idealis', 'az ajánlott határnap még ideális');
-  assertEq(CaseTypes.windowPhase(a, '2026-11-22'), 'siess');
-  assertEq(CaseTypes.windowPhase(a, '2026-12-21'), 'siess',   'a legvégső nap még beadható');
-  assertEq(CaseTypes.windowPhase(a, '2026-12-22'), 'lekesve');
+  assertEq(CaseTypes.windowPhase(a, '2026-11-16'), 'idealis', 'a határidő napja még ideális');
+  assertEq(CaseTypes.windowPhase(a, '2026-11-17'), 'siess');
+  assertEq(CaseTypes.windowPhase(a, '2026-12-16'), 'siess',   'a legvégső nap még beadható');
+  assertEq(CaseTypes.windowPhase(a, '2026-12-17'), 'lekesve');
 });
 
 atest('az összefoglaló szöveg megmondja, mit kell tenni', async () => {
@@ -269,7 +269,7 @@ atest('az összefoglaló szöveg megmondja, mit kell tenni', async () => {
 
   assert(/nem adható be/.test(CaseRepo.submissionStatus(ugy, F, '2026-09-01').text));
   assert(/Beadható/.test(CaseRepo.submissionStatus(ugy, F, '2026-10-15').text));
-  assert(/Sürgős/.test(CaseRepo.submissionStatus(ugy, F, '2026-12-01').text));
+  assert(/vis maior/.test(CaseRepo.submissionStatus(ugy, F, '2026-12-01').text));
   assert(/lejárt/.test(CaseRepo.submissionStatus(ugy, F, '2026-12-25').text));
 });
 
@@ -1046,8 +1046,8 @@ atest('a mérföldkövek a VALÓDI arányuknál állnak, nem egyenletesen', asyn
 
   const p = Object.fromEntries(m.marks.map(k => [k.label, Math.round(k.pct * 10) / 10]));
   assertEq(p['legkorábbi'], 0);
-  assertEq(p['ajánlott'],  Math.round((50 / 90) * 1000) / 10);   // −40 nap → 55.6%
-  assertEq(p['legvégső'],  Math.round((80 / 90) * 1000) / 10);   // −10 nap → 88.9%
+  assertEq(p['határidő'],  Math.round((45 / 90) * 1000) / 10);   // −45 nap → 50%
+  assertEq(p['legvégső'],  Math.round((75 / 90) * 1000) / 10);   // −15 nap → 83.3%
   assertEq(p['engedély lejár'], 100);
 
   // a mai nap ugyanazon a skálán: 2026-11-01 a 30. nap
@@ -1116,7 +1116,7 @@ atest('a következő ügy az ÚJ engedély ablakából indul', async () => {
   assertEq(uj.closedAt, null);
 
   const ablak = CaseTypes.submissionWindow('rp_hosszabbitas', EmployeeRepo.get(emp.id).fields);
-  assertEq(ablak.final, '2028-10-05');
+  assertEq(ablak.final, '2028-09-30');   // −15 nap
 });
 
 atest('lejárat ismerete nélkül nem lehet láncolni', async () => {

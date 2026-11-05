@@ -180,8 +180,9 @@ const EmployeeForm = (() => {
           ${opts.map(o => `<option value="${escHtml(o.id)}"${o.id === val ? ' selected' : ''}>${escHtml(o.label)}</option>`).join('')}
           ${unknown ? `<option value="${escHtml(val)}" selected>${escHtml(val)} (ismeretlen)</option>` : ''}
         </select>`;
-    } else if (typeof Leaders !== 'undefined' && f.key === Leaders.FIELD) {
-      // Közvetlen vezető: csak vezetői fiók választható (TERV-fiokok.md 10.3 V5).
+    } else if (typeof Leaders !== 'undefined' && Leaders.FIELDS.includes(f.key)) {
+      // Közvetlen vezető és K2: csak vezetői fiók választható (TERV-fiokok.md
+      // 10.3 V5, TERV-hosszabbitasi-dontesek.md 3.1).
       // A fiókkal nem egyező régi/importált érték nem vész el: jelölve megmarad.
       const nevek = Leaders.candidates();
       const egyezik = Leaders.canonical(val);

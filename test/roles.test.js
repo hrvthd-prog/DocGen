@@ -68,9 +68,9 @@ async function main() {
     await test('az admin mindent tud', async () => {
       for (const a of R.ACTIONS) assertEq(R.can('admin', a.key), true, a.key);
     });
-    await test('a megtekintő csak a két „own" jogot kapja', async () => {
+    await test('a megtekintő (Vezető) csak „own" jogokat kap', async () => {
       assertEq(R.get('megtekinto').can.sort().join(','),
-               'cases.read.own,registry.read.own');
+               'cases.read.own,registry.read.own,renewals.decide.own,renewals.read.own');
     });
     await test('a HRBP nem ír teljeset, csak HR-t', async () => {
       assertEq(R.can('hrbp', 'registry.write'), false);

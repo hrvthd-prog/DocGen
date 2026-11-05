@@ -51,6 +51,15 @@ const ROLE_ACTIONS = [
     hint: 'Fiók felvétele, szint adása és elvétele, PIN-csere.' },
   { key: 'log.all',            label: 'Napló minden fiókra',
     hint: 'A hiányzó-adatok napló az összes fiók bejegyzéseivel.' },
+  // Engedély-hosszabbítási döntések (plans/TERV-hosszabbitasi-dontesek.md 3.10)
+  { key: 'renewals.read',       label: 'Hosszabbítások: mindenki',
+    hint: 'A K2-döntések listái, a teljes napló és az adatminőség minden dolgozóra.' },
+  { key: 'renewals.read.own',   label: 'Hosszabbítások: a saját dolgozói',
+    hint: 'Akiknek K2-je vagy közvetlen vezetője (a helyettesítettekét is).' },
+  { key: 'renewals.decide.own', label: 'Döntés K2-ként',
+    hint: 'Ahol a dolgozó „K2” mezőjében ő áll, vagy akit ma helyettesít.' },
+  { key: 'renewals.decide',     label: 'Döntés bárki nevében',
+    hint: 'HRBP-helyettesítés: a K2 nevében rögzít, opcionálisan forrással.' },
 ];
 
 /**
@@ -67,13 +76,18 @@ const SEED_ROLES = {
     { key: 'ugyintezo', label: 'Ügyintéző', builtin: true,
       hint: 'Nyilvántartás, dokumentumok, ügyek, átutalások.',
       can: ['registry.read', 'registry.write', 'docgen.generate',
-            'cases.read', 'cases.write', 'transfers.use', 'settings.ehcontact'] },
+            'cases.read', 'cases.write', 'transfers.use', 'settings.ehcontact',
+            'renewals.read'] },
     { key: 'hrbp', label: 'HR Business Partner', builtin: true,
       hint: 'Mindent olvas, de csak a „Csak HR tölti" mezőket írja.',
-      can: ['registry.read', 'registry.write.hr', 'cases.read', 'leaders.manage'] },
-    { key: 'megtekinto', label: 'Csak megtekintő', builtin: true,
-      hint: 'Csak a hozzá tartozó dolgozók ügyállását látja.',
-      can: ['registry.read.own', 'cases.read.own'] },
+      can: ['registry.read', 'registry.write.hr', 'cases.read', 'leaders.manage',
+            'renewals.read', 'renewals.decide'] },
+    // A kulcs marad `megtekinto` (fiókok hivatkoznak rá); a neve „Vezető”, mert
+    // ez a szint K2-ként már dönt is. Az élő configban a név adat: ott az admin
+    // nevezi át (TERV-hosszabbitasi-dontesek.md 3.10).
+    { key: 'megtekinto', label: 'Vezető', builtin: true,
+      hint: 'A hozzá tartozó dolgozók ügyállását látja; K2-ként dönt a hosszabbításról.',
+      can: ['registry.read.own', 'cases.read.own', 'renewals.read.own', 'renewals.decide.own'] },
   ],
 };
 

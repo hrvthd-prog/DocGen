@@ -6,7 +6,7 @@ BevLogger.init('');
 BevLogger.initGlobalHandlers();
 
 // ── Fülek ─────────────────────────────────────────────────────────────────
-const TABS = ['docgen', 'registry', 'cases', 'settings', 'allapot'];
+const TABS = ['docgen', 'registry', 'cases', 'settings', 'allapot', 'hosszabbitas'];
 
 // Melyik fülhöz milyen jog kell. Ami nincs itt, azt mindenki látja.
 const TAB_NEEDS = {
@@ -26,6 +26,8 @@ function visibleTabs() {
       return Auth.can('settings.schema') || Auth.can('settings.ehcontact')
           || Auth.can('leaders.manage');
     }
+    // K2-döntések: mindenkire vagy a saját dolgozókra (TERV-hosszabbitasi-dontesek.md 3.10)
+    if (id === 'hosszabbitas') return Auth.can('renewals.read') || Auth.can('renewals.read.own');
     const need = TAB_NEEDS[id];
     return !need || Auth.can(need);
   });
@@ -206,7 +208,10 @@ function applyRole() {
   CasesModule.init(document.getElementById('tab-cases'));
   SettingsModule.init(document.getElementById('tab-settings'));
   AllapotModule.init(document.getElementById('tab-allapot'));
+  HosszabbitasModule.init(document.getElementById('tab-hosszabbitas'));
 
   applyRole();
   switchTab(Settings.getUser('last_tab', 'docgen'));
+  // Offline értesítés: belépéskor, ha van új tétel, megnyílik az Összesítő (3.9)
+  HosszabbitasModule.indulaskor();
 })();

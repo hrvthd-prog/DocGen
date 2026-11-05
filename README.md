@@ -403,8 +403,11 @@ ugyanaz a lista és ugyanaz a szint.
 |---|---|
 | **Legfőbb admin** | mindent, és ő kezeli a fiókokat és a szinteket |
 | **Ügyintéző** | nyilvántartás, dokumentumok, ügyek, átutalások |
-| **HR Business Partner** | mindent **olvas**, de csak a „Csak HR tölti" mezőket írja |
-| **Csak megtekintő** | egyetlen „Ügyállás" fül: a hozzá tartozó dolgozók ügyállása |
+| **HR Business Partner** | mindent **olvas**, de csak a „Csak HR tölti" mezőket írja; a K2 nevében dönthet a hosszabbításról |
+| **Vezető** (korábban „Csak megtekintő”) | „Ügyállás” és „Hosszabbítások” fül: a hozzá tartozó dolgozók; K2-ként dönt a hosszabbításról |
+
+> A szint kulcsa továbbra is `megtekinto`. Egy meglévő telepítésben a név adat: a
+> Beállítások → Szintek kártyán az admin nevezi át „Vezető”-re.
 
 A megtekintőhöz a dolgozókat a nyilvántartás **„Közvetlen vezető"** mezője
 rendeli: a fiók nevére illeszkedő dolgozók látszanak (ékezet- és
@@ -425,8 +428,9 @@ eredménye. A kijelölt sorokra:
 
 A vezető a **saját helyettesét** is itt jelöli ki, időszakra (pl. szabadság).
 
-**Vezetői fiók** az, amelyik csak a saját dolgozói ügyállását látja (pl. „Csak
-megtekintő”). A **„Közvetlen vezető”** mezőbe csak ilyen fiók választható,
+**Vezetői fiók** az, amelyik csak a saját dolgozói ügyállását látja (pl. „Vezető”,
+korábban „Csak megtekintő”). A **„Közvetlen vezető”** és a **„K2”** mezőbe csak ilyen
+fiók választható,
 lenyíló listából — három úton:
 
 - **Dolgozói űrlap** — a mező lenyíló lista.
@@ -504,8 +508,9 @@ melletti visszakövetés.
 > Ugyanez a PIN-re: azt akadályozza meg, hogy más fiókjával dolgozzanak — így a
 > naplóbejegyzések ahhoz tartoznak, aki tényleg dolgozott. **Nem titkosít.**
 >
-> Ebből következik, hogy a **„Csak megtekintő" szint egyelőre nem adatvédelmi
-> korlát**: ugyanabból a fájlból olvas, mint a többi. A valódi adatminimalizálás
+> Ebből következik, hogy a **„Vezető” (korábban „Csak megtekintő”) szint egyelőre
+> nem adatvédelmi korlát**: ugyanabból a fájlból olvas, mint a többi — a
+> Hosszabbítások fülön is. A valódi adatminimalizálás
 > a következő lépés (külön állapot-kivonat fájl, amire a megtekintő NTFS-szinten
 > is csak olvasást kap).
 
@@ -627,6 +632,105 @@ Ha egy dolgozó engedélye nem kerül meghosszabbításra: sor(ok) kijelölése 
 borostyán csíkkal látszik, az Előzményekbe is bekerül, és a dolgozó **kimarad az
 Ügyek → Áttekintés „Nincs még ügye” listájából**. Visszavonás ugyanott:
 **Mégis hosszabbítjuk**.
+
+## Hosszabbítások — K2-döntések
+
+A külföldi munkavállaló engedélyének hosszabbításáról a **K2 vezető** dönt, a
+DocGen-be belépve — e-mail és Excel helyett. A döntés naplózva van; a HRBP és az
+ügyintéző mindent lát, és mindenki személyre szabott **Összesítőt** kap.
+Terv: `plans/TERV-hosszabbitasi-dontesek.md`.
+
+**Ki a K2?** A dolgozó **„K2”** mezője (Csak HR tölti), ugyanúgy fiókhoz kötve,
+mint a Közvetlen vezető: az űrlapon lenyíló lista, a fiók átnevezése a mezőt is
+átírja, a „Frissítés törzsszám alapján” jelzi a nem fiók nevet.
+
+| Ki | Lát | Rögzít |
+|---|---|---|
+| K2 (és a helyettese a helyettesítés idején) | akiknek ő a K2-je | **döntést** |
+| Közvetlen vezető | a saját dolgozóit | semmit, csak olvas |
+| HRBP | mindenkit | döntést a K2 nevében (opcionálisan forrással) |
+| Ügyintéző, admin | mindenkit | az ügyintéző nem dönt; ő intézi az ügyet |
+
+A jogok a szintek rácsán: **Hosszabbítások: mindenki / a saját dolgozói**,
+**Döntés K2-ként**, **Döntés bárki nevében**.
+
+**A fül.** *Döntésre vár*: akinek az engedélye 365 napon belül lejár (a lejártak
+is), és az aktuális körben nincs döntése — színes sávokkal, mindig felirattal:
+
+| Nap a lejáratig | Sáv |
+|---|---|
+| 365–180 | Tájékoztató |
+| 179–120 | Közeleg |
+| 119–90 | **Döntés esedékes** |
+| 89–60 | Késésben |
+| 59–45 | Utolsó lehetőség |
+| 44–15 | Csak vis maior |
+| 14–0 | Már nem adható be |
+| < 0 | Lejárt |
+
+A 90 / 45 / 15 a benyújtási ablakból jön; a többi négy határ a Beállítások →
+**Hosszabbítások — sávhatárok** kártyán állítható. *Döntések*: két külön
+szakasz, **✔ Hosszabbít** és **✖ Nem hosszabbít**, a döntés idejével, azzal,
+hogy ki rögzítette (K2 / helyettes / HRBP, kinek a nevében), a „Módosítva”
+jelzéssel és az **ügy állásával** (Nincs még ügy / Előkészítés / … /
+Engedélyezve ÉÉÉÉ-HH-NN-ig). A lezárt kör döntése még 30 napig látszik; a
+*Korábbi körök is* jelölővel mind. HRBP-nek és ügyintézőnek ezen felül:
+**Adatminőség** (lejárat nélkül, K2 nélkül, a K2 nem fiók — ők némán kimaradnának)
+és **Teljes napló**.
+
+**A kör.** A döntés egy engedélyről szól: amikor az ügyintéző lezárja a
+hosszabbítási ügyet, új kör nyílik, és a dolgozó újra „Döntésre vár” lesz, ha az
+új lejárata 365 napon belül van.
+
+**Módosítás.** Bármikor, új sorként (a régi megmarad). Ha a hosszabbítási ügy
+már fut, **indoklás kell**, és a HRBP meg az ügyintéző **piros, nyugtázandó**
+figyelmeztetést kap, ami addig marad, amíg valaki „Tudomásul vettem”-mel le nem
+zárja (ez is naplózva).
+
+**Az ügyintézőnél** (Ügyek → Áttekintés): *Indítható — a K2 jóváhagyta* (egy
+kattintás, és megnyílik az ügy a döntésre hivatkozva, a 90 napos horizonttól
+függetlenül), *K2-döntés — teendő* („Nem” → **Átvétel**: a „nem hosszabbítjuk”
+jelölés, `k2` forrással; Igenre módosítás után **Visszavétel**; futó ügynél a
+kérelem visszavonása), és *Nincs még ügye — K2 döntésre vár*.
+
+**Az Összesítő** (fejléc: csengő). Push és e-mail nincs; belépéskor, ha van új
+tétel, magától megnyílik. A tételek a naplóból, az ügyekből és a sávokból
+számolódnak: K2-nek a sávváltás (sávonként egyszer, 90 naptól), a nevében hozott
+döntés, az átszervezéssel kapott dolgozó és a lezárt ügy („…-ig
+meghosszabbították”); HRBP-nek a döntések, a módosítás és a 90 napon belüli
+döntéshiány — alapból a saját dolgozóiról (`HRBP` mező), kapcsolóval
+mindenkiéről; ügyintézőnek a teendők. ≤ 14 napnál és lejártnál értesítés nincs,
+csak a listában jelzés. Az „olvasott” jelölés a böngészőben él: másik gépen a
+tételek újra újnak látszanak.
+
+**A napló.** `data/docgen-hosszabbitas.json`, **csak hozzáfűzés** — nem
+törölhető. Ha két gép egyszerre ír, a program újraolvas és egyesít, mindkét
+esemény megmarad. Az idő a gép órája. A jegyzet és az indoklás **közös**: a HR is
+látja.
+
+### Útmutató vezetőknek (K2) — két perc
+
+1. Nyisd meg a DocGen-t Chrome-ban vagy Edge-ben, válaszd a neved, add meg a
+   PIN-ed.
+2. Ha van új tétel, megnyílik az **Összesítő**: mi vált sürgőssé, ki döntött a
+   nevedben, kinek lett meg az engedélye. Egy tételre kattintva a dolgozó
+   előzménye nyílik meg. Később a fejléc **csengőjén** éred el.
+3. **Hosszabbítások** fül → *Döntésre vár*. A szín a sürgősség: a **sárga**
+   („Döntés esedékes”, 119–90 nap) a döntés ideje; a narancs és a piros már
+   késés.
+4. Jelöld ki a dolgozót → **Döntés…** (vagy dupla kattintás) → *Hosszabbít* vagy
+   *Nem hosszabbít*. Az indoklás nem kötelező; a HR is látja, és nem törölhető.
+5. A döntés a *Döntések* listára kerül; ott követed, hol tart az ügy, és
+   meddig kapta meg a dolgozó az engedélyt.
+6. Meggondoltad magad? Ugyanott **Döntés…** — ha az ügy már fut, indoklás kell,
+   és a HR azonnal látja.
+7. Szabadság előtt az **Ügyállás** fülön jelölj ki **helyettest**: a megadott
+   időszakban ő dönt helyetted (a naplóban „X helyetteseként” áll).
+
+> **Mit véd ez, és mit nem.** Mint az Ügyállás: felületi szűkítés. A vezetők a
+> közös mappát használják, tehát aki a fájlhoz fér, mindent lát. A valódi határ
+> az NTFS 2. fázis (`TERV-fiokok.md` 4.): a vezetők a döntésnaplóra kapnak írási
+> jogot, a nyilvántartás helyett egy kivonatot olvasnak.
 
 ## Kilépés és törlés
 
@@ -934,10 +1038,14 @@ Ez az **egyetlen** dolog, amit a program ki tud számolni — a meglévő enged�
 lejárata a nyilvántartásban van. Meghosszabbításnál három mérföldkő:
 
 ```
-─────●━━━━━━━━━━━●━━━━━━━●───────●
-   −90         −40     −10    lejárat
-  korai      ideális  siess  lekésve
+─────●━━━━━━━━━━━●━━━━━━━━━━━━━●───────●
+   −90         −45           −15    lejárat
+  korai      ideális   csak vis maior  lekésve
 ```
+
+A −45 a jogszabályi beadási határidő, utána csak vis maior esetén adható be;
+−15 után már nem. Ugyanezt a hármat használják a K2-döntések sávjai
+(„Hosszabbítások” fül) — egy forrás.
 
 Ez **nem** a 70 nap: az a hatóság döntési ideje, ez a mi benyújtási ablakunk.
 A kettő külön ponton jelenik meg az idővonalon.

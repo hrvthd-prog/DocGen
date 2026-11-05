@@ -459,11 +459,11 @@ const CaseRepo = (() => {
           label: 'Benyújtás legkorábban', windowRole: 'earliest',
           note: 'Ennél korábban nem fogadják be' });
         pontok.push({ kind: 'ablak', date: ablak.latest, computed: true,
-          label: 'Benyújtás ajánlott határnapja', windowRole: 'latest',
-          note: 'Eddig érdemes beadni' });
+          label: 'Benyújtási határidő', windowRole: 'latest',
+          note: 'A jogszabályi határidő — utána csak vis maior esetén' });
         pontok.push({ kind: 'ablak', date: ablak.final, computed: true,
           label: 'Benyújtás legvégső napja', windowRole: 'final',
-          note: 'Az utolsó nap, amikor még beadható' });
+          note: 'Utána már nem nyújtható be' });
       }
       pontok.push({ kind: 'ablak', date: ablak.basis, computed: true,
         label: 'A jelenlegi engedély lejár', windowRole: 'basis' });
@@ -524,8 +524,8 @@ const CaseRepo = (() => {
 
     const szoveg = {
       korai:   () => `Még nem adható be – ${napokig(ablak.earliest)} nap múlva nyílik`,
-      idealis: () => `Beadható – ajánlott ${napokig(ablak.latest)} napon belül`,
-      siess:   () => `Sürgős: még ${napokig(ablak.final)} nap, utána nem adható be`,
+      idealis: () => `Beadható – a határidőig ${napokig(ablak.latest)} nap`,
+      siess:   () => `Határidőn túl, csak vis maior – még ${napokig(ablak.final)} nap, utána nem adható be`,
       lekesve: () => `A benyújtási határidő ${-napokig(ablak.final)} napja lejárt`,
     }[fazis];
 

@@ -99,14 +99,17 @@ const DEADLINE_KIND = { AUTHORITY: 'hatosagi', ADVISORY: 'tajekoztato' };
  * Meghosszabbításnál három mérföldkő van, mindegyik az engedély lejáratához
  * képest:
  *   legkorábbi  −90 nap  ennél előbb nem fogadják be
- *   legkésőbbi  −40 nap  eddig érdemes beadni
- *   legvégső    −10 nap  az utolsó nap, amikor még beadható
+ *   határidő    −45 nap  a jogszabályi beadási határidő
+ *   legvégső    −15 nap  utána már nem nyújtható be (−44…−15: csak vis maior)
+ *
+ * A K2-döntések sávjai (js/services/hosszabbitas.js) ugyanezt a hármat
+ * használják határnak — egy forrás, ne írd át máshol.
  */
 const SUBMISSION_WINDOW_DEFAULT = {
   field:       'expiration_of_rp',
   earliestDays: -90,
-  latestDays:   -40,
-  finalDays:    -10,
+  latestDays:   -45,
+  finalDays:    -15,
 };
 
 /** Kérelmekre közös státuszsor – a kimenet a lezáráskor derül ki. */

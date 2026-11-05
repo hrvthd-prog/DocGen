@@ -10,12 +10,13 @@
        lépteti minden commitnál; a főverziót a kiadás: node tools/kiadas.js
        A verziólépés nélkül a böngésző a gyorsítótárból veszi a régi JS-t, és a
        felhasználók a frissítés után is a régi kódot futtatják. -->
-  <link rel="stylesheet" href="css/app.css?v=10.102">
-  <link rel="stylesheet" href="css/login.css?v=10.102">
-  <link rel="stylesheet" href="css/registry.css?v=10.102">
-  <link rel="stylesheet" href="css/cases.css?v=10.102">
-  <link rel="stylesheet" href="css/transfers.css?v=10.102">
-  <link rel="stylesheet" href="vendor/client-picker.css?v=10.102">
+  <link rel="stylesheet" href="css/app.css?v=10.103">
+  <link rel="stylesheet" href="css/login.css?v=10.103">
+  <link rel="stylesheet" href="css/registry.css?v=10.103">
+  <link rel="stylesheet" href="css/cases.css?v=10.103">
+  <link rel="stylesheet" href="css/transfers.css?v=10.103">
+  <link rel="stylesheet" href="css/hosszabbitas.css?v=10.103">
+  <link rel="stylesheet" href="vendor/client-picker.css?v=10.103">
 </head>
 <body>
   <svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" class="bev-sprite" style="position:absolute;overflow:hidden" aria-hidden="true">
@@ -33,6 +34,15 @@
       <rect x="3" y="6" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
       <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M9 6V4.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 4.5V6M3 11h18"/>
       <circle cx="12" cy="15.5" r="2.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    </symbol>
+    <symbol id="ic-tab-hossz" viewBox="0 0 24 24">
+      <rect x="3.5" y="5" width="17" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" d="M3.5 9.5h17M8 3v4M16 3v4"/>
+      <path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M9 14.5l2 2 4-4"/>
+    </symbol>
+    <symbol id="ic-bell" viewBox="0 0 24 24">
+      <path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/>
+      <path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" d="M10 20.5a2 2 0 0 0 4 0"/>
     </symbol>
     <symbol id="ic-tab-settings" viewBox="0 0 24 24">
       <circle cx="12" cy="12" r="3.1" fill="none" stroke="currentColor" stroke-width="1.6"/>
@@ -58,6 +68,11 @@
       </div>
       <div class="header-user">
         <span id="header-verzio" class="header-verzio"></span>
+        <!-- Az offline értesítések összesítője (Hosszabbítások, 3.9) -->
+        <button type="button" class="header-bell" id="header-bell" hidden title="Összesítő">
+          <svg width="18" height="18" aria-hidden="true"><use href="#ic-bell"/></svg>
+          <span class="header-bell__n" id="header-bell-n" hidden></span>
+        </button>
         <span id="header-username" class="muted"></span>
         <button type="button" class="btn btn-ghost btn-sm" id="logout-btn" hidden
                 title="Kilépés — a lap újratöltődik">Kilépés</button>
@@ -90,6 +105,11 @@
         <svg class="tab-btn__icon" width="18" height="18" aria-hidden="true"><use href="#ic-tab-cases"/></svg>
         <span>Ügyállás</span>
       </button>
+      <!-- K2-döntések az engedély-hosszabbításról (TERV-hosszabbitasi-dontesek.md) -->
+      <button class="tab-btn" type="button" data-tab="hosszabbitas" accesskey="6">
+        <svg class="tab-btn__icon" width="18" height="18" aria-hidden="true"><use href="#ic-tab-hossz"/></svg>
+        <span>Hosszabbítások</span>
+      </button>
     </nav>
 
     <!-- Tab tartalmak -->
@@ -98,6 +118,7 @@
     <div id="tab-cases"    class="tab-content"></div>
     <div id="tab-settings" class="tab-content"></div>
     <div id="tab-allapot"  class="tab-content"></div>
+    <div id="tab-hosszabbitas" class="tab-content"></div>
 
   </div>
 
@@ -108,86 +129,88 @@
   <div id="dialog-overlay" class="dialog-overlay hidden"></div>
 
   <!-- Vendor -->
-  <script src="vendor/pdf-lib.min.js?v=10.102"></script>
+  <script src="vendor/pdf-lib.min.js?v=10.103"></script>
   <!-- A fontkit nélkül a pdf-lib nem tud saját betűkészletet beágyazni, a beépített
        betűiben pedig nincs ő és ű. A betűkészlet maga (vendor/carlito-fonts.js,
        1,7 MB) szándékosan NEM itt töltődik: a PdfService az első PDF-készítéskor
        szúrja be, hogy ne lassítsa minden indulást. -->
-  <script src="vendor/fontkit.umd.min.js?v=10.102"></script>
-  <script src="vendor/client-picker.js?v=10.102"></script>
-  <script src="vendor/xlsx.full.min.js?v=10.102"></script>
-  <script src="vendor/pizzip.min.js?v=10.102"></script>
-  <script src="vendor/docxtemplater.js?v=10.102"></script>
-  <script src="vendor/FileSaver.min.js?v=10.102"></script>
-  <script src="vendor/exceljs.min.js?v=10.102"></script>
+  <script src="vendor/fontkit.umd.min.js?v=10.103"></script>
+  <script src="vendor/client-picker.js?v=10.103"></script>
+  <script src="vendor/xlsx.full.min.js?v=10.103"></script>
+  <script src="vendor/pizzip.min.js?v=10.103"></script>
+  <script src="vendor/docxtemplater.js?v=10.103"></script>
+  <script src="vendor/FileSaver.min.js?v=10.103"></script>
+  <script src="vendor/exceljs.min.js?v=10.103"></script>
 
   <!-- Verzió (a tools/verzio.js írja minden commitnál) -->
-  <script src="js/version.js?v=10.102"></script>
+  <script src="js/version.js?v=10.103"></script>
 
   <!-- Naplózás -->
-  <script src="js/logger.js?v=10.102"></script>
+  <script src="js/logger.js?v=10.103"></script>
 
   <!-- Service réteg -->
-  <script src="js/services/settings-service.js?v=10.102"></script>
-  <script src="js/services/fs-service.js?v=10.102"></script>
-  <script src="js/services/docx-service.js?v=10.102"></script>
-  <script src="js/services/pdf-service.js?v=10.102"></script>
-  <script src="js/services/form-pdf.js?v=10.102"></script>
-  <script src="js/services/employee-repo.js?v=10.102"></script>
-  <script src="js/services/auth-service.js?v=10.102"></script>
-  <script src="js/services/xlsx-write.js?v=10.102"></script>
-  <script src="js/services/xlsx-read.js?v=10.102"></script>
+  <script src="js/services/settings-service.js?v=10.103"></script>
+  <script src="js/services/fs-service.js?v=10.103"></script>
+  <script src="js/services/docx-service.js?v=10.103"></script>
+  <script src="js/services/pdf-service.js?v=10.103"></script>
+  <script src="js/services/form-pdf.js?v=10.103"></script>
+  <script src="js/services/employee-repo.js?v=10.103"></script>
+  <script src="js/services/auth-service.js?v=10.103"></script>
+  <script src="js/services/xlsx-write.js?v=10.103"></script>
+  <script src="js/services/xlsx-read.js?v=10.103"></script>
 
   <!-- Séma-réteg (a séma adat, nem kód – lásd js/schema/seed-schema.js) -->
-  <script src="js/schema/value-codec.js?v=10.102"></script>
-  <script src="js/schema/seed-schema.js?v=10.102"></script>
-  <script src="js/schema/roles.js?v=10.102"></script>
-  <script src="js/services/leaders.js?v=10.102"></script>
-  <script src="js/schema/schema-store.js?v=10.102"></script>
-  <script src="js/schema/schema-from-xlsx.js?v=10.102"></script>
-  <script src="js/schema/export-profiles.js?v=10.102"></script>
-  <script src="js/schema/eh-forms.js?v=10.102"></script>
+  <script src="js/schema/value-codec.js?v=10.103"></script>
+  <script src="js/schema/seed-schema.js?v=10.103"></script>
+  <script src="js/schema/roles.js?v=10.103"></script>
+  <script src="js/services/leaders.js?v=10.103"></script>
+  <script src="js/schema/schema-store.js?v=10.103"></script>
+  <script src="js/schema/schema-from-xlsx.js?v=10.103"></script>
+  <script src="js/schema/export-profiles.js?v=10.103"></script>
+  <script src="js/schema/eh-forms.js?v=10.103"></script>
 
   <!-- Megosztott segédfüggvények -->
-  <script src="js/utils.js?v=10.102"></script>
+  <script src="js/utils.js?v=10.103"></script>
 
   <!-- Modulok -->
   <!-- Dokumentumgenerálás: alegységek a mag előtt töltődnek -->
-  <script src="js/modules/docgen/missing-log.js?v=10.102"></script>
-  <script src="js/modules/docgen/naming.js?v=10.102"></script>
-  <script src="js/modules/docgen/pdf-chain.js?v=10.102"></script>
-  <script src="js/modules/docgen/merge.js?v=10.102"></script>
-  <script src="js/modules/docgen/groups.js?v=10.102"></script>
-  <script src="js/modules/docgen/celmappa.js?v=10.102"></script>
-  <script src="js/modules/docgen.js?v=10.102"></script>
-  <script src="js/modules/registry/employee-form.js?v=10.102"></script>
-  <script src="js/modules/registry/bulk-edit.js?v=10.102"></script>
-  <script src="js/modules/registry/employee-history.js?v=10.102"></script>
-  <script src="js/modules/registry/employee-summary.js?v=10.102"></script>
-  <script src="js/modules/registry/xlsx-io.js?v=10.102"></script>
-  <script src="js/modules/registry/registry-view.js?v=10.102"></script>
+  <script src="js/modules/docgen/missing-log.js?v=10.103"></script>
+  <script src="js/modules/docgen/naming.js?v=10.103"></script>
+  <script src="js/modules/docgen/pdf-chain.js?v=10.103"></script>
+  <script src="js/modules/docgen/merge.js?v=10.103"></script>
+  <script src="js/modules/docgen/groups.js?v=10.103"></script>
+  <script src="js/modules/docgen/celmappa.js?v=10.103"></script>
+  <script src="js/modules/docgen.js?v=10.103"></script>
+  <script src="js/modules/registry/employee-form.js?v=10.103"></script>
+  <script src="js/modules/registry/bulk-edit.js?v=10.103"></script>
+  <script src="js/modules/registry/employee-history.js?v=10.103"></script>
+  <script src="js/modules/registry/employee-summary.js?v=10.103"></script>
+  <script src="js/modules/registry/xlsx-io.js?v=10.103"></script>
+  <script src="js/modules/registry/registry-view.js?v=10.103"></script>
 
   <!-- Ügykövetés: a típusok a séma-réteghez, a tároló a service-réteghez tartozik,
        de a betöltési sorrend miatt itt, a felhasználóik előtt szerepelnek -->
-  <script src="js/schema/case-types.js?v=10.102"></script>
-  <script src="js/services/case-repo.js?v=10.102"></script>
-  <script src="js/services/case-xlsx.js?v=10.102"></script>
-  <script src="js/services/transfer-repo.js?v=10.102"></script>
-  <script src="js/services/transfer-pdf.js?v=10.102"></script>
-  <script src="js/modules/cases/cases-dashboard.js?v=10.102"></script>
-  <script src="js/modules/cases/case-timeline.js?v=10.102"></script>
-  <script src="js/modules/cases/case-form.js?v=10.102"></script>
-  <script src="js/modules/cases/case-eh.js?v=10.102"></script>
-  <script src="js/modules/cases/transfers-view.js?v=10.102"></script>
-  <script src="js/modules/cases/bulk-case.js?v=10.102"></script>
-  <script src="js/modules/cases/cases-view.js?v=10.102"></script>
+  <script src="js/schema/case-types.js?v=10.103"></script>
+  <script src="js/services/case-repo.js?v=10.103"></script>
+  <script src="js/services/hosszabbitas.js?v=10.103"></script>
+  <script src="js/services/case-xlsx.js?v=10.103"></script>
+  <script src="js/services/transfer-repo.js?v=10.103"></script>
+  <script src="js/services/transfer-pdf.js?v=10.103"></script>
+  <script src="js/modules/cases/cases-dashboard.js?v=10.103"></script>
+  <script src="js/modules/cases/case-timeline.js?v=10.103"></script>
+  <script src="js/modules/cases/case-form.js?v=10.103"></script>
+  <script src="js/modules/cases/case-eh.js?v=10.103"></script>
+  <script src="js/modules/cases/transfers-view.js?v=10.103"></script>
+  <script src="js/modules/cases/bulk-case.js?v=10.103"></script>
+  <script src="js/modules/cases/cases-view.js?v=10.103"></script>
 
-  <script src="js/modules/settings/settings-view.js?v=10.102"></script>
-  <script src="js/modules/login.js?v=10.102"></script>
-  <script src="js/modules/leaders-ui.js?v=10.102"></script>
-  <script src="js/modules/allapot.js?v=10.102"></script>
+  <script src="js/modules/settings/settings-view.js?v=10.103"></script>
+  <script src="js/modules/login.js?v=10.103"></script>
+  <script src="js/modules/leaders-ui.js?v=10.103"></script>
+  <script src="js/modules/allapot.js?v=10.103"></script>
+  <script src="js/modules/hosszabbitas-view.js?v=10.103"></script>
 
   <!-- App shell -->
-  <script src="js/app.js?v=10.102"></script>
+  <script src="js/app.js?v=10.103"></script>
 </body>
 </html>
