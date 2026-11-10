@@ -68,6 +68,22 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-11-10 — „Mai nap” nem ragad be többé (TAJ-meghatalmazás dátuma)
+
+**Cél:** a TAJ-meghatalmazás PDF-en mindig 2026.08.17 volt a dátum.
+**Változás:** `js/modules/docgen.js` — a `global_mai_nap` beállítás most
+`{ ertek, nap }`; betöltéskor csak akkor él, ha a beállítás napja ma van,
+különben a mai dátum. (`v10.104`)
+**Miért / döntés:** a hiba nem a PDF-sablonban volt: a „Mai nap” kártya
+kézi értékét (vagy a „Ma” gombot) az app örökre elmentette, és minden
+indításkor visszatöltötte — így minden `{{mai nap}}` / `mai nap` mező
+(docx is, PDF is) a 2026.08.17-én rögzített dátumot kapta. A régi,
+szövegként mentett érték automatikusan érvénytelen (nincs `nap`-ja).
+**Tesztek:** `node test/run-all.js` zöld. A felületi viselkedés Node-ból
+nem ellenőrizhető.
+**Nyitott / következő:** céges gépen frissítés után: DocGen fül → a „Mai nap”
+kártyán a mai dátum látszik-e, és a generált TAJ-meghatalmazáson is az.
+
 ## 2026-11-05 — K2-döntések az engedély-hosszabbításról: terv és megvalósítás
 
 **Cél:** a hosszabbításról szóló vezetői döntés (ma: HRBP → K2 → HRBP →

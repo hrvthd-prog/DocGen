@@ -107,8 +107,11 @@ const DocgenModule = (() => {
     state.chosenTemplates  = new Set(savedTpls);
     state.templateGroups   = Settings.getAccountGroups(currentUser);
     state.activeGroups     = new Set();
-    // Mai nap: globális, minden fiókra érvényes; alapértelmezett = mai dátum
-    state.maiNap = Settings.get('global_mai_nap', '') || _todayDot();
+    // Mai nap: globális, minden fiókra érvényes; alapértelmezett = mai dátum.
+    // A kézi felülírás csak a beállítás napján él — korábban örökre megmaradt,
+    // és minden irat (pl. TAJ-meghatalmazás) a régen beállított dátumot kapta.
+    const mn = Settings.get('global_mai_nap', null);
+    state.maiNap = (mn && mn.nap === _todayDot() && mn.ertek) || _todayDot();
     // PDF összefűzés — per-user beállítások
     const ms = Settings.get(DocgenMerge.MERGE_KEY(), {});
     state.mergeEnabled   = ms.enabled  ?? false;
@@ -730,14 +733,14 @@ const DocgenModule = (() => {
         const v = e.target.value.trim();
         state.maiNap = /^\d{4}-\d{2}-\d{2}$/.test(v) ? _inputToDot(v) : _todayDot();
         if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) e.target.value = _dotToInput(state.maiNap);
-        Settings.set('global_mai_nap', state.maiNap);
+        Settings.set('global_mai_nap', { ertek: state.maiNap, nap: _todayDot() });
       });
     }
     const maiNapToday = q('#dg-mai-nap-today');
     if (maiNapToday) {
       maiNapToday.addEventListener('click', () => {
         state.maiNap = _todayDot();
-        Settings.set('global_mai_nap', state.maiNap);
+        Settings.set('global_mai_nap', { ertek: state.maiNap, nap: _todayDot() });
         if (maiNapInput) {
           maiNapInput.value = _dotToInput(state.maiNap);
           maiNapInput.dispatchEvent(new Event('input', { bubbles: true }));  // a naptár is kövesse
