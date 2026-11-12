@@ -1,6 +1,6 @@
 # Hozzáférés új gépen, IT-audit és szerverre költözés — terv
 
-*2026-11-12. Állapot: **terv, döntésre vár** (a 6. fejezet kérdései). Kód még nincs.*
+*2026-11-12. Állapot: **R1 + R4 megvalósítva (`v10.106`, 7. fejezet)**; a szerver és az R2 döntésre vár.*
 
 ## 0. Röviden
 
@@ -166,3 +166,35 @@ technikai döntésekbe (S0), mielőtt kód készül.
 - **K7.** Kaphat-e a szolgáltatás írási jogot a `09_OIF_kerelmek` megosztásra
   (szolgáltatásfiók), és ki a felelős a mentésért?
 - **K8.** Kell-e DPIA, és ki az adatvédelmi kapcsolattartó?
+
+## 7. Döntések és megvalósítás (2026-11-12)
+
+**A felhasználó válaszai:** K1 — az R1 mehet most. K2 — a szerver időpontja
+nem ismert; a közös gyökér `Z:\23_HARMADIK_ORSZAGBELI_MUNKAVALLALOK\` (alatta
+`08_DocGen`, `09_OIF_kerelmek`). K3 — kb. **15–20 felhasználó**.
+
+**Amit a kód feltárt:** új gépen a belépőképernyő mappaválasztó kártyája
+**meg sem jelent**: mentett mappa híján a `restore()` csendben próba módba
+lépett, és a kapu (`gate()`) próba módnál azonnal elengedett. Ezért kellett a
+próba mód → Nyilvántartás → mappa → újratöltés → engedély kerülő.
+
+**R1 (`v10.106`):**
+- `registry-view.js` `restore()`: mappa nélkül, mappaválasztós böngészőben NEM
+  lép próba módba (mappaválasztó nélkül továbbra is igen).
+- `login.js` `renderNoFolder`: *Adatmappa kiválasztása* gomb, a várt útvonal
+  (`location`-ből: az app mappája + `data`), majd közvetlenül a fiókválasztás /
+  első admin. Próba mód külön gombbal.
+- **Rossz mappa elleni védelem:** ha a választott mappában nincs
+  `docgen-accounts/employees/config.json`, a kapu szól, és nem kezd új
+  nyilvántartást — csak a *Mégis ez: új, üres adatmappa* gombra. 15–20 gépen a
+  `data` szülőjének kijelölése várható hiba, és üres mappán az app „Első
+  indulás”-t mutatott volna: párhuzamos, üres nyilvántartást.
+- `gate()`: a régi munkamenet (`sessionStorage`) csak betöltött fiókfájl mellett
+  enged be — mappa nélkül háttér nélküli appot kapna.
+- Teszt: `test/indulas.test.js` „Új gép” szakasz (3 eset).
+
+**R2 a 15–20 fő miatt újra mérlegelendő:** indulásonként fejenként 3 engedély ×
+15–20 fő napi súrlódás, és a szerver időpontja ismeretlen. A gyökér közös
+(`23_HARMADIK_…`), tehát az R2 megvalósítható. **A 15–20 fő a közös JSON-fájlok
+egyidejű írását is élesebbé teszi** (`TERV-adatbiztonsag.md` 7.: frissesség-
+ellenőrzés, nem zárolás) — ez a szerver melletti legerősebb érv az IT felé.

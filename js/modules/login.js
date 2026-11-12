@@ -74,7 +74,9 @@ const LoginModule = (() => {
     // Az engedélykérés MEGELŐZI a munkamenetet: a mentett session a
     // sessionStorage-ból él, az adatmappa viszont ilyenkor nincs betöltve —
     // átengedve az app adat nélkül, néma próba módként indulna.
-    if (!pendingDir() && Auth.restoreSession()) {
+    // Adatmappa nélkül (új gép) a fiókfájl sincs betöltve: a régi munkamenet
+    // ilyenkor nem engedhet be háttér nélküli appba.
+    if (!pendingDir() && Auth.loaded() && Auth.restoreSession()) {
       // Lapújratöltés ugyanabban a munkamenetben: nem kérdezünk újra.
       hide();
       return Promise.resolve('session');
@@ -159,24 +161,66 @@ const LoginModule = (() => {
     if (r) r(kind);
   }
 
-  // ── Nincs adatmappa ───────────────────────────────────────────────────────
+  // ── Nincs adatmappa (új gép / új böngészőprofil) ──────────────────────────
+  /** A várt adatmappa útvonala: az app mappája + `data` (TERV-kimenet-es-ugyek
+   *  2.1). A Windows mappaválasztója útvonalat nem fogad, ezért kiírjuk. */
+  function vartUtvonal() {
+    try {
+      if (location.protocol !== 'file:') return '';
+      const p = decodeURIComponent(location.pathname).replace(/^\/(?=[A-Za-z]:)/, '');
+      return p.replace(/\/[^/]*$/, '/data').replace(/\//g, '\\');
+    } catch { return ''; }
+  }
+
   function renderNoFolder() {
+    const tud = FsService.hasFsApi;
+    const ut  = vartUtvonal();
     el.innerHTML = shell(`
-      <div class="login-card-heading">Nincs beállított adatmappa</div>
+      <div class="login-card-heading">Az adatmappa még nincs beállítva</div>
       <p class="login-note">
-        A fiókok és a szintek a <b>közös adatmappában</b> élnek. Amíg nincs
-        kiválasztva, nincs mihez kötni a jogosultságot.
+        A fiókok és a közös adat az <b>adatmappában</b> vannak. Ezen a gépen
+        (ebben a böngészőben) egyszer kell kiválasztani, utána a program megjegyzi.
       </p>
+      ${ut ? `<p class="login-note">A mappa (a program mellett): <b>${escHtml(ut)}</b></p>` : ''}
+      ${tud ? `<div class="login-pin-row">
+        <button class="btn btn-primary" id="lg-pick" style="flex:1">Adatmappa kiválasztása</button>
+      </div>` : `<p class="login-note">Ez a böngésző nem tud mappát választani — Chrome vagy Edge kell.</p>`}
+      <div class="login-error" id="lg-err"></div>
+      <div class="login-pin-row" id="lg-uj-row" hidden>
+        <button class="btn btn-ghost" id="lg-uj" style="flex:1">Mégis ez: új, üres adatmappa</button>
+      </div>
       <p class="login-note">
-        Válaszd ki a mappát a <b>Nyilvántartás</b> fülön, majd töltsd újra az
-        oldalt. Kipróbálni adatmappa nélkül is lehet, de akkor a munka
-        <b>nem a közös adatra</b> megy, és nincs szint sem.
+        Kipróbálni adatmappa nélkül is lehet, de akkor a munka <b>nem a közös
+        adatra</b> megy, és nincs jogosultsági szint.
       </p>
       <div class="login-pin-row">
         <button class="btn btn-ghost" id="lg-proba" style="flex:1">
           Folytatás próba módban
         </button>
       </div>`);
+
+    let uresMappa = null;
+    const hasznal = async dir => {
+      try { await RegistryModule.useDataDir(dir); }
+      catch (e) {
+        q('#lg-err').textContent = 'A mappa nem tölthető be: ' + e.message;
+        return;
+      }
+      BevLogger.info('AUTH', 'Adatmappa beállítva a belépőképernyőn', dir.name, '');
+      renderGate();
+    };
+    q('#lg-pick')?.addEventListener('click', async () => {
+      const dir = await RegistryModule.valasztMappa();
+      if (!dir) return;
+      if (await RegistryModule.vanAdat(dir)) { await hasznal(dir); return; }
+      // Üres mappa: valószínűleg nem a jó (pl. a `data` szülője). Nem kezdünk
+      // magunktól új nyilvántartást — csak kifejezett kérésre.
+      uresMappa = dir;
+      q('#lg-err').textContent = `A(z) „${dir.name}” mappában nincs DocGen-adat. `
+        + 'Válaszd a fent írt mappát — vagy, ha új nyilvántartást kezdesz, az alsó gombot.';
+      q('#lg-uj-row').hidden = false;
+    });
+    q('#lg-uj').addEventListener('click', () => uresMappa && hasznal(uresMappa));
     q('#lg-proba').addEventListener('click', async () => {
       await RegistryModule.probaMode();
       BevLogger.warn('AUTH', 'Próba mód: adatmappa nélküli indulás', '', '');

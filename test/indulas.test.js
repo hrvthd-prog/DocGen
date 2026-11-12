@@ -152,11 +152,11 @@ const UGY = { id: 'c1', employeeId: 'e1', type: 'rp_hosszabbitas', openedAt: '20
               updatedAt: '2026-08-10T10:00:00Z' };
 
 /** Friss indulás: a megadott mappa van mentve, a megadott engedélyállapottal. */
-async function indul({ engedely, kattintasra = true }) {
-  bongeszo.mentettMappa = mappa('munkamappa', {
+async function indul({ engedely, kattintasra = true, mentett = true }) {
+  bongeszo.mentettMappa = mentett ? mappa('munkamappa', {
     'docgen-employees.json': { version: 1, employees: [] },
     'docgen-cases.json':     { version: 1, cases: [UGY] },
-  });
+  }) : null;
   bongeszo.engedely    = engedely;
   bongeszo.kattintasra = kattintasra;
   bongeszo.kerdezve    = 0;
@@ -197,6 +197,32 @@ async function main() {
     assertEq(RegistryModule.pendingDir(), null);
     assertEq(Auth.isProba(), false);
     assertEq(CaseRepo.all().length, 1);
+  });
+
+  section('Új gép: nincs mentett adatmappa (TERV-szerver-es-audit.md R1)');
+
+  // A hiba: mentett mappa híján a restore() csendben próba módba lépett, így a
+  // belépőképernyő mappaválasztója meg sem jelent — új gépen 5 lépéses kerülő.
+  await test('nem esünk magunktól próba módba, és nincs várakozó mappa', async () => {
+    await indul({ engedely: 'prompt', mentett: false });
+    assertEq(Auth.isProba(), false, 'a próba mód a belépőképernyő gombja');
+    assertEq(RegistryModule.pendingDir(), null);
+  });
+
+  await test('üres mappát a kapu felismer (rossz mappa ellen)', async () => {
+    assertEq(await RegistryModule.vanAdat(mappa('23_HARMADIK')), false);
+    assertEq(await RegistryModule.vanAdat(mappa('data',
+      { 'docgen-accounts.json': { accounts: [] } })), true);
+  });
+
+  await test('a kapuból választott mappa betölt és megjegyződik, újratöltés nélkül', async () => {
+    await indul({ engedely: 'granted', mentett: false });
+    const dir = mappa('data', { 'docgen-cases.json': { version: 1, cases: [UGY] },
+                                'docgen-employees.json': { version: 1, employees: [] } });
+    assertEq(await RegistryModule.useDataDir(dir), true);
+    assertEq(CaseRepo.all().length, 1, 'az adatmappa ügyei azonnal elérhetők');
+    assertEq(bongeszo.mentettMappa, dir, 'a következő indulás ezt a mappát kéri');
+    assertEq(Auth.isProba(), false);
   });
 
   section('Próba mód a belépőképernyőről');

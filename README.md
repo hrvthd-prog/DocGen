@@ -40,10 +40,16 @@ beállítása, a korábbi, közös érték az induló.
 
 ### Első használat
 
-1. **Nyilvántartás** → *Adatmappa kiválasztása* — ide kerül a `docgen-employees.json`.
+1. **Adatmappa** — a belépőképernyő új gépen magától kéri: *Adatmappa
+   kiválasztása* → a `08_DocGen\DocGen-main\data` mappa (a kártya kiírja a pontos
+   útvonalat). Utána rögtön a belépés jön, újratöltés nélkül. Ha üres mappát
+   választasz (pl. a `data` helyett a szülőjét), a program nem kezd új
+   nyilvántartást, hanem szól — új, üres adatmappát csak a *Mégis ez* gombbal.
 2. **Dokumentumok** → *Sablonmappa* — a `.docx` sablonok helye.
-3. **Dokumentumok** → *Kimeneti mappa* — a **PDF Műhely munkamappája** (a dolgozói
-   mappák szülője).
+3. **Dokumentumok** → *Kimeneti mappa* — a `09_OIF_kerelmek` (a **PDF Műhely
+   munkamappája**, a dolgozói mappák szülője).
+
+A közös gyökér: `Z:\23_HARMADIK_ORSZAGBELI_MUNKAVALLALOK\`.
 
 A választott mappákat a böngésző megjegyzi, de a **hozzáférési engedélyt** a
 `file://` protokollon **minden indításnál újra meg kell adni** — a Chrome tartós

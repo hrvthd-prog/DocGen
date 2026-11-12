@@ -70,8 +70,13 @@ const RegistryModule = (() => {
       renderSidebar();
       return;
     }
-    // Adatmappa nélkül nincs fiókfájl, tehát nincs szint sem: próba mód. A
-    // felület végig sávot mutat róla (TERV-fiokok.md 2.).
+    // Nincs mentett mappa (új gép / új böngészőprofil): NEM lépünk magunktól
+    // próba módba. A belépőképernyő mappaválasztót ad, a próba mód ott külön
+    // gomb. Korábban itt csendben próba mód indult, és új gépen a felhasználó
+    // csak próba mód → Nyilvántartás → mappa → újratöltés → engedély kerülővel
+    // jutott a közös adathoz (TERV-szerver-es-audit.md 1., R1).
+    if (FsService.hasFsApi) { renderSidebar(); return; }
+    // Mappaválasztó nélküli böngészőben nincs más út: próba mód (TERV-fiokok.md 2.).
     Auth.setProba(true);
     await useIdbBackend();
   }
@@ -436,7 +441,7 @@ const RegistryModule = (() => {
         toast(e.message, 'error');
       }
     });
-    document.getElementById('rg-pick-dir')?.addEventListener('click', pickDataDir);
+    document.getElementById('rg-pick-dir')?.addEventListener('click', () => pickDataDir());
     document.getElementById('rg-grant')?.addEventListener('click', grantAccess);
     document.getElementById('rg-restore')?.addEventListener('click', openRestoreDialog);
     refreshStats();
@@ -943,15 +948,31 @@ const RegistryModule = (() => {
   }
 
   async function pickDataDir() {
+    const dir = await valasztMappa();
+    if (dir) await useDataDir(dir);
+  }
+
+  /** A natív mappaválasztó; megszakításnál null. Kattintásból kell hívni. */
+  async function valasztMappa() {
     if (!FsService.hasFsApi) {
       toast('Ez a böngésző nem támogatja a mappaválasztást.', 'error');
-      return;
+      return null;
     }
-    let dir;
     try {
-      dir = await window.showDirectoryPicker({ id: 'docgen-data', mode: 'readwrite' });
-    } catch { return; }   // megszakítva
+      return await window.showDirectoryPicker({ id: 'docgen-data', mode: 'readwrite' });
+    } catch { return null; }   // megszakítva
+  }
 
+  // A belépőképernyő ebből látja, hogy rossz (üres) mappát választottak-e: 15-20
+  // gépen könnyű a `data` helyett a szülőjét kijelölni, és üres mappán az app
+  // „Első indulás”-t mutatna — egy második, üres nyilvántartást kezdene.
+  const ADATFAJLOK = ['docgen-accounts.json', 'docgen-employees.json', 'docgen-config.json'];
+  async function vanAdat(dir) {
+    for (const f of ADATFAJLOK) if (await FsService.fileExists(dir, f)) return true;
+    return false;
+  }
+
+  async function useDataDir(dir) {
     // Ha volt már adat (a böngészőtárban vagy az eddigi mappában), ne vesszen el
     let atvitt = [];
     if (state.ready) {
@@ -974,6 +995,7 @@ const RegistryModule = (() => {
           + `${CaseRepo.all().length} ügy, ${TransferRepo.all().length} átutalási köteg`, 'success');
     }
     toast('Adatmappa beállítva', 'success');
+    return true;
   }
 
   /**
@@ -1109,6 +1131,9 @@ const RegistryModule = (() => {
     pendingDir: () => (state.engedelyKell ? state.dirHandle : null),
     grantAccess,
     probaMode,
+    valasztMappa,
+    vanAdat,
+    useDataDir,
     _hatterek: hatterek, _atkoltoztet: atkoltoztet,
   };
 })();

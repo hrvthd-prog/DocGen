@@ -68,6 +68,31 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-11-12 — Új gép: adatmappa választása a belépőképernyőn (R1)
+
+**Cél:** a `TERV-szerver-es-audit.md` R1-e: új gépen ne kelljen a próba mód →
+Nyilvántartás → mappa → újratöltés → engedély kerülő.
+**Változás (`v10.106`):** `registry-view.js` (`restore()` mappa nélkül nem lép
+próba módba; `valasztMappa` / `vanAdat` / `useDataDir` kiexportálva),
+`login.js` (`renderNoFolder`: mappaválasztó gomb, várt útvonal, üres mappa
+elleni védelem; `gate()` munkamenet csak betöltött fiókfájllal),
+`test/indulas.test.js` (+3 eset), README „Első használat”, a terv 7. fejezete.
+**Miért / döntés:** a kártya új gépen meg sem jelent, mert a `restore()`
+csendben próba módot kapcsolt, és a kapu próba módnál azonnal elenged. Üres
+mappán az app „Első indulás”-t mutatott volna (párhuzamos, üres
+nyilvántartás) — 15–20 gépen a `data` szülőjének kijelölése várható hiba, ezért
+csak kifejezett gombra kezd újat. A felhasználó: kb. 15–20 fő, a szerver
+időpontja ismeretlen, a gyökér `Z:\23_HARMADIK_ORSZAGBELI_MUNKAVALLALOK\`.
+**Tesztek:** `node test/run-all.js` zöld. Fej nélküli Edge-ben a kapu a
+„betöltés…” állapotban marad — a régi kóddal is, tehát a mérési környezet
+korlátja; a felület böngészőben nincs ellenőrizve.
+**Nyitott / következő:** céges gépen, **új böngészőprofillal** (vagy InPrivate
+helyett egy másik Edge-profillal): indulás → „Az adatmappa még nincs beállítva”
+kártya, a kiírt útvonal `…\08_DocGen\DocGen-main\data` → *Adatmappa
+kiválasztása* → a `data` mappa → engedély → a fiókválasztó jön, újratöltés
+nélkül. Próbaként a `23_HARMADIK_…` gyökeret választva hibaüzenet jöjjön, ne
+„Első indulás”. Utána: R2 (egy gyökér, 1 engedély 3 helyett) döntése; SheetJS-frissítés.
+
 ## 2026-11-12 — Hosszabbítások: olvasható hover; terv: új gép, IT-audit, szerver
 
 **Cél:** (1) a Hosszabbítások listában a már nem hosszabbítható (sötét) sorok
