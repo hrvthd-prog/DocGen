@@ -1314,6 +1314,19 @@ atest('a cél tárolódik, ismeretlen célt nem fogad el, bejelentésnél nincs'
   assertEq(CaseRepo.get(b.id).purpose, null);
 });
 
+atest('régi, cél nélküli lezárt ügy utólag célt kap — a lezárás és a határidő marad', async () => {
+  await tisztaAllapot();
+  const emp = ujDolgozo();
+  const u = CaseRepo.create({ employeeId: emp.id, type: 'rp_hosszabbitas', triggerDate: '2026-01-10' });
+  CaseRepo.setStatus(u.id, 'lezarva', { outcome: 'megadva' });
+  const elotte = JSON.stringify([CaseRepo.get(u.id).closedAt, CaseRepo.get(u.id).dueAt, CaseRepo.get(u.id).outcome]);
+  CaseRepo.update(u.id, { purpose: 'foglalkoztatasi' });
+  const c = CaseRepo.get(u.id);
+  assertEq(c.purpose, 'foglalkoztatasi');
+  assertEq(JSON.stringify([c.closedAt, c.dueAt, c.outcome]), elotte);
+  assertEq(CaseTypes.title(c), 'Foglalkoztatási célú tartózkodási engedély meghosszabbítása');
+});
+
 atest('a következő hosszabbítás előjegyzése átveszi a célt', async () => {
   await tisztaAllapot();
   const emp = ujDolgozo({ expiration_of_rp: '2027-12-01' });

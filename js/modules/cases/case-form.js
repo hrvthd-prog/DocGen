@@ -603,5 +603,56 @@ const CaseForm = (() => {
     });
   }
 
-  return { open, openStatus, openEvent, openSorozatszam, openSap };
+  /**
+   * A régi, cél nélküli kiadási/hosszabbítási ügyek tartózkodási célja egy
+   * ablakban (a cél 2026-10-29 óta kötelező; a korábbi ügyeken nincs, és
+   * semmiből nem következtethető ki). Csak a kiválasztott sorok mentődnek.
+   */
+  function openPurposes({ onSaved = null } = {}) {
+    const nevek = new Map(dolgozok().map(d => [d.id, d.nev]));
+    const ugyek = CaseRepo.all()
+      .filter(c => CaseTypes.needsPurpose(c.type) && !c.purpose)
+      .map(c => ({ c, nev: nevek.get(c.employeeId) || '(törölt személy)' }))
+      .sort((a, b) => a.nev.localeCompare(b.nev, 'hu') || String(b.c.openedAt).localeCompare(String(a.c.openedAt)));
+    if (!ugyek.length) { toast('Minden kiadási és hosszabbítási ügynek van típusa', 'success'); return; }
+
+    const opciok = '<option value="">— később —</option>' + CaseTypes.purposes()
+      .map(p => `<option value="${escHtml(p.key)}">${escHtml(p.label)}</option>`).join('');
+    showDialog({
+      title: `Engedélytípus pótlása — ${ugyek.length} ügy`,
+      body: `
+        <table class="sap-tabla">
+          <colgroup><col><col style="width:290px"></colgroup>
+          <thead><tr><th>Dolgozó és ügy</th><th>Tartózkodási cél</th></tr></thead>
+          <tbody>${ugyek.map(({ c, nev }) => `
+            <tr>
+              <td>${escHtml(nev)}
+                <small>${escHtml([CaseTypes.label(c.type), 'nyitva: ' + CaseTimeline.huDatum(c.openedAt),
+                  c.fileNumber, c.closedAt ? 'lezárt' : ''].filter(Boolean).join(' · '))}</small></td>
+              <td><select class="field-input" data-cel-ugy="${escHtml(c.id)}">${opciok}</select></td>
+            </tr>`).join('')}</tbody>
+        </table>
+        <p style="font-size:11.5px;color:var(--c-muted);margin-top:8px">
+          Ebből lesz az ügy neve, pl. „Nemzeti Kártya meghosszabbítása”. A „később” sor
+          változatlan marad; egy ügy célja az ügy adatainak szerkesztésében is megadható.</p>`,
+      footer: `
+        <button class="btn btn-ghost btn-sm" onclick="closeDialog()">Mégse</button>
+        <button class="btn btn-primary btn-sm" id="cel-save">Mentés</button>`,
+    });
+    document.getElementById('cel-save').addEventListener('click', () => {
+      const valasztott = [...document.querySelectorAll('[data-cel-ugy]')].filter(s => s.value);
+      const hibak = [];
+      for (const s of valasztott) {
+        try { CaseRepo.update(s.dataset.celUgy, { purpose: s.value }); }
+        catch (e) { hibak.push(e.message); }
+      }
+      closeDialog();
+      const db = valasztott.length - hibak.length;
+      if (hibak.length) toast(`${db} ügy mentve, ${hibak.length} nem: ${hibak[0]}`, 'error');
+      else if (db) toast(`✓ ${db} ügy típusa rögzítve`, 'success');
+      if (onSaved) onSaved();
+    });
+  }
+
+  return { open, openStatus, openEvent, openSorozatszam, openSap, openPurposes };
 })();

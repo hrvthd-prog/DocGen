@@ -296,6 +296,8 @@ Kiadási és meghosszabbítási ügynél **kötelező** megadni (új ügy felvé
   következő hosszabbítás előjegyzése) átveszi az előző ügyét.
 - `case-form.js`: legördülő a típus alatt, csak ennél a két típusnál; új ügynél
   kötelező, a régi (cél nélküli) ügy szerkesztésekor pótolható.
+  *2026-11-12:* a régiek egy ablakban is (`CaseForm.openPurposes`) — a lista
+  „típus?” jelvényéről és a **Típus pótlása (N)** gombról.
 - Ahol eddig `CaseTypes.label(c.type)` állt egy **ügyre**, ott `CaseTypes.title(c)`:
   lista, részletező fejléc, idővonal fejléc, ügytörlés-megerősítés, Áttekintés
   sorai, ügykimutatás xlsx. A típus-szűrő és a köteglista típust mutat, az marad.

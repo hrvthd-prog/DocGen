@@ -970,6 +970,13 @@ nyilvántartásba rögzített adat (pl. az új cím) marad. A köteg ügyei a li
 **„Tömeges”** jelölést kapnak; bármelyik ügy részletezőjéből a **Tömeges ügy
 (N dolgozó)** gomb is újranyitja a köteget a generálási lépésnél.
 
+**Engedélytípus (tartózkodási cél):** kiadási és hosszabbítási ügynél ebből
+lesz az ügy neve („Nemzeti Kártya meghosszabbítása”, „Foglalkoztatási célú
+tartózkodási engedély kiadása”). Új ügynél kötelező. A régi, típus nélküli
+ügyek a listán **„típus?”** jelvényt kapnak; a jelvényre vagy az eszközsor
+**Típus pótlása (N)** gombjára kattintva egy ablakban, soronként pótolható (a
+„később” sor változatlan marad). Egy ügyé az *Adatok szerkesztése* alatt is.
+
 **Ügytípus-sablonok:** Ügyek → Áttekintés → **Ügytípus-sablonok…** — melyik
 sablon kell egy ügytípushoz. A közös configba kerül, nincs beégetve.
 

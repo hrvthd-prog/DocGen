@@ -109,6 +109,14 @@ nélkül). A bejelentésnél az előnév (2×), az előző családi és utónév
 adatot: ezek a megkezdés űrlapjában sem voltak, a megszűnésében sincsenek —
 most teszt is őrzi mindkettőt. Az útlevél szerinti utónév (EH-n kötelező) marad.
 
+**Utólag 2. (`v10.110`):** visszamenőleges típus-pótlás — `CaseForm.openPurposes`:
+minden cél nélküli kiadási/hosszabbítási ügy egy ablakban, soronként legördülővel
+(„később” = marad). Nyitja a „típus?” jelvény (a sort nem) és az eszközsor
+**Típus pótlása (N)** gombja. `CaseRepo.update(id, { purpose })` a lezárt ügyön is
+megy, a határidőhöz/lezáráshoz nem nyúl (`cases` +1 teszt). Fej nélküli Chromium,
+`tools/ui-proba.html`: 3 ügy → 2 kiválasztva → nevük frissül, gomb (1), JS-hiba nincs.
+Céges gépen: Ügyek → Típus pótlása → régi ügyek típusa.
+
 ## 2026-11-12 — Új gép: adatmappa választása a belépőképernyőn (R1)
 
 **Cél:** a `TERV-szerver-es-audit.md` R1-e: új gépen ne kelljen a próba mód →

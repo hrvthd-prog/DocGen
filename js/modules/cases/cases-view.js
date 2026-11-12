@@ -351,6 +351,16 @@ const CasesModule = (() => {
               title="Engedélyezett ügyek, ahol van még teendő">Teendő ${db}</button>`;
   }
 
+  /** Csak ha van cél nélküli (régi) kiadási/hosszabbítási ügy. */
+  function celPotlasGombHtml() {
+    if (!irhat()) return '';
+    let db = 0;
+    try { db = CaseRepo.all().filter(c => CaseTypes.needsPurpose(c.type) && !c.purpose).length; } catch { return ''; }
+    return db ? `
+      <button type="button" class="btn btn-ghost btn-sm" id="cv-celpotlas"
+              title="A régi ügyek engedélytípusa egy ablakban">Típus pótlása (${db})</button>` : '';
+  }
+
   function sorHtml(c) {
     const s = CaseRepo.urgency(c);
     return `
@@ -359,7 +369,7 @@ const CasesModule = (() => {
         <td class="cv-td--nev">
           <span class="cv-t__nev">${escHtml(dolgozoNeve(c.employeeId))}</span>
           <span class="cv-t__tip">${escHtml(CaseTypes.title(c))}${CaseTypes.needsPurpose(c.type) && !c.purpose
-            ? ' <span class="cv-batch cv-batch--warn" title="Régi ügy, nincs megadva az engedély típusa — az ügy szerkesztésében pótolható">típus?</span>' : ''}${c.batchId
+            ? ' <span class="cv-batch cv-batch--warn" data-celpotlas title="Régi ügy, nincs megadva az engedély típusa — kattints a pótláshoz">típus?</span>' : ''}${c.batchId
             ? ' <span class="cv-batch" title="Tömeges ügyintézés része">Tömeges</span>' : ''}</span>
         </td>
         <td class="cv-td--allapot">${escHtml(CaseRepo.allapotSzoveg(c))}${teendoJelHtml(c)}</td>
@@ -401,6 +411,7 @@ const CasesModule = (() => {
                     id="cv-tomeges-kapcs" aria-pressed="${state.tomegesLatszik}"
                     title="Bekapcsolva a tömeges ügyek is látszanak">Tömeges</button>
             ${tipusSzuroHtml()}
+            ${celPotlasGombHtml()}
           </div>
         </div>
         <div class="cv-table-wrap">
@@ -1038,6 +1049,14 @@ const CasesModule = (() => {
 
     container.querySelectorAll('.cv-tr[data-id]').forEach(tr =>
       sorAktival(tr, () => megnyit(tr.dataset.id)));
+    // A „típus?” jelvény és a gomb a pótló ablakot nyitja (a jelvénynél nem a sort)
+    const celPotlas = () => { if (irhat()) CaseForm.openPurposes({ onSaved: () => render() }); };
+    container.querySelectorAll('[data-celpotlas]').forEach(el => el.addEventListener('click', e => {
+      e.stopPropagation();
+      celPotlas();
+    }));
+    const celGomb = q('#cv-celpotlas');
+    if (celGomb) celGomb.addEventListener('click', celPotlas);
     // A jelölőnégyzet nem nyitja meg a köteget
     container.querySelectorAll('[data-batch]').forEach(el =>
       sorAktival(el, e => { if (!(e && e.target.closest('.cv-td--cb'))) tomegesNyit(el.dataset.batch); }));
