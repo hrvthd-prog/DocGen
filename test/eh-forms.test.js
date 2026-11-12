@@ -60,7 +60,8 @@ SchemaStore.loadFrom(JSON.parse(JSON.stringify(SEED_SCHEMA)));
 const FO = EhForms._FO.filter(r => r.eh);
 const BETET = EhForms._BETET.filter(r => r.eh);
 const BEJ = EhForms._BEJELENTES.filter(r => r.eh);
-const MIND = FO.concat(BETET, BEJ);
+const MEG = EhForms._MEGSZUNES.filter(r => r.eh);
+const MIND = FO.concat(BETET, BEJ, MEG);
 
 // ── A leírás épsége ─────────────────────────────────────────────────────────
 asection('Űrlapleírás');
@@ -91,7 +92,7 @@ atest('minden `employer` útvonal értéket ad', () => {
 });
 
 atest('az `eh` nevek lapon belül egyediek', () => {
-  for (const [nev, lista] of [['fő űrlap', FO], ['betétlap', BETET], ['bejelentés', BEJ]]) {
+  for (const [nev, lista] of [['fő űrlap', FO], ['betétlap', BETET], ['bejelentés', BEJ], ['megszűnés', MEG]]) {
     const latott = new Set();
     for (const r of lista) {
       assert(!latott.has(r.eh), `${nev}: ismétlődő eh név: ${r.eh}`);
@@ -209,6 +210,43 @@ atest('ügyből: a határozat száma és az Új belépés a döntést hozó kér
   // SAP-adat nélkül üres — a belépési dátum (employment_start) NEM tartalék
   delete kerelem.sap;
   assertEq(ertek('fogalkoztataskezdete', kotott), '');
+  delete sandbox.CaseRepo;
+});
+
+// ── Munkaviszony megszűnésének bejelentése ──────────────────────────────────
+asection('Munkaviszony-megszűnés');
+
+// explorer.py, 2026-11-12 (EH 20178893, …/bejelentes-foglmegszunes): a megkezdés
+// mezőnevei, csak a dátum-rovat nem kötelező. NEM a menedékes változat.
+atest('a megszűnés saját űrlapot kap: a megkezdés rovatai, a dátum nem kötelező', () => {
+  assert(EhForms.sajatUrlap('munkaviszony_kijelentes'));
+  assertEq(MEG.map(r => r.eh).join(), BEJ.map(r => r.eh).join());
+  for (const eh of BEJ_KOTELEZO.filter(x => x !== 'fogalkoztataskezdete')) {
+    assert(MEG.find(r => r.eh === eh).req, `nincs kötelezőnek jelölve: ${eh}`);
+  }
+  const d = MEG.find(r => r.eh === 'fogalkoztataskezdete');
+  assert(!d.req, 'a megszűnés dátuma az EH-n nem kötelező');
+  assertEq(d.label, 'Foglalkoztatás megszűnése');
+  const panelek = EhForms.rowsFor('munkaviszony_kijelentes').map(r => r.panel || '').join('|');
+  assert(/MEGSZŰNÉSE/.test(panelek) && !/MEGKEZDÉSE/.test(panelek), panelek);
+});
+
+atest('megszűnés: engedélyszám a nyilvántartásból, tartalék az iktatószám; dátum az ügyből', () => {
+  sandbox.CaseRepo = {
+    get: () => null,
+    forEmployee: () => [{ id: 'k', fileNumber: '106-3-1/2026-T' }],
+    teendok: x => (x.fileNumber ? [] : null),
+  };
+  const ugy = { id: 'u', type: 'munkaviszony_kijelentes', employeeId: 'e', triggerDate: '2026-11-30' };
+  const sor = eh => MEG.find(r => r.eh === eh);
+  const van = CaseEh._ertekOf(sor('tartrajogokmszama'), { fields: { number_of_rp: 'HU1234567' } },
+                              { number_of_rp: 'HU1234567' }, ugy);
+  assertEq(van.text, 'HU1234567');
+  assertEq(van.jelzes.length, 0, 'saját engedélyszámnál nincs jelzés');
+  const nincs = CaseEh._ertekOf(sor('tartrajogokmszama'), { fields: {} }, {}, ugy);
+  assertEq(nincs.text, '106-3-1/2026-T');
+  assertEq(nincs.jelzes.length, 1, 'a tartalékot jelezni kell');
+  assertEq(CaseEh._ertekOf(sor('fogalkoztataskezdete'), { fields: {} }, {}, ugy).text, '2026-11-30');
   delete sandbox.CaseRepo;
 });
 

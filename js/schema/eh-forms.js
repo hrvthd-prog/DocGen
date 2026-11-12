@@ -31,6 +31,8 @@
  *   const     minden kérelemnél ugyanaz az érték
  *   fromCase  az ügyből jövő érték: hosszabbitas | hatarozat (a döntést hozó
  *             kérelem iktatószáma) | kezdet (a kérelem SAP-adatai közül az Új belépés)
+ *             | trigger (az ügy kezdő napja)
+ *   fallbackCase  ha a `key` üres, ez a `fromCase`-érték jön, jelzéssel
  *   setting   a Beállítások fülön megadott érték (Settings.ehContact)
  *   manual    nincs a DB-ben, kézzel töltendő
  *   list      listás mező; az értéke a soron megjelenő tipp, vagy `true`
@@ -541,8 +543,28 @@ const EhForms = (() => {
     { eh: 'sztelepules', label: 'Szálláshely település', req: true, key: 'locality' },
   ];
 
+  /**
+   * A munkaviszony megszűnésének bejelentése (explorer.py, 2026-11-12, EH 20178893):
+   * ugyanaz a két lap és ugyanazok a mezőnevek, mint a megkezdésnél (`…/bejelentes`,
+   * `…/bejelentes-foglmegszunes`). Eltérés: a dátum-rovat neve marad
+   * `fogalkoztataskezdete`, de a címkéje „Foglalkoztatás megszűnése”, és nem
+   * kötelező; az engedélyszám a dolgozó tartózkodási engedélyéé (ekkor már
+   * többnyire van), a kérelem iktatószáma csak tartalék. A menedékes változat
+   * (`bejelentes-menedekesfoglmegszunes`) másik EH-típus — nem ez.
+   */
+  const MEGSZUNES_ROWS = BEJELENTES_ROWS.map(r =>
+    r.panel === '── 2. LAP: FOGLALKOZTATÁS MEGKEZDÉSE ──'
+      ? { panel: '── 2. LAP: FOGLALKOZTATÁS MEGSZŰNÉSE ──' }
+    : r.eh === 'tartrajogokmszama'
+      ? { eh: r.eh, label: r.label, req: true, key: 'number_of_rp', fallbackCase: 'hatarozat' }
+    : r.eh === 'fogalkoztataskezdete'
+      ? { eh: r.eh, label: 'Foglalkoztatás megszűnése', fromCase: 'trigger',
+          note: 'az ügy kezdő napja (a munkaviszony megszűnése)' }
+    : r);
+
   /** Ügytípus → saját EH-űrlap. Ami nincs itt, az kérelem: fő űrlap + betétlap. */
-  const TIPUS_URLAP = { munkaviszony_bejelentes: BEJELENTES_ROWS };
+  const TIPUS_URLAP = { munkaviszony_bejelentes: BEJELENTES_ROWS,
+                        munkaviszony_kijelentes: MEGSZUNES_ROWS };
 
   // ── Lekérdezés ─────────────────────────────────────────────────────────────
 
@@ -587,7 +609,8 @@ const EhForms = (() => {
   }
 
   return { JOGCIMEK, rows, rowsFor, sajatUrlap, labelOf, employerValue, EMPLOYER: EH_EMPLOYER,
-           _FO: FO_ROWS, _BETET: BETET_ROWS, _BEJELENTES: BEJELENTES_ROWS };
+           _FO: FO_ROWS, _BETET: BETET_ROWS, _BEJELENTES: BEJELENTES_ROWS,
+           _MEGSZUNES: MEGSZUNES_ROWS };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { EhForms, EH_EMPLOYER };

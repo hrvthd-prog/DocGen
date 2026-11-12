@@ -66,6 +66,11 @@ const CaseEh = (() => {
     if (!text && row.fallback) text = String(emp.fields[row.fallback] || '');
 
     const jelzes = [];
+    // Az ügyből jövő tartalék csak megjelenik; a DB-be csak kézi javítás (F2) írna.
+    if (!text && row.fallbackCase) {
+      text = ugybolErtek({ fromCase: row.fallbackCase }, ugy).text;
+      if (text) jelzes.push('a nyilvántartásban üres — a legutóbbi engedélyezett kérelem iktatószáma');
+    }
     // A `resolveValues` a szabad szöveget már fordítja; itt csak azt nézzük,
     // volt-e mihez nyúlnia. Fordítást NEM találunk ki.
     if (row.dict && text && SchemaStore.translate(text, 'hu') === null) {
@@ -88,6 +93,7 @@ const CaseEh = (() => {
   function ugybolErtek(row, ugy) {
     const ki = text => ({ text: text || '', fajta: 'ugy' });
     if (row.fromCase === 'hosszabbitas') return ki(ugy.type === 'rp_hosszabbitas' ? 'igen' : 'nem');
+    if (row.fromCase === 'trigger')      return ki(ugy.triggerDate);
     const k = (ugy.kerelemId && CaseRepo.get(ugy.kerelemId))
       || CaseRepo.forEmployee(ugy.employeeId).find(x => CaseRepo.teendok(x)) || {};
     if (row.fromCase === 'hatarozat') return ki(k.fileNumber);

@@ -1010,6 +1010,19 @@ előbb a SAP-táblázat párbeszédében add meg. Ha már van bejelentés-ügy, 
 azt nyitja, és a felirata az EH-számát mutatja. A teendőt a beküldés után
 továbbra is kézzel kell kipipálni.
 
+### Munkaviszony megszűnésének bejelentése
+
+A *Munkaviszony megszűnésének bejelentése* ügy Enter Hungary fülén a
+megszűnés két EH-lapja áll (EH: Bejelentés → *Foglalkoztatás megszűnése*; **nem**
+a menedékes foglalkoztatottakra vonatkozó változat). A rovatok ugyanazok, mint a
+megkezdésnél, két eltéréssel:
+
+- **tartózkodásra jogosító engedély száma** — a dolgozó *Tartózkodási engedély
+  száma* a nyilvántartásból. Ha az üres, a legutóbbi engedélyezett kérelem
+  iktatószáma jelenik meg, jelzéssel; F2-vel átírva a nyilvántartásba ment.
+- **Foglalkoztatás megszűnése** — az ügy kezdő napja (a kilépés dátuma). Az
+  EH-n nem kötelező.
+
 
 Az idegenrendészeti ügyintézés nem állapot, hanem folyamat: a kérelmek egymás
 után következnek, és közben be- meg kijelentéseket is határidőre kell tenni.

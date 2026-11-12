@@ -1088,3 +1088,25 @@ A felhasználó javítása az első változat után — **három téves feltevé
 
 Ha az Új belépés még nincs megadva, a bejelentés akkor is elindul (a határidő
 fut), de figyelmeztet, és a sor „hiányzik”.
+
+## 14. Munkaviszony megszűnésének bejelentése (2026-11-12)
+
+**Hiba:** a `munkaviszony_kijelentes` ügy EH-fülén a kérelem fő űrlapja állt (a
+`rowsFor` saját űrlap híján a kérelemét adja).
+
+**Felmérés:** `PyDS/pyds/explorer.py --case-type munkaviszony_megszunes` (új profil:
+`#bejelentes` blokk, 1. lap `bejelentes`, link `cases/new/bejelentes-foglmegszunes`),
+EH-piszkozat **20178893** (beküldés nélkül; törlése kézi). A menedékes változat
+(`bejelentes-menedekesfoglmegszunes`) külön EH-típus — kimarad.
+
+**Eredmény:** a két lap mezőnevei **azonosak** a megkezdésével (17 + 37 mező, a
+kihagyottak ugyanazok). Ezért `MEGSZUNES_ROWS = BEJELENTES_ROWS.map(…)`, három
+eltéréssel:
+- 2. lap címe: *Foglalkoztatás megszűnése*.
+- `fogalkoztataskezdete` (az EH nem nevezte át): címke „Foglalkoztatás megszűnése”,
+  **nem kötelező**, értéke az ügy `triggerDate`-je (`fromCase: 'trigger'`).
+- `tartrajogokmszama`: az EH mintája itt is `106-x-...`, de a felhasználó szerint
+  megszűnéskor a dolgozónak többnyire **már van engedélye, annak száma kell** →
+  `key: 'number_of_rp'`, és csak ha üres, `fallbackCase: 'hatarozat'` (a legutóbb
+  engedélyezett kérelem iktatószáma), jelzéssel. A tartalék nem íródik a DB-be,
+  csak ha a felhasználó F2-vel ráment.
