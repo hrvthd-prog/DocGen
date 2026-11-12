@@ -68,6 +68,25 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-11-12 — Hosszabbítások: olvasható hover; terv: új gép, IT-audit, szerver
+
+**Cél:** (1) a Hosszabbítások listában a már nem hosszabbítható (sötét) sorok
+hoverkor olvashatatlanok; (2) terv arra, hogy új gépen nehéz az adatmappa
+beállítása, az IT-nak be kell mutatni az appot (audit), és szerverre kerül.
+**Változás:** `css/hosszabbitas.css` — hover-szabály a sávos sorokra;
+új `plans/TERV-szerver-es-audit.md`; CLAUDE.md tervlista. (`v10.105`)
+**Miért / döntés:** a `vendor/client-picker.css` a `hosszabbitas.css` UTÁN
+töltődik, azonos specificitással, így hoverkor a világos háttere nyert, a
+sáv fehér betűje maradt. Hoverkor a szöveg sötétre vált (mint a kijelölt
+soron). A terv lényege: a `file://`-os nehézség a böngésző engedélymodelljéből
+jön, a szerver megszünteti — ezért most csak az olcsó R1 (mappaválasztó a
+belépőképernyőn) javasolt, az auditot a célállapotra kérjük. Audit-lelet:
+`vendor/xlsx.full.min.js` = SheetJS 0.18.5, CVE-2023-30533 és CVE-2024-22363.
+**Tesztek:** `node test/run-all.js` zöld. A hover csak böngészőben látszik.
+**Nyitott / következő:** céges gépen: Hosszabbítások fül → egy „Nem adható”
+vagy „Lejárt” sorra húzott egér mellett a szöveg olvasható-e. A terv 6.
+fejezetének kérdései (K1–K3 a felhasználónak, K4–K8 az IT-nak); SheetJS-frissítés.
+
 ## 2026-11-10 — „Mai nap” nem ragad be többé (TAJ-meghatalmazás dátuma)
 
 **Cél:** a TAJ-meghatalmazás PDF-en mindig 2026.08.17 volt a dátum.

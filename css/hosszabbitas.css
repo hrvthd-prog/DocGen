@@ -17,6 +17,10 @@
 .cp-table tbody tr.hs-sav--lejart td { text-decoration: line-through; text-decoration-thickness: 1px; }
 .cp-table tbody tr.hs-sav--lejart td:nth-child(3) { text-decoration: none; }
 .cp-table tbody tr[class*="hs-sav--"].cp-selected td { background: #E5F4F0; color: var(--c-text); }
+/* Hover: a vendor/client-picker.css később töltődik, azonos specificitással a
+   világos hover-háttere nyer — a sötét sávok (nem adható, lejárt) fehér betűje
+   ezért olvashatatlan volt. A szöveg a kijelölt sorhoz hasonlóan sötétre vált. */
+.cp-table tbody tr[class*="hs-sav--"]:hover td { color: var(--c-text); }
 
 /* Módosított döntés: narancs jel mindkét listán; nyugtázandó: piros */
 .cp-table tbody tr.hs-mod td:nth-child(3) { box-shadow: inset 4px 0 0 var(--c-amber); }

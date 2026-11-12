@@ -28,7 +28,9 @@ szerkesztő, legutóbbi változások),
 ügylista-szűrők, engedélyezés utáni teendők, SAP-táblázat),
 `TERV-hosszabbitasi-dontesek.md` (K2-döntések az engedély-hosszabbításról,
 sávok, döntésnapló, értesítések — megvalósítva v10.103-ban, az eltérések a 9.
-fejezetben).
+fejezetben),
+`TERV-szerver-es-audit.md` (új gép beállítása, IT-audit, szerverre költözés —
+**terv, döntésre vár**).
 A használat: `README.md`.
 
 ## Hol fut?
