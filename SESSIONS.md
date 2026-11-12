@@ -68,6 +68,41 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-11-12 (3.) — Munkaviszony megszűnése: EH-űrlap; engedélytípus az ügy nevében
+
+**Cél:** (1) a megszűnés-bejelentés EH-fülén a tartózkodási kérelem adatlapja
+állt — explorer.py-jal felmérni és lecserélni (a menedékes változat NEM kell);
+(2) az Ügyek listában a tartózkodási engedélyes ügyek nevében az engedély
+típusa is látszódjon.
+**Változás:** `v10.107` — `eh-forms.js` (`MEGSZUNES_ROWS`, `fallbackCase`),
+`case-eh.js` (`fromCase: 'trigger'`, tartalék jelzéssel), teszt, README, TERV-enterhungary 14.
+`v10.108` — `case-types.js` (`Nemzeti Kártya tartózkodási engedély`, új
+`foglalkoztatasi` cél), `cases-view.js` + `cases.css` („típus?” jelvény a cél
+nélküli engedélyes ügyön), `case-form.js` súgószöveg, TERV-kimenet 4.4.
+A PyDS-ben `explorer.py` új profil: `--case-type munkaviszony_megszunes`.
+**Miért / döntés:**
+- Az explorer szerint a megszűnés két lapja (`bejelentes`, `bejelentes-foglmegszunes`)
+  **mezőnévre azonos** a megkezdésével; a dátum-rovat neve is `fogalkoztataskezdete`
+  maradt, csak a címkéje „Foglalkoztatás megszűnése”, és nem kötelező. Ezért a sorok
+  a megkezdéséből képződnek (`map`), nem másolatként.
+- Engedélyszám: az EH mintája `106-x-...` (iktatószám), de a felhasználó javítása
+  szerint megszűnéskor többnyire **már van engedély, annak száma kell** →
+  `number_of_rp`, és csak ha üres, a legutóbb engedélyezett kérelem iktatószáma.
+- Az ügy neve már 10-29 óta a célból jön (`CaseTypes.title`), de **csak ha a cél
+  meg van adva** — a régebbi ügyeken nincs, és semmiből nem következtethető ki
+  (az EH-panel jogcímválasztója nem mentődik). Ezért jelvény jelzi, hogy
+  szerkesztésben pótolható. Az utótag marad „kiadása / meghosszabbítása”
+  (a többi ügynév nyelvtanához igazodva).
+**Tesztek:** `node test/run-all.js` zöld (`eh-forms` +2, `cases` +1 állítás).
+Felület böngészőben nincs ellenőrizve.
+**Nyitott / következő:**
+- **Céges gépen:** egy *Munkaviszony megszűnésének bejelentése* ügy → Enter Hungary
+  fül: két lap (Bejelentés / Foglalkoztatás megszűnése), az engedélyszám a
+  nyilvántartásból, a dátum a kilépés napja. Ügyek lista: a régi engedélyes
+  ügyeken „típus?” jelvény → Szerkesztés → tartózkodási cél → a név frissül.
+- Az EH-n maradt piszkozat (**20178893**, explorer-futás) kézzel törlendő.
+- Magyar Kártya cél nincs felvéve (nem kérték); egy sor a `CASE_PURPOSES`-ben.
+
 ## 2026-11-12 — Új gép: adatmappa választása a belépőképernyőn (R1)
 
 **Cél:** a `TERV-szerver-es-audit.md` R1-e: új gépen ne kelljen a próba mód →

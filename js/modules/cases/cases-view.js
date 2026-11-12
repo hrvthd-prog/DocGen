@@ -358,7 +358,8 @@ const CasesModule = (() => {
           data-id="${escHtml(c.id)}" tabindex="0">
         <td class="cv-td--nev">
           <span class="cv-t__nev">${escHtml(dolgozoNeve(c.employeeId))}</span>
-          <span class="cv-t__tip">${escHtml(CaseTypes.title(c))}${c.batchId
+          <span class="cv-t__tip">${escHtml(CaseTypes.title(c))}${CaseTypes.needsPurpose(c.type) && !c.purpose
+            ? ' <span class="cv-batch cv-batch--warn" title="Régi ügy, nincs megadva az engedély típusa — az ügy szerkesztésében pótolható">típus?</span>' : ''}${c.batchId
             ? ' <span class="cv-batch" title="Tömeges ügyintézés része">Tömeges</span>' : ''}</span>
         </td>
         <td class="cv-td--allapot">${escHtml(CaseRepo.allapotSzoveg(c))}${teendoJelHtml(c)}</td>

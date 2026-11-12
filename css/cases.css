@@ -649,6 +649,7 @@
   background: #E9F5F2; border: 1px solid var(--c-green); color: #21474f;
   font-size: 10px; font-weight: 600; vertical-align: 1px;
 }
+.cv-batch--warn { background: #FFF6E5; border-color: #E0A030; color: #7A4B00; }
 .cv-dash-tools { display: flex; justify-content: flex-end; padding: 10px 14px 0; }
 
 /* ── Tömeges ügyintézés oldala (BulkCase) ───────────────────────────────── */

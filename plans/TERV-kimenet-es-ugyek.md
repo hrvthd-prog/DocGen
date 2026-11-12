@@ -283,11 +283,12 @@ Kiadási és meghosszabbítási ügynél **kötelező** megadni (új ügy felvé
 | Kulcs | Megnevezés |
 |---|---|
 | `vendegmunkas` | Vendégmunkás-tartózkodási engedély |
-| `nemzeti_kartya` | Nemzeti Kártya |
+| `nemzeti_kartya` | Nemzeti Kártya tartózkodási engedély *(2026-11-12-ig: Nemzeti Kártya)* |
+| `foglalkoztatasi` | Foglalkoztatási célú tartózkodási engedély *(2026-11-12)* |
 | `eu_kek_kartya` | EU Kék Kártya |
 | `csaladi` | Családi együttélés biztosítása céljából kiadott tartózkodási engedély |
 
-- `case-types.js`: `CASE_PURPOSES` (fenti négy) + `CaseTypes.title(c)`:
+- `case-types.js`: `CASE_PURPOSES` (fenti lista) + `CaseTypes.title(c)`:
   van cél → `<cél> meghosszabbítása` / `<cél> kiadása`, nincs → a típus címkéje.
   `ponytail:` a „melyik típus kér célt” két kulccsal (`rp_elso`,
   `rp_hosszabbitas`) van megadva, nem típus-tulajdonsággal.

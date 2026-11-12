@@ -1282,7 +1282,9 @@ atest('az ügy neve a célból: „<cél> meghosszabbítása / kiadása”', asy
   assertEq(CaseTypes.title({ type: 'rp_hosszabbitas', purpose: 'vendegmunkas' }),
            'Vendégmunkás-tartózkodási engedély meghosszabbítása');
   assertEq(CaseTypes.title({ type: 'rp_hosszabbitas', purpose: 'nemzeti_kartya' }),
-           'Nemzeti Kártya meghosszabbítása');
+           'Nemzeti Kártya tartózkodási engedély meghosszabbítása');
+  assertEq(CaseTypes.title({ type: 'rp_elso', purpose: 'foglalkoztatasi' }),
+           'Foglalkoztatási célú tartózkodási engedély kiadása');
   assertEq(CaseTypes.title({ type: 'rp_elso', purpose: 'eu_kek_kartya' }), 'EU Kék Kártya kiadása');
   assertEq(CaseTypes.title({ type: 'rp_elso' }), 'Tartózkodási engedély kiadása', 'cél nélkül a típus neve');
   assertEq(CaseTypes.title({ type: 'szallashely_valtozas', purpose: 'vendegmunkas' }),
