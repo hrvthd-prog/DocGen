@@ -103,6 +103,12 @@ Felület böngészőben nincs ellenőrizve.
 - Az EH-n maradt piszkozat (**20178893**, explorer-futás) kézzel törlendő.
 - Magyar Kártya cél nincs felvéve (nem kérték); egy sor a `CASE_PURPOSES`-ben.
 
+**Utólag, ugyanaznap (`v10.109`):** a felhasználó javítása — a Nemzeti Kártya
+címkéje marad „Nemzeti Kártya” (mint az EU Kék Kártyáé, „tartózkodási engedély”
+nélkül). A bejelentésnél az előnév (2×), az előző családi és utónév ne adjon
+adatot: ezek a megkezdés űrlapjában sem voltak, a megszűnésében sincsenek —
+most teszt is őrzi mindkettőt. Az útlevél szerinti utónév (EH-n kötelező) marad.
+
 ## 2026-11-12 — Új gép: adatmappa választása a belépőképernyőn (R1)
 
 **Cél:** a `TERV-szerver-es-audit.md` R1-e: új gépen ne kelljen a próba mód →

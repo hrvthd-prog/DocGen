@@ -29,12 +29,12 @@ const CASE_OUTCOMES = [
 
 /**
  * Tartózkodási cél — kiadási és meghosszabbítási kérelemnél ez adja az ügy
- * nevét („Nemzeti Kártya tartózkodási engedély meghosszabbítása”). Csak a
- * jellemzően intézett célok; bővíteni egy sorral lehet (plans/TERV-kimenet-es-ugyek.md 4.4).
+ * nevét („Nemzeti Kártya meghosszabbítása”). Csak a jellemzően intézett célok;
+ * bővíteni egy sorral lehet (plans/TERV-kimenet-es-ugyek.md 4.4).
  */
 const CASE_PURPOSES = [
   { key: 'vendegmunkas',   label: 'Vendégmunkás-tartózkodási engedély' },
-  { key: 'nemzeti_kartya', label: 'Nemzeti Kártya tartózkodási engedély' },
+  { key: 'nemzeti_kartya', label: 'Nemzeti Kártya' },
   { key: 'foglalkoztatasi', label: 'Foglalkoztatási célú tartózkodási engedély' },
   { key: 'eu_kek_kartya',  label: 'EU Kék Kártya' },
   { key: 'csaladi',        label: 'Családi együttélés biztosítása céljából kiadott tartózkodási engedély' },

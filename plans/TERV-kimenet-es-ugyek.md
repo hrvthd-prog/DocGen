@@ -283,7 +283,7 @@ Kiadási és meghosszabbítási ügynél **kötelező** megadni (új ügy felvé
 | Kulcs | Megnevezés |
 |---|---|
 | `vendegmunkas` | Vendégmunkás-tartózkodási engedély |
-| `nemzeti_kartya` | Nemzeti Kártya tartózkodási engedély *(2026-11-12-ig: Nemzeti Kártya)* |
+| `nemzeti_kartya` | Nemzeti Kártya |
 | `foglalkoztatasi` | Foglalkoztatási célú tartózkodási engedély *(2026-11-12)* |
 | `eu_kek_kartya` | EU Kék Kártya |
 | `csaladi` | Családi együttélés biztosítása céljából kiadott tartózkodási engedély |

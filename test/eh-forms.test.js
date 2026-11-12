@@ -163,9 +163,10 @@ atest('minden kötelező rovat benne van, kötelezőként és adatforrással', (
   }
 });
 
-atest('az előnév és az előző név nincs benne (a felhasználó kérése)', () => {
+atest('az előnév és az előző név nincs benne (a felhasználó kérése) — megkezdés és megszűnés', () => {
   for (const eh of ['kerelmezonevelotag', 'kerelmezonevelotag2', 'kerelmezoelozocsaladnev', 'kerelmezoelozoutonev']) {
-    assert(!BEJ.some(r => r.eh === eh), `nem kellene: ${eh}`);
+    assert(!BEJ.some(r => r.eh === eh), `nem kellene (megkezdés): ${eh}`);
+    assert(!MEG.some(r => r.eh === eh), `nem kellene (megszűnés): ${eh}`);
   }
 });
 

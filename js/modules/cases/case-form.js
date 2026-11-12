@@ -61,7 +61,7 @@ const CaseForm = (() => {
               <option value="">— válassz —</option>
               ${CaseTypes.purposes().map(p => `<option value="${escHtml(p.key)}" ${c && c.purpose === p.key ? 'selected' : ''}>${escHtml(p.label)}</option>`).join('')}
             </select>
-            <small>Ebből lesz az ügy neve, pl. „Nemzeti Kártya tartózkodási engedély meghosszabbítása”.</small>
+            <small>Ebből lesz az ügy neve, pl. „Nemzeti Kártya meghosszabbítása”.</small>
           </label>
 
           <label class="cf-field">
