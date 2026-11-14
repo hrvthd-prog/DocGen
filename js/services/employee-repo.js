@@ -791,7 +791,7 @@ const EmployeeRepo = (() => {
         // UTÁN vett lenyomat már nem azt írná le, ami a fájlba került — és a
         // következő mentés a SAJÁT előző írásunkat ütközésnek venné („valaki más
         // közben írt”, miközben egyedül dolgozunk), ráadásul újratöltésig minden
-        // további mentés is elbukna. (plans/TERV-belso-szerver.md 2.1, a belso-szerver ágon)
+        // további mentés is elbukna. (plans/TERV-felulet-es-kimenet.md 3.1, a belso-szerver ágon)
         const szoveg = JSON.stringify(data, null, 2);
         const kiirt  = fingerprint(data);
         await FsService.writeTextToDir(dirHandle, filename, szoveg);
