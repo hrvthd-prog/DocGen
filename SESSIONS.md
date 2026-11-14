@@ -68,6 +68,31 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-11-14 — A hamis „valaki más közben írt” gyökéroka és javítása
+
+**Cél:** a figyelmeztetés egyedül dolgozva is megjelent — gyökérok és javítás.
+(A belső szerverre költözés fejlesztési terve a `belso-szerver` ágon van:
+`plans/TERV-belso-szerver.md`, draft PR #3, jóváhagyásra vár.)
+**Változás:** `v10.111` — `employee-repo.js` (`createFileBackend.save`),
+`case-repo.js`, `transfer-repo.js`, `test/employee-repo.test.js` (+4).
+**Miért / döntés:**
+- **A gyökérok:** a fájl-háttér az írás UTÁN, az élő gyorsítótárból vette a
+  „mit láttam utoljára” lenyomatot. Ha az írás alatt (Z:-n lassú) a felhasználó
+  tovább szerkesztett, a lenyomat olyat írt le, ami nem került a fájlba → a
+  következő mentés a saját előző írását vette ütközésnek, és újratöltésig minden
+  mentés elbukott. 300 ms-os hamis írással reprodukálva.
+- Javítás: szöveg + lenyomat egy pillanatban, az írás előtt; a háttér a
+  mentéseket sorba állítja; a repók változás-számlálója őrzi a `dirty`-t (a
+  `flush()` eddig kihagyhatta a mentés alatt jött módosítást).
+- A felhasználó döntése (D1): a javítás a `main`-re is menjen, ne várjon az ágra.
+**Tesztek:** `node test/run-all.js` zöld. Az új 4 tesztből a régi kódon 3 bukik.
+Böngészőben, hálózati meghajtón nincs ellenőrizve.
+**Nyitott / következő:**
+- **Céges gépen:** Nyilvántartás → két-három dolgozónál 5–6 mező gyors egymás
+  utáni átírása → nem jöhet „valaki más közben írt”. Ha mégis jön: a napló
+  `REPO_UTKOZES` sora kell (kinek a nevét írja ki).
+- A terv 8. fejezetének D2–D6 döntései nyitottak (a `belso-szerver` ágon).
+
 ## 2026-11-12 (3.) — Munkaviszony megszűnése: EH-űrlap; engedélytípus az ügy nevében
 
 **Cél:** (1) a megszűnés-bejelentés EH-fülén a tartózkodási kérelem adatlapja
