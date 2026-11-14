@@ -68,6 +68,37 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-11-14 — Belső szerver: fejlesztési terv; a hamis „valaki más közben írt” gyökéroka
+
+**Cél:** fejlesztési terv a belső szerverre költözéshez, külön ágon. Súlypontok:
+párhuzamos mentés (a figyelmeztetés egyedül dolgozva is megjelent), bolondbiztos
+felület külön legfőbb adminnal, alapértelmezett DOCX.
+**Változás:** `belso-szerver` ág, **verzió és tag nélkül** (az ágon a hookok
+szándékosan nincsenek bekapcsolva — lásd a terv 1. fejezetét).
+`plans/TERV-belso-szerver.md` (új), `employee-repo.js` (`createFileBackend.save`),
+`case-repo.js`, `transfer-repo.js`, `test/employee-repo.test.js` (+4), CLAUDE.md.
+**Miért / döntés:**
+- **A gyökérok:** a fájl-háttér az írás UTÁN, az élő gyorsítótárból vette a
+  „mit láttam utoljára” lenyomatot. Ha az írás alatt (Z:-n lassú) a felhasználó
+  tovább szerkesztett, a lenyomat olyat írt le, ami nem került a fájlba → a
+  következő mentés a saját előző írását vette ütközésnek, és újratöltésig minden
+  mentés elbukott. 300 ms-os hamis írással reprodukálva. Javítás: szöveg +
+  lenyomat egy pillanatban, az írás előtt; a mentések sorban futnak; a repók
+  változás-számlálója őrzi a `dirty`-t (a `flush()` eddig kihagyhatta a mentés
+  alatt jött módosítást).
+- A zárolás helyett a terv **rekordszintű verziót + mezőszintű összefésülést**
+  javasol a szerveren (2.3) — az indoklás ott.
+- Nagyobb változtatás (DOCX-gombok, egyszerű mód, változás-sor) **nem készült**:
+  a felhasználó előbb a tervet akarja látni.
+**Tesztek:** `node test/run-all.js` zöld. Az új 4 tesztből a régi kódon 3 bukik.
+Böngészőben, hálózati meghajtón nincs ellenőrizve.
+**Nyitott / következő:**
+- **Döntésre vár** a terv 8. fejezete (D1–D6). D1: a javítás menjen-e `main`-re.
+- **Céges gépen** (ha a javítás a `main`-re került): Nyilvántartás → két-három
+  dolgozónál 5–6 mező gyors egymás utáni átírása → nem jöhet „valaki más közben
+  írt”. Ha mégis jön: a napló `REPO_UTKOZES` sora kell (kinek a nevét írja ki).
+- Az ágat a `main`-re kell húzni, mielőtt bármi más kerül rá.
+
 ## 2026-11-12 (3.) — Munkaviszony megszűnése: EH-űrlap; engedélytípus az ügy nevében
 
 **Cél:** (1) a megszűnés-bejelentés EH-fülén a tartózkodási kérelem adatlapja

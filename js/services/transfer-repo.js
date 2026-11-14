@@ -60,6 +60,7 @@ const TransferRepo = (() => {
   let backend = null;
   let cache   = null;
   let dirty   = false;
+  let valtozasSzam = 0;      // minden scheduleSave lépteti (lásd save)
   let saveTimer = null;
   const saveErrorListeners = new Set();
   const listeners = new Set();
@@ -154,13 +155,17 @@ const TransferRepo = (() => {
     ensureLoaded();
     if (!backend) throw new Error('Nincs beállított tároló háttér.');
     cache.savedAt = nowIso();
+    // Ha a mentés ALATT újabb módosítás jön, a `dirty` maradjon igaz: különben
+    // a `flush()` (pl. újratöltés előtt) azt hinné, nincs mit kiírni.
+    const ekkor = valtozasSzam;
     await backend.save(cache);
-    dirty = false;
+    if (ekkor === valtozasSzam) dirty = false;
     return true;
   }
 
   function scheduleSave(delayMs = 800) {
     dirty = true;
+    valtozasSzam++;
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       saveTimer = null;

@@ -583,6 +583,97 @@ atest('a lenyomat a cases.json alakját is felismeri', async () => {
          'a cases alakú fájlnál nem vette észre az ütközést');
 });
 
+// ── A hamis „valaki más közben írt” (plans/TERV-belso-szerver.md 2.1) ────────
+// Egyetlen felhasználó, egyetlen lap. A hálózati meghajtón az írás lassú; ha
+// közben tovább szerkeszt, a mentés a SAJÁT előző írását vette ütközésnek.
+asection('Egyidejű szerkesztés: hamis riasztás egyedül dolgozva');
+
+/** Mint az ujRepoFajlrendszerrel, de az írás `irasMs` ideig tart. */
+function ujRepoLassuIrassal(fajlok, irasMs) {
+  let code = fs.readFileSync(path.join(__dirname, '../js/services/employee-repo.js'), 'utf8');
+  code += '\nglobalThis.EmployeeRepo = EmployeeRepo;';
+  const var_ = ms => new Promise(r => setTimeout(r, ms));
+  const naplo = { parhuzamos: 0, legtobb: 0 };
+  const FsService = {
+    async readTextFromDir(dir, nev) {
+      if (!(nev in fajlok)) throw new Error('nincs ilyen fájl');
+      return fajlok[nev];
+    },
+    async writeTextToDir(dir, nev, szoveg) {
+      naplo.parhuzamos++; naplo.legtobb = Math.max(naplo.legtobb, naplo.parhuzamos);
+      await var_(irasMs);
+      fajlok[nev] = szoveg;
+      naplo.parhuzamos--;
+    },
+    async mentesElotte() {},
+  };
+  const sandbox = {
+    console, Date, Math, JSON, Set, Map, Object, Array, String, Number, Boolean,
+    Error, RegExp, Promise, setTimeout, clearTimeout, crypto, FsService,
+  };
+  sandbox.globalThis = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(code, sandbox);
+  const R = sandbox.EmployeeRepo;
+  R.useBackend(R.createFileBackend({ name: 'proba' }));
+  R._naplo = naplo;
+  return R;
+}
+
+atest('szerkesztés a futó mentés ALATT nem ad ütközést', async () => {
+  const fajlok = { [FAJLNEV]: KETTO() };
+  const R = ujRepoLassuIrassal(fajlok, 60);
+  await R.load();
+  R.create({ fields: { surname: 'Elso' } });
+  const elso = R.save();                           // az írás 60 ms-ig tart…
+  await new Promise(r => setTimeout(r, 20));
+  R.create({ fields: { surname: 'Kozben' } });      // …közben újabb módosítás
+  await elso;
+  assertEq(JSON.parse(fajlok[FAJLNEV]).employees.length, 3, 'az első mentés tartalma');
+  let dobott = null;
+  try { await R.save(); } catch (e) { dobott = e; }
+  assert(!dobott, `a saját előző írását ütközésnek vette: ${dobott && dobott.message}`);
+  assertEq(JSON.parse(fajlok[FAJLNEV]).employees.length, 4, 'a közbeni módosítás nincs a fájlban');
+});
+
+atest('a mentés alatti módosítást a flush() még kiírja', async () => {
+  const fajlok = { [FAJLNEV]: KETTO() };
+  const R = ujRepoLassuIrassal(fajlok, 60);
+  await R.load();
+  R.create({ fields: { surname: 'Elso' } });
+  const elso = R.save();
+  await new Promise(r => setTimeout(r, 20));
+  R.create({ fields: { surname: 'Kozben' } });
+  await elso;
+  await R.flush();                                 // pl. újratöltés előtt
+  assertEq(JSON.parse(fajlok[FAJLNEV]).employees.length, 4,
+           'a flush() azt hitte, nincs mit menteni – a módosítás elveszett volna');
+});
+
+atest('két egyszerre indított mentés sorban fut, nem egymásba csúszva', async () => {
+  const fajlok = { [FAJLNEV]: KETTO() };
+  const R = ujRepoLassuIrassal(fajlok, 40);
+  await R.load();
+  R.create({ fields: { surname: 'Elso' } });
+  const a = R.save();
+  R.create({ fields: { surname: 'Masodik' } });
+  const b = R.save();
+  await Promise.all([a, b]);
+  assertEq(R._naplo.legtobb, 1, 'két írás futott egyszerre ugyanarra a fájlra');
+  assertEq(JSON.parse(fajlok[FAJLNEV]).employees.length, 4);
+});
+
+atest('a valódi ütközést továbbra is jelzi (lassú írás mellett is)', async () => {
+  const fajlok = { [FAJLNEV]: KETTO() };
+  const A = ujRepoLassuIrassal(fajlok, 30), B = ujRepoLassuIrassal(fajlok, 30);
+  await A.load(); await B.load();
+  A.create({ fields: { surname: 'A-tol' } }); await A.save();
+  B.create({ fields: { surname: 'B-tol' } });
+  let dobott = null;
+  try { await B.save(); } catch (e) { dobott = e; }
+  assert(dobott && dobott.name === 'StaleWriteError', 'a valódi ütközés átcsúszott');
+});
+
 // ════════════════════════════════════════════════════════════════════════════
 asection('Változásnapló');
 

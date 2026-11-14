@@ -111,6 +111,7 @@ const EmployeeRepo = (() => {
   let backend = null;
   let cache   = null;          // { employees: [], meta: {} }
   let dirty   = false;
+  let valtozasSzam = 0;      // minden scheduleSave lépteti (lásd save)
   let saveTimer = null;
   const listeners = new Set();
   const saveErrorListeners = new Set();
@@ -311,14 +312,18 @@ const EmployeeRepo = (() => {
     ensureLoaded();
     if (!backend) throw new Error('Nincs beállított tároló háttér.');
     cache.savedAt = nowIso();
+    // Ha a mentés ALATT újabb módosítás jön, a `dirty` maradjon igaz: különben
+    // a `flush()` (pl. újratöltés előtt) azt hinné, nincs mit kiírni.
+    const ekkor = valtozasSzam;
     await backend.save(cache);
-    dirty = false;
+    if (ekkor === valtozasSzam) dirty = false;
     return true;
   }
 
   /** Automata mentés: több gyors módosítást egyetlen írásba fog össze. */
   function scheduleSave(delayMs = 800) {
     dirty = true;
+    valtozasSzam++;
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       saveTimer = null;
@@ -661,6 +666,7 @@ const EmployeeRepo = (() => {
     // ütközést, de LÁTHATÓVÁ teszi — ez a lényegi különbség a némán eltűnő
     // adathoz képest.
     let seen = null;          // { updatedAt, count } — amit legutóbb láttunk
+    let sor  = Promise.resolve();   // a mentések sora (lásd save)
 
     // Ugyanez a háttér szolgálja az employees, a cases és a transfers fájlt is,
     // más-más kulccsal ({employees:[]}, {cases:[]}, …). Ezért nem egy kulcsot
@@ -737,7 +743,19 @@ const EmployeeRepo = (() => {
         return JSON.parse(await FsService.readTextFromDir(dirHandle, filename));
       },
 
-      async save(data) {
+      /**
+       * A mentések SORBAN futnak, sosem egymásba csúszva. Az automata mentés
+       * (időzítő) és a `flush()` enélkül egyszerre olvashatná vissza és írhatná
+       * ugyanazt a fájlt — a saját másik mentésünket látnánk „valaki másnak”.
+       */
+      save(data) {
+        const fut = () => this._saveNow(data);
+        const p = sor.then(fut, fut);
+        sor = p.catch(() => {});
+        return p;
+      },
+
+      async _saveNow(data) {
         // ── Közben más írt? Akkor NEM írunk. ─────────────────────────────────
         // A visszaolvasás hibáját (nincs fájl, olvashatatlan) nem tekintjük
         // ütközésnek: a mentés ilyenkor épp a helyreállítás útja.
@@ -767,8 +785,17 @@ const EmployeeRepo = (() => {
             BevLogger.warn('REPO_BACKUP', 'Biztonsági másolat nem készült', e.message, '');
           }
         }
-        await FsService.writeTextToDir(dirHandle, filename, JSON.stringify(data, null, 2));
-        seen = fingerprint(data);      // amit kiírtunk, azt most már „láttuk”
+        // A szöveg és a lenyomat UGYANABBAN a pillanatban készül, még az írás
+        // előtt. A `data` az élő gyorsítótár: ha az írás alatt (lassú hálózati
+        // meghajtón ez tized-másodpercek) a felhasználó tovább szerkeszt, az írás
+        // UTÁN vett lenyomat már nem azt írná le, ami a fájlba került — és a
+        // következő mentés a SAJÁT előző írásunkat ütközésnek venné („valaki más
+        // közben írt”, miközben egyedül dolgozunk), ráadásul újratöltésig minden
+        // további mentés is elbukna. (plans/TERV-belso-szerver.md 2.1)
+        const szoveg = JSON.stringify(data, null, 2);
+        const kiirt  = fingerprint(data);
+        await FsService.writeTextToDir(dirHandle, filename, szoveg);
+        seen = kiirt;                  // amit kiírtunk, azt most már „láttuk”
       },
 
       /**

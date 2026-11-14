@@ -30,7 +30,10 @@ szerkesztő, legutóbbi változások),
 sávok, döntésnapló, értesítések — megvalósítva v10.103-ban, az eltérések a 9.
 fejezetben),
 `TERV-szerver-es-audit.md` (új gép beállítása, IT-audit, szerverre költözés —
-**terv, döntésre vár**).
+**terv, döntésre vár**),
+`TERV-belso-szerver.md` (a szerverre költözés **fejlesztési terve**: párhuzamos
+mentés, egyszerű/szakértő felület, DOCX alapértelmezés, fázisok — a
+`belso-szerver` ágon, **jóváhagyásra vár**).
 A használat: `README.md`.
 
 ## Hol fut?
