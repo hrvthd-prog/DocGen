@@ -72,7 +72,7 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 **Cél:** a figyelmeztetés egyedül dolgozva is megjelent — gyökérok és javítás.
 (A belső szerverre költözés fejlesztési terve a `belso-szerver` ágon van:
-`plans/TERV-belso-szerver.md`, draft PR #3, jóváhagyásra vár.)
+két terv: `plans/TERV-belso-szerver.md` és `plans/TERV-felulet-es-kimenet.md`, draft PR #3.)
 **Változás:** `v10.111` — `employee-repo.js` (`createFileBackend.save`),
 `case-repo.js`, `transfer-repo.js`, `test/employee-repo.test.js` (+4).
 **Miért / döntés:**
