@@ -32,8 +32,9 @@ fejezetben),
 `TERV-szerver-es-audit.md` (új gép beállítása, IT-audit, szerverre költözés —
 **terv, döntésre vár**),
 `TERV-belso-szerver.md` (a szerverre költözés **fejlesztési terve**: párhuzamos
-mentés, egyszerű/szakértő felület, DOCX alapértelmezés, fázisok — a
-`belso-szerver` ágon, **jóváhagyásra vár**).
+mentés a szerveren, fázisok — a `belso-szerver` ágon, **jóváhagyásra vár**),
+`TERV-felulet-es-kimenet.md` (egyszerű/szakértő felület, DOCX alapértelmezés,
+a hamis ütközés javítása — szervertől független, **jóváhagyásra vár**).
 A használat: `README.md`.
 
 ## Hol fut?

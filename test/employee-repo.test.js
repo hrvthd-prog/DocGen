@@ -583,7 +583,7 @@ atest('a lenyomat a cases.json alakját is felismeri', async () => {
          'a cases alakú fájlnál nem vette észre az ütközést');
 });
 
-// ── A hamis „valaki más közben írt” (plans/TERV-belso-szerver.md 2.1) ────────
+// ── A hamis „valaki más közben írt” (plans/TERV-felulet-es-kimenet.md 3.1) ────────
 // Egyetlen felhasználó, egyetlen lap. A hálózati meghajtón az írás lassú; ha
 // közben tovább szerkeszt, a mentés a SAJÁT előző írását vette ütközésnek.
 asection('Egyidejű szerkesztés: hamis riasztás egyedül dolgozva');

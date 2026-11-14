@@ -99,6 +99,14 @@ Böngészőben, hálózati meghajtón nincs ellenőrizve.
   írt”. Ha mégis jön: a napló `REPO_UTKOZES` sora kell (kinek a nevét írja ki).
 - Az ágat a `main`-re kell húzni, mielőtt bármi más kerül rá.
 
+**Utólag, ugyanaznap:** a felhasználó kérésére a terv **kettévált**:
+`plans/TERV-felulet-es-kimenet.md` (felület, DOCX, a hamis ütközés javítása,
+szervertől független javaslatok — a `main`-re szánt munka) és
+`plans/TERV-belso-szerver.md` (párhuzamos mentés a szerveren, S1–S5 fázisok).
+A D1 döntés megvolt: a javítás a `main`-re megy — felhős sessionből a `main`
+és a tag nem pusholható (403), ezért külön ág + PR #4 (`javitas-hamis-utkozes`,
+`v10.111`), „Rebase and merge”-dzsel, a taget a felhasználó tolja fel.
+
 ## 2026-11-12 (3.) — Munkaviszony megszűnése: EH-űrlap; engedélytípus az ügy nevében
 
 **Cél:** (1) a megszűnés-bejelentés EH-fülén a tartózkodási kérelem adatlapja
