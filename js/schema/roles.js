@@ -60,6 +60,9 @@ const ROLE_ACTIONS = [
     hint: 'Ahol a dolgozó „K2” mezőjében ő áll, vagy akit ma helyettesít.' },
   { key: 'renewals.decide',     label: 'Döntés bárki nevében',
     hint: 'HRBP-helyettesítés: a K2 nevében rögzít, opcionálisan forrással.' },
+  // Mennyit LÁT, nem mit szabad (plans/TERV-felulet-es-kimenet.md 1.2)
+  { key: 'ui.expert',           label: 'Szakértő felület',
+    hint: 'A teljes felület: PDF-készítés és -összefűzés, „Megnézem úgy, mint…”. Nélküle az egyszerű mód látszik.' },
 ];
 
 /**

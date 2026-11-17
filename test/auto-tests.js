@@ -308,9 +308,13 @@ test('dg-alt-toggle gomb törölve', () => {
   assert(!/dg-alt-toggle/.test(docgenSrc), 'dg-alt-toggle még létezik');
 });
 
-test('dg-alt-panel mindig nyitva (--open default)', () => {
-  assert(/dg-alt-panel dg-alt-panel--open/.test(docgenSrc),
-    'dg-alt-panel--open class nincs default-ban');
+test('a fő gomb Word-iratot ad, PDF-szkript nélkül (TERV-felulet-es-kimenet 2.)', () => {
+  assert(/genBoth\.addEventListener\('click', \(\) => runGenerate\(\{ docx: true,\s+pdf: false \}\)\)/.test(docgenSrc),
+    'a fő gomb nem pdf:false-szal generál');
+  assert(!/runGenerate\(\{[^}]*pdf: true/.test(docgenSrc), 'maradt PDF-es generálás gombon');
+  const bulkSrc = fs.readFileSync(path.join(__dirname, '../js/modules/cases/bulk-case.js'), 'utf8');
+  assert(!/general\(true\)/.test(bulkSrc), 'a tömeges ügyben maradt PDF-es generálás');
+  assert(/PDF készítése a kész iratokból/.test(docgenSrc + bulkSrc), 'a szakértői PDF-lépés hiányzik');
 });
 
 test('Másik sablonmappa választása gomb', () => {

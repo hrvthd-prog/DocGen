@@ -104,7 +104,7 @@ const AllapotModule = (() => {
   }
 
   function sajatFiok() {
-    try { return Auth.byName(Auth.currentUser()); } catch { return null; }
+    try { return Auth.viewer(); } catch { return null; }
   }
 
   function render() {

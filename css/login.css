@@ -113,6 +113,12 @@
   text-align: center;
 }
 .proba-bar b { font-weight: 600; }
+/* „Megnézem úgy, mint…” — más színnel, hogy ne a próba módnak tűnjön */
+.viewas-bar { background: var(--c-purple, #6d4bb3); }
+.viewas-bar .btn { margin-left: 10px; color: #fff; border-color: rgba(255,255,255,.6); }
+
+/* Egyszerű mód: a szakértői vezérlők nem látszanak (TERV-felulet-es-kimenet.md 1.2) */
+body.ui-simple .expert-only { display: none !important; }
 
 /* Szinttel nem szerkeszthető mező (pl. HRBP a nem HR-mezőkön).
    Látszik az adat — csak nem írható: a HRBP-nek olvasnia KELL. */

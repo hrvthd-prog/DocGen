@@ -63,6 +63,9 @@ const TransferRepo = (() => {
   let valtozasSzam = 0;      // minden scheduleSave lépteti (lásd save)
   let saveTimer = null;
   const saveErrorListeners = new Set();
+  // A fejléc mentés-jelzőjének: 'pending' (vár kiírásra) | 'saved' (TERV-felulet-es-kimenet.md 3.2)
+  const saveStateListeners = new Set();
+  function _saveState(s) { for (const fn of saveStateListeners) { try { fn(s); } catch {} } }
   const listeners = new Set();
 
   // ── Segédfüggvények ────────────────────────────────────────────────────────
@@ -160,12 +163,14 @@ const TransferRepo = (() => {
     const ekkor = valtozasSzam;
     await backend.save(cache);
     if (ekkor === valtozasSzam) dirty = false;
+    _saveState(dirty ? 'pending' : 'saved');
     return true;
   }
 
   function scheduleSave(delayMs = 800) {
     dirty = true;
     valtozasSzam++;
+    _saveState('pending');
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       saveTimer = null;
@@ -528,6 +533,7 @@ const TransferRepo = (() => {
     AMOUNTS, MAX_REF_LEN, STATUS, ID_RE,
     useBackend, hasBackend, onChange, createFileBackend, createIdbBackend, createMemoryBackend,
     onSaveError: (fn) => { saveErrorListeners.add(fn); return () => saveErrorListeners.delete(fn); },
+    onSaveState: (fn) => { saveStateListeners.add(fn); return () => saveStateListeners.delete(fn); },
     load, save, scheduleSave, flush,
     all, get, getRow, isOpen, total, openBatch, createBatch, destroyBatch,
     rowFromCase, addRow, updateRow, removeRow, refreshRow,

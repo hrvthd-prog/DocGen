@@ -68,6 +68,41 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
+## 2026-11-17 — PR #4 és #3 be; Felület és kimenet: A1, A2, A4
+
+**Cél:** a PR #4 beolvasztása és tagelése; a PR #3 tervének átnézése, majd az
+implementáció kezdete (a döntések: A1 + A2 + A4, PDF elrejtve, nézetváltás
+szint + személy, #3 squash a `main`-re).
+**Változás:**
+- PR #4 rebase and merge → `v10.111` (a javítás) és `v10.112` taggel.
+- PR #3: helyben squash-olva a `main`-re (`v10.113`), hogy a hook léptessen; a PR
+  lezárva megjegyzéssel. A `belso-szerver` ág megmaradt (a felülírását nem engedtük).
+- `v10.114`: **A1** — a fő gomb „Iratok elkészítése” (DOCX), a PDF a Szakértő
+  módban utólagos gomb (`docgen.js`, `bulk-case.js`), a PDF-összefűzés kártya
+  `expert-only`. **A2** — `ui.expert` jog (`roles.js`), `Auth` nézetváltás
+  (`setViewAs`, `viewingAs`, `viewer`, `realRole`, `canViewAs`), fejlécgomb +
+  lila sáv (`app.js`, `index.html`, `login.css`), `body.ui-simple`. **A4** —
+  `onSaveState` a három tárolóban, „Mentve ✓ óó:pp” a fejlécben.
+**Miért / döntés:** a részletek a `plans/TERV-felulet-es-kimenet.md` 7. fejezet
+végén („Ahogy megépült”). A legfontosabb: a nézetben a szerző a valódi fiók, a
+Hosszabbítások rögzítése tiltott, és csak memóriában él (nincs újratöltés).
+**Tesztek:** `node test/run-all.js` zöld. Új: `auth.test.js` (nézetváltás, 9 eset;
+`ui.expert` a mátrixban), `roles.test.js` (az élő config csak az adminnak adja),
+`employee-repo.test.js` (mentés-állapot a mentés alatti módosításnál),
+`auto-tests.js` (a fő gomb `pdf: false`, nincs PDF-es generálás gombon).
+Böngészőben (headless Chromium, próba mód + memóriabeli fiókok) kipróbálva: a
+nézetváltás, a sáv, a fülek szűkülése, a visszalépés és a mentés-jelző. **Nem
+próbált:** a Dokumentumok munkaterülete (sablonmappa kell hozzá) — a fő gomb
+felirata és a „PDF készítése…” gomb csak forrásszinten ellenőrzött.
+**Nyitott / következő:**
+- Céges gépen: (1) egy irat generálása → csak .docx, szkript nem kerül a
+  mappába; adminnal a „PDF készítése a kész iratokból…” odamásolja. (2) Megnézem
+  úgy, mint → Ügyintéző: a PDF-összefűzés kártya eltűnik. (3) A fejlécben a
+  „Mentve ✓” egy mező átírása után.
+- D1 (az egyszerű mód köre) és D4 (a próbázó kollégák) — az A3 előtt.
+- A `showGenConfirmDialog` (`docgen.js`) halott kód, senki nem hívja — nem töröltem.
+- A tervben a hamis ütközés javítása (A0) céges gépen még ellenőrizendő.
+
 ## 2026-11-14 — A hamis „valaki más közben írt” gyökéroka és javítása
 
 **Cél:** a figyelmeztetés egyedül dolgozva is megjelent — gyökérok és javítás.

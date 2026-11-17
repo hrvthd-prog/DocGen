@@ -26,7 +26,13 @@ const HosszabbitasModule = (() => {
 
   function fiok() {
     if (Auth.isProba()) return { name: '(próba mód)', proba: true };
-    return Auth.byName(Auth.currentUser());
+    return Auth.viewer();
+  }
+  // „Megnézem úgy, mint…”: a nézett fiók nevében nem rögzítünk — a napló a
+  // „rogzitette” mezőbe az ő nevét írná.
+  function iro() {
+    if (Auth.viewingAs()) throw new Error('Nézet módban nem rögzíthetsz — előbb lépj vissza a saját nézetedbe.');
+    return fiok();
   }
   function lathat()  { return Auth.can('renewals.read') || Auth.can('renewals.read.own'); }
   function mindent() { return Auth.can('renewals.read'); }
@@ -456,7 +462,7 @@ const HosszabbitasModule = (() => {
       const gomb = document.getElementById('hs-ok');
       gomb.disabled = true;
       try {
-        await Hosszabbitas.dont(fiok(), empId, { dontes: valasz.value, mezok, forras });
+        await Hosszabbitas.dont(iro(), empId, { dontes: valasz.value, mezok, forras });
         closeDialog();
         toast(`✓ Rögzítve: ${DONT[valasz.value]}`, 'success');
       } catch (e) {
@@ -480,7 +486,7 @@ const HosszabbitasModule = (() => {
     });
     document.getElementById('hs-j-ok').addEventListener('click', async () => {
       try {
-        await Hosszabbitas.jegyzet(fiok(), empId, document.getElementById('hs-jegyzet').value);
+        await Hosszabbitas.jegyzet(iro(), empId, document.getElementById('hs-jegyzet').value);
         closeDialog();
         toast('✓ Jegyzet mentve', 'success');
       } catch (e) { toast(e.message, 'error'); }
@@ -526,7 +532,7 @@ const HosszabbitasModule = (() => {
     on('hs-e-dont', () => dontesAblak(empId));
     on('hs-e-jegyzet', () => jegyzetAblak(empId));
     document.querySelectorAll('[data-hs-nyugta]').forEach(b => b.addEventListener('click', async () => {
-      try { await Hosszabbitas.nyugtaz(fiok(), b.dataset.hsNyugta); toast('✓ Nyugtázva', 'success'); elozmeny(empId); }
+      try { await Hosszabbitas.nyugtaz(iro(), b.dataset.hsNyugta); toast('✓ Nyugtázva', 'success'); elozmeny(empId); }
       catch (e) { toast(e.message, 'error'); }
     }));
   }
@@ -612,7 +618,7 @@ const HosszabbitasModule = (() => {
       else if (Auth.can('cases.write') && typeof switchTab === 'function') switchTab('cases');
     }));
     document.querySelectorAll('[data-hs-ny]').forEach(b => b.addEventListener('click', async () => {
-      try { await Hosszabbitas.nyugtaz(fiok(), b.dataset.hsNy); toast('✓ Nyugtázva', 'success'); osszesito(); }
+      try { await Hosszabbitas.nyugtaz(iro(), b.dataset.hsNy); toast('✓ Nyugtázva', 'success'); osszesito(); }
       catch (e) { toast(e.message, 'error'); }
     }));
   }

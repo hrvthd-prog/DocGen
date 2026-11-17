@@ -95,6 +95,9 @@ html, body { overflow: auto; }
   letter-spacing: .02em;
 }
 
+.header-mentes { font-size: 11px; color: rgba(255,255,255,.6); }
+.header-mentes--hiba { color: #ffb4a8; font-weight: 600; }
+
 #header-username {
   font-weight: 500;
   font-size: 12px;
@@ -539,14 +542,6 @@ html, body { overflow: auto; }
   position: relative;
   z-index: 1;
   transition: none;
-}
-
-/* Mellékgomb-panel — mindig nyitva (DOCX/PDF mindig látszik) */
-.dg-alt-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  padding-top: 6px;
 }
 
 /* ══ 1. Sablon-lista keresőmező ════════════════════════════════════════════ */

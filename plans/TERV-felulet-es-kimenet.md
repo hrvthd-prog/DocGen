@@ -1,6 +1,7 @@
 # Felület és kimenet — fejlesztési terv
 
-*2026-11-14. Állapot: **terv, jóváhagyásra vár** (a 3. fejezet javítása kész).
+*2026-11-14. Állapot: **jóváhagyva 2026-11-17** — A0, A1, A2, A4 kész (`v10.114`),
+A3, A5, A6 hátravan. A döntések a 7. fejezet végén.
 A szerverre költözés külön terv: `TERV-belso-szerver.md`.*
 
 Ez a terv azt tartalmazza, ami **a szervertől függetlenül**, a mai `file://`
@@ -219,10 +220,10 @@ Fontossági sorrendben; mind független a szervertől.
 | Lépés | Tartalom | Kész, ha |
 |---|---|---|
 | **A0** | A hamis ütközés javítása (3.1) | ✅ tesztek zöldek; **céges gépen**: két-három dolgozónál 5–6 mező gyors egymás utáni átírása a Z:-n nem ad figyelmeztetést |
-| **A1** | DOCX alapértelmezés (2.) | a fő gomb Word-iratot ad, szkript nem másolódik; a PDF-sablon irata `.pdf` |
-| **A2** | `ui.expert` jog + „Megnézem úgy, mint…” (1.2) | a legfőbb admin bármely szint nézetét látja kilépés nélkül |
+| **A1** ✅ | DOCX alapértelmezés (2.) | a fő gomb Word-iratot ad, szkript nem másolódik; a PDF-sablon irata `.pdf` |
+| **A2** ✅ | `ui.expert` jog + „Megnézem úgy, mint…” (1.2) | a legfőbb admin bármely szint nézetét látja kilépés nélkül |
 | **A3** | Dokumentumok egyszerű nézete (1.2–1.3) | egy ügyintéző fiókkal három lépésben készül irat |
-| **A4** | Mentés-állapot a fejlécben (3.2) | mentés után az időpont látszik; hibánál a szöveg megmondja, mi a teendő |
+| **A4** ✅ | Mentés-állapot a fejlécben (3.2) | mentés után az időpont látszik; hibánál a szöveg megmondja, mi a teendő |
 | **A5** | Ügyek „Teendőim”; a Nyilvántartás és a Beállítások szűkítése; szövegek | az 1.4 szerinti próba három felhasználóval |
 | **A6** | A 4. fejezet tételei | egyenként |
 
@@ -234,3 +235,24 @@ Fontossági sorrendben; mind független a szervertől.
 | D2 | A PDF-készítés **elrejtve marad** a Szakértő módban, vagy töröljük? | **Elrejtve**, három hónap múlva újranézve. |
 | D3 | Kezdhetem az A1-gyel (DOCX alapértelmezés) és az A2-vel? | **Igen** — kicsik, és a többit megalapozzák. |
 | D4 | Ki az a két-három kolléga, akivel a szövegeket és a próbát (1.4) el lehet végezni? | Egy ügyintéző, egy HRBP, egy vezető. |
+
+**Döntve 2026-11-17:** D2 — elrejtve; D3 — igen, A1 + A2 + A4. D1 és D4 nyitott
+(az A3/A5 előtt kell).
+
+### Ahogy megépült (A1, A2, A4)
+
+- **A1:** a fő gomb „Iratok elkészítése” (Dokumentumok és tömeges ügy), `pdf: false`.
+  Szakértő módban a kész eredmény alatt „PDF készítése a kész iratokból…”: ez másolja
+  a szkriptet, és kiírja a következő lépést. A PDF-összefűzés kártya `expert-only`.
+- **A2:** `ui.expert` jog (a frissítéskor csak a beépített admin kapja). Az egyszerű
+  mód egy `body.ui-simple` osztály; ami szakértői, `expert-only` osztályt kap.
+  **„Megnézem úgy, mint…”: szint + személy.** A „saját dolgozók” szintek látóköre
+  a fiók nevéhez kötött, ezért a nézethez egy vezetőt is választani kell —
+  enélkül az admin üres listát látna. A nézet csak memóriában él (újratöltés
+  után a saját nézet jön), csak szűkít, a szerző a valódi fiók marad, és a
+  Hosszabbítások rögzítése nézet módban tiltott (a „rogzitette” a nézett nevet
+  írná). Élőben vált, újratöltés nélkül: az újratöltés mappa-engedélyt és PIN-t kérne.
+- **A4:** a tárolók `onSaveState` jelzése ('pending' / 'saved') + a meglévő
+  `onSaveError`; a fejlécben „Mentés…” / „Mentve ✓ óó:pp” / „⚠ A mentés nem
+  sikerült”. Próba módban nem látszik. Automatikus újrapróbálás nincs — a
+  következő módosítás próbálja újra, ezt mondja a felirat súgója is.

@@ -115,6 +115,9 @@ const EmployeeRepo = (() => {
   let saveTimer = null;
   const listeners = new Set();
   const saveErrorListeners = new Set();
+  // A fejléc mentés-jelzőjének: 'pending' (vár kiírásra) | 'saved' (TERV-felulet-es-kimenet.md 3.2)
+  const saveStateListeners = new Set();
+  function _saveState(s) { for (const fn of saveStateListeners) { try { fn(s); } catch {} } }
 
   // ── Segédfüggvények ────────────────────────────────────────────────────────
 
@@ -317,6 +320,7 @@ const EmployeeRepo = (() => {
     const ekkor = valtozasSzam;
     await backend.save(cache);
     if (ekkor === valtozasSzam) dirty = false;
+    _saveState(dirty ? 'pending' : 'saved');
     return true;
   }
 
@@ -324,6 +328,7 @@ const EmployeeRepo = (() => {
   function scheduleSave(delayMs = 800) {
     dirty = true;
     valtozasSzam++;
+    _saveState('pending');
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
       saveTimer = null;
@@ -890,6 +895,7 @@ const EmployeeRepo = (() => {
   return {
     ID_TYPES, NATURAL_KEY_FIELDS, IDENTIFIER_FIELD_MAP, EXIT_DATE_FIELD,
     applyIdentifiersToFields, isCorruptError, onSaveError, isStaleWriteError,
+    onSaveState: (fn) => { saveStateListeners.add(fn); return () => saveStateListeners.delete(fn); },
     // tároló
     useBackend, hasBackend, describeBackend, onChange,
     createFileBackend, createIdbBackend, createMemoryBackend,

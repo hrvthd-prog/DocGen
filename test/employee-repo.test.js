@@ -674,6 +674,24 @@ atest('a valódi ütközést továbbra is jelzi (lassú írás mellett is)', asy
   assert(dobott && dobott.name === 'StaleWriteError', 'a valódi ütközés átcsúszott');
 });
 
+atest('mentés-állapot: a mentés alatti módosítás után „vár”, flush után „mentve”', async () => {
+  const fajlok = { [FAJLNEV]: KETTO() };
+  const R = ujRepoLassuIrassal(fajlok, 60);
+  await R.load();
+  const allapotok = [];
+  R.onSaveState(s => allapotok.push(s));
+  R.create({ fields: { surname: 'Elso' } });
+  assertEq(allapotok[allapotok.length - 1], 'pending', 'a módosítás nem jelzett várakozást');
+  const elso = R.save();
+  await new Promise(r => setTimeout(r, 20));
+  R.create({ fields: { surname: 'Kozben' } });
+  await elso;
+  assertEq(allapotok[allapotok.length - 1], 'pending',
+           'a fejléc „Mentve”-t mutatna, pedig a közbeni módosítás még nincs a fájlban');
+  await R.flush();
+  assertEq(allapotok[allapotok.length - 1], 'saved');
+});
+
 // ════════════════════════════════════════════════════════════════════════════
 asection('Változásnapló');
 

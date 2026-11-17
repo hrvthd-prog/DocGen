@@ -584,7 +584,7 @@ const DocgenModule = (() => {
           </div>
         </div>
 
-        <div class="ws-card" id="dg-card-merge">
+        <div class="ws-card expert-only" id="dg-card-merge">
           <div class="ws-card-header">
             <span class="ws-card-drag-handle" title="Húzd át a pozíció megváltoztatásához">⠿</span>
             <div class="ws-card-title">PDF összefűzés</div>
@@ -621,11 +621,8 @@ const DocgenModule = (() => {
             <div class="gen-btn-group">
               <button id="dg-gen-both" class="btn btn-primary btn-full btn-lg dg-primary-btn">
                 <span class="dg-btn-fill" id="dg-btn-fill"></span>
-                <span class="dg-btn-label" id="dg-btn-label">DOCX + PDF</span>
+                <span class="dg-btn-label" id="dg-btn-label">Iratok elkészítése</span>
               </button>
-              <div class="dg-alt-panel dg-alt-panel--open" id="dg-alt-panel">
-                <button id="dg-gen-docx" class="btn btn-secondary btn-full">Csak DOCX</button>
-              </div>
             </div>
             <div class="dg-result-card" id="dg-result-card">
               <div class="dg-result-title" id="dg-result-title"></div>
@@ -722,9 +719,9 @@ const DocgenModule = (() => {
       applyTplSelect();
     });
     const genBoth = q('#dg-gen-both');
-    if (genBoth) genBoth.addEventListener('click', () => runGenerate({ docx: true,  pdf: true  }));
-    const genDocx = q('#dg-gen-docx');
-    if (genDocx) genDocx.addEventListener('click', () => runGenerate({ docx: true,  pdf: false }));
+    // A fő gomb Word-iratot ad; a PDF utólagos, kézi lépés a Szakértő módban
+    // (plans/TERV-felulet-es-kimenet.md 2.). A PDF-sablon irata így is PDF.
+    if (genBoth) genBoth.addEventListener('click', () => runGenerate({ docx: true,  pdf: false }));
     // ── Mai nap kártya ────────────────────────────────────────────────────────
     const maiNapInput = q('#dg-mai-nap-input');
     if (maiNapInput) {
@@ -1615,14 +1612,12 @@ const DocgenModule = (() => {
 
   function updateGenButtons() {
     const ready = state.selectedClients.length > 0 && state.chosenTemplates.size > 0 && !!state.templatesDir;
-    ['#dg-gen-both','#dg-gen-docx'].forEach(sel => {
-      const el = q(sel); if (el) el.disabled = !ready;
-    });
+    const gen = q('#dg-gen-both'); if (gen) gen.disabled = !ready;
     // Primer gomb visszaállítása alapállapotra
     const fill  = q('#dg-btn-fill');
     const label = q('#dg-btn-label');
     if (fill)  fill.style.width = '0%';
-    if (label && label.textContent !== 'DOCX + PDF') label.textContent = 'DOCX + PDF';
+    if (label && label.textContent !== 'Iratok elkészítése') label.textContent = 'Iratok elkészítése';
     const tplWarn = q('#dg-tpl-warn');
     if (tplWarn) tplWarn.classList.toggle('visible', state.chosenTemplates.size === 0);
     const clientWarn = q('#dg-client-warn');
@@ -1658,9 +1653,7 @@ const DocgenModule = (() => {
   }
 
   function setGenButtons(enabled) {
-    ['#dg-gen-both','#dg-gen-docx'].forEach(s => {
-      const e = q(s); if (e) e.disabled = !enabled;
-    });
+    const gen = q('#dg-gen-both'); if (gen) gen.disabled = !enabled;
   }
 
   // ── Generálás előnézet dialog ─────────────────────────────────────────────
@@ -2207,19 +2200,36 @@ const DocgenModule = (() => {
         // és a tördelést eldobja – hivatalos nyomtatványnál használhatatlan.
         // A formahű PDF-et a Word adja, ezért itt már csak az van, hogy mi a
         // teendő: egy duplakattintás a kimeneti mappában.
-        if (pdf && docxGenerated.length) {
+        const pdfLepes = (szkript) => {
           const lepes = document.createElement('div');
           lepes.style.cssText = 'font-size:11.5px;line-height:1.5;margin:6px 0 2px';
-          lepes.innerHTML = state.outputDir
+          lepes.innerHTML = !state.outputDir
+            ? `<span style="color:var(--c-amber)">Nincs kimeneti mappa, ezért a PDF-lánc nem
+               készíthető elő — a dokumentumok letöltésként érkeztek.</span>`
+            : szkript
             ? `<b>Következő lépés a PDF-hez:</b> nyisd meg a
                <code>${escHtml(state.outputDir.name)}</code> mappát, és kattints duplán a
                <code>${escHtml(DocgenPdfChain.SCRIPT_OUT)}</code> fájlra.
                Utána a PDF összefűzés kártyán az <i>Ellenőrzés</i> mutatja az eredményt.`
-            : `<span style="color:var(--c-amber)">Nincs kimeneti mappa, ezért a PDF-lánc nem
-               készíthető elő — a dokumentumok letöltésként érkeztek.</span>`;
+            : `<span style="color:var(--c-amber)">A konvertáló szkript nincs beállítva, ezért nem
+               került a mappába — a PDF összefűzés kártyán állítható be (egyszer kell).</span>`;
           ra.appendChild(lepes);
-
           DocgenMerge.refreshChainPanel();
+        };
+        if (pdf && docxGenerated.length) {
+          pdfLepes(true);
+        } else if (docxGenerated.length && state.outputDir && Auth.can('ui.expert')) {
+          // Szakértő mód: a PDF utólagos, kézi lépés a már kész iratokból.
+          const pdfBtn = document.createElement('button');
+          pdfBtn.className = 'btn btn-ghost btn-sm';
+          pdfBtn.textContent = 'PDF készítése a kész iratokból…';
+          pdfBtn.addEventListener('click', async () => {
+            pdfBtn.disabled = true;
+            const szkript = await DocgenPdfChain.copyScript(state.outputDir);
+            pdfBtn.remove();
+            pdfLepes(szkript);
+          });
+          ra.appendChild(pdfBtn);
         }
 
         if (errors.length) {

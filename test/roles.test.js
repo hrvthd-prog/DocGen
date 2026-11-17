@@ -214,6 +214,26 @@ async function main() {
     });
   }
 
+  section('Frissítés: a szakértő felület (ui.expert) csak az adminé');
+  {
+    const AKTOK = ujRoles().R.ACTIONS.map(a => a.key).filter(a => a !== 'ui.expert');
+    const { R } = ujRoles({
+      version: 1, knownActions: AKTOK,
+      roles: [
+        { key: 'admin', label: 'Legfőbb admin', builtin: true, can: AKTOK.slice() },
+        { key: 'ugyintezo', label: 'Ügyintéző', builtin: true, can: ['registry.read'] },
+        { key: 'hrbp', label: 'HRBP', builtin: true, can: ['registry.read'] },
+      ],
+    });
+    await R.load();
+    await test('az élő config adminja megkapja', async () =>
+      assertEq(R.can('admin', 'ui.expert'), true));
+    await test('a többi beépített szint nem', async () => {
+      assertEq(R.can('ugyintezo', 'ui.expert'), false);
+      assertEq(R.can('hrbp', 'ui.expert'), false);
+    });
+  }
+
   section('Visszaállítás a kiadás szerinti alapra');
   {
     const { R } = ujRoles();

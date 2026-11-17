@@ -328,10 +328,8 @@ const BulkCase = (() => {
             <code>03_Bejelentesek\\02_Szallashelyvaltozasok\\&lt;hónap&gt;</code> mappába, a többi a
             dolgozó saját mappájába kerül.</div>
           <div class="bk-actions">
-            <button type="button" class="btn btn-primary" id="bk-gen-pdf"
-                    ${(!db || (kellMappa && !kimenet) || st.fut) ? 'disabled' : ''}>DOCX + PDF (${db} fájl)</button>
-            <button type="button" class="btn btn-secondary" id="bk-gen-docx"
-                    ${(!db || (kellMappa && !kimenet) || st.fut) ? 'disabled' : ''}>Csak DOCX</button>
+            <button type="button" class="btn btn-primary" id="bk-gen-docx"
+                    ${(!db || (kellMappa && !kimenet) || st.fut) ? 'disabled' : ''}>Iratok elkészítése (${db} fájl)</button>
           </div>
           <div class="bk-progress" id="bk-progress" ${st.fut ? '' : 'hidden'}><div id="bk-progress-bar"></div></div>
           <div class="bk-status" id="bk-status"></div>
@@ -353,6 +351,8 @@ const BulkCase = (() => {
           ? `a mappában kattints duplán a <code>${escHtml(DocgenPdfChain.SCRIPT_OUT)}</code> fájlra.`
           : `a konvertáló szkript nincs beállítva, ezért nem került a mappába — a Dokumentumok fül
              „PDF összefűzés” kártyáján állítható be (egyszer kell).`}</div>` : ''}
+      ${!e.pdf && e.docxCount && e.outDir && jog('ui.expert') ? `<div class="bk-hint">
+          <button type="button" class="btn btn-ghost btn-sm" id="bk-pdf">PDF készítése a kész iratokból…</button></div>` : ''}
       ${e.missing ? `<div class="bk-hint">${e.missing} dokumentumban maradt üres mező.
           <button type="button" class="btn btn-ghost btn-sm" id="bk-missing">Hiányzó adatok naplója</button></div>` : ''}`;
   }
@@ -393,8 +393,15 @@ const BulkCase = (() => {
       if (cb.checked) st.sablonok.add(cb.dataset.tpl); else st.sablonok.delete(cb.dataset.tpl);
       rajzol();
     }));
-    q('#bk-gen-pdf')?.addEventListener('click', () => general(true));
+    // A fő gomb Word-iratot ad; a PDF a Szakértő módban utólagos, kézi lépés
+    // (plans/TERV-felulet-es-kimenet.md 2.).
     q('#bk-gen-docx')?.addEventListener('click', () => general(false));
+    q('#bk-pdf')?.addEventListener('click', async () => {
+      const e = st.eredmeny;
+      e.szkript = await DocgenPdfChain.copyScript(e.outDir);
+      e.pdf = true;
+      rajzol();
+    });
     q('#bk-missing')?.addEventListener('click', () => DocgenMissingLog.showDialog());
   }
 
@@ -515,7 +522,7 @@ const BulkCase = (() => {
         employeeIds: st.ids, templates: sablonok, outputDir: outDir,
         docx: true, pdf, ui: { status },
       });
-      st.eredmeny = Object.assign(r, { pdf, outName: outDir ? outDir.name : '' });
+      st.eredmeny = Object.assign(r, { pdf, outDir, outName: outDir ? outDir.name : '' });
     } catch (e) {
       st.eredmeny = { count: 0, docxCount: 0, missing: 0, errors: [e.message], pdf, outName: '' };
     } finally {

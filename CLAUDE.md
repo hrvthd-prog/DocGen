@@ -32,9 +32,10 @@ fejezetben),
 `TERV-szerver-es-audit.md` (új gép beállítása, IT-audit, szerverre költözés —
 **terv, döntésre vár**),
 `TERV-belso-szerver.md` (a szerverre költözés **fejlesztési terve**: párhuzamos
-mentés a szerveren, fázisok — a `belso-szerver` ágon, **jóváhagyásra vár**),
+mentés a szerveren, fázisok — **jóváhagyásra vár**),
 `TERV-felulet-es-kimenet.md` (egyszerű/szakértő felület, DOCX alapértelmezés,
-a hamis ütközés javítása — szervertől független, **jóváhagyásra vár**).
+a hamis ütközés javítása — szervertől független; **A1, A2, A4 kész** v10.114-ben,
+A3, A5, A6 hátravan).
 A használat: `README.md`.
 
 ## Hol fut?

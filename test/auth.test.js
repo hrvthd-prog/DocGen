@@ -86,6 +86,7 @@ const MATRIX = {
     'settings.schema': true, 'settings.ehcontact': true,
     'accounts.manage': true, 'log.all': true,
     'leaders.manage': true,
+    'ui.expert': true,
   },
   ugyintezo: {
     'registry.read': true,  'registry.read.own': false, 'registry.write': true,
@@ -94,6 +95,7 @@ const MATRIX = {
     'settings.schema': false, 'settings.ehcontact': true,
     'accounts.manage': false, 'log.all': false,
     'leaders.manage': false,
+    'ui.expert': false,
   },
   hrbp: {
     'registry.read': true,  'registry.read.own': false, 'registry.write': false,
@@ -102,6 +104,7 @@ const MATRIX = {
     'settings.schema': false, 'settings.ehcontact': false,
     'accounts.manage': false, 'log.all': false,
     'leaders.manage': true,
+    'ui.expert': false,
   },
   megtekinto: {
     'registry.read': false, 'registry.read.own': true,  'registry.write': false,
@@ -110,6 +113,7 @@ const MATRIX = {
     'settings.schema': false, 'settings.ehcontact': false,
     'accounts.manage': false, 'log.all': false,
     'leaders.manage': false,
+    'ui.expert': false,
   },
 };
 
@@ -344,6 +348,58 @@ async function main() {
     await test('ügyintéző mindenkit lát, a vezető mezőtől függetlenül', async () => {
       assertEq(A.ownsEmployee(masnak), true);
       assertEq(A.ownsEmployee(senkie), true);
+    });
+  }
+
+  section('Megnézem úgy, mint… (csak nézet, csak szűkít)');
+  {
+    const { A } = ujAuth();
+    await A.load();
+    await A.create({ name: 'Admin A', role: 'admin', pin: '1111' });
+    await A.create({ name: 'Szabó Müszakvezető', role: 'megtekinto', pin: '2222' });
+    await A.create({ name: 'Ugy Ugo', role: 'ugyintezo', pin: '3333' });
+    const sajat  = { fields: { hr_direct_leader: 'Szabó Müszakvezető' } };
+    const masnak = { fields: { hr_direct_leader: 'Kovács Csoportvezető' } };
+
+    await A.login('Admin A', '1111');
+    await test('az admin válthat nézetet', async () => assertEq(A.canViewAs(), true));
+    A.setViewAs({ role: 'megtekinto', name: 'Szabó Müszakvezető' });
+    await test('nézetben a szint a nézetté, a szerző az adminé marad', async () => {
+      assertEq(A.currentRole(), 'megtekinto');
+      assertEq(A.realRole(), 'admin');
+      assertEq(A.currentUser(), 'Admin A');
+      assertEq(A.viewer().name, 'Szabó Müszakvezető');
+      assertEq(A.viewer().role, 'megtekinto');
+    });
+    await test('nézetben a jogok a nézett szinté', async () => {
+      assertEq(A.can('registry.read'), false);
+      assertEq(A.can('accounts.manage'), false);
+      assertEq(A.can('ui.expert'), false);
+      assertEq(A.can('cases.read.own'), true);
+    });
+    await test('a „saját dolgozók” a választott vezetőé', async () => {
+      assertEq(A.ownsEmployee(sajat), true);
+      assertEq(A.ownsEmployee(masnak), false);
+    });
+    await test('nézetből is visszaléphet (a valódi szint dönt)', async () =>
+      assertEq(A.canViewAs(), true));
+    A.setViewAs(null);
+    await test('visszalépve újra minden jog megvan', async () => {
+      assertEq(A.currentRole(), 'admin');
+      assertEq(A.can('accounts.manage'), true);
+      assertEq(A.ownsEmployee(masnak), true);
+    });
+    A.setViewAs({ role: 'ugyintezo' });
+    A.logout();
+    await A.login('Admin A', '1111');
+    await test('új belépés a saját nézetben indul', async () => assertEq(A.viewingAs(), null));
+
+    A.logout();
+    await A.login('Ugy Ugo', '3333');
+    await test('ügyintéző nem válthat nézetet', async () => {
+      assertEq(A.canViewAs(), false);
+      await throws(() => A.setViewAs({ role: 'admin' }), /nincs jogod/);
+      assertEq(A.currentRole(), 'ugyintezo');
     });
   }
 

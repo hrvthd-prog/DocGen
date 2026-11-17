@@ -445,6 +445,7 @@ const Auth = (() => {
     const h = await hashPin(pin, a.pinSalt);
     if (h !== a.pinHash) return null;
     session = { name: a.name, role: a.role };
+    viewAs = null;
     _persistSession();
     return a;
   }
@@ -470,10 +471,40 @@ const Auth = (() => {
     } catch { return null; }
   }
 
-  function logout() { session = null; _persistSession(); }
+  function logout() { session = null; viewAs = null; _persistSession(); }
 
+  /** A bejelentkezett fiók neve. Nézet módban is EZ — a szerző sosem a nézett fiók. */
   function currentUser() { return session ? session.name : ''; }
-  function currentRole() { return session ? session.role : null; }
+  /** A felületet meghatározó szint: nézet módban a nézetté. */
+  function currentRole() { return viewAs ? viewAs.role : realRole(); }
+  function realRole()    { return session ? session.role : null; }
+
+  // ── „Megnézem úgy, mint…” (plans/TERV-felulet-es-kimenet.md 1.2) ──────────
+  // Csak a memóriában él: újratöltés után mindenki a saját nézetében indul.
+  // Csak SZŰKÍT (lásd can()), és a szerző a valódi fiók marad.
+  let viewAs = null;          // { role, name } — name: kinek a dolgozóit látja
+
+  function canViewAs() { return !proba && !!realRole() && Roles.can(realRole(), 'ui.expert'); }
+
+  function setViewAs(v) {
+    if (!v) { viewAs = null; return null; }
+    if (!canViewAs()) throw new Error('Ehhez nincs jogod (szakértő felület).');
+    if (!isKnownRole(v.role)) throw new Error('Ismeretlen szint.');
+    viewAs = { role: v.role, name: String(v.name || '').trim() };
+    return viewAs;
+  }
+
+  function viewingAs() { return viewAs ? { ...viewAs } : null; }
+
+  /** Kinek a szemével nézünk: a „saját dolgozók” szűrők ezt használják. */
+  function viewerName() { return viewAs && viewAs.name ? viewAs.name : currentUser(); }
+
+  /** A nézett fiók a megtekintéshez — a nézet szintjével. Rögzítéshez NEM való. */
+  function viewer() {
+    const a = byName(viewerName());
+    if (!viewAs) return a;
+    return Object.assign({}, a || { name: viewerName() }, { role: viewAs.role });
+  }
 
   /**
    * Az egyetlen jogosultság-kérdés a felület felé. Bejelentkezés nélkül MINDEN
@@ -486,7 +517,7 @@ const Auth = (() => {
     if (proba) return action !== Roles.KEY_ACTION;
     const r = currentRole();
     if (!r) return false;
-    return Roles.can(r, action);
+    return Roles.can(r, action) && (!viewAs || Roles.can(realRole(), action));
   }
 
   /** Adatmappa nélküli üzem. A felület végig sávot mutat, és a generált irat
@@ -509,7 +540,7 @@ const Auth = (() => {
     if (can('registry.read')) return true;
     if (!can('registry.read.own')) return false;
     const vez = fold(((emp && emp.fields) || {}).hr_direct_leader);
-    return vez !== '' && visibleLeaderNames().has(vez);
+    return vez !== '' && visibleLeaderNames(viewerName()).has(vez);
   }
 
   return {
@@ -518,7 +549,8 @@ const Auth = (() => {
     useBackend, createFileBackend, load, loaded, accounts, isEmpty, save,
     create, get, byName, setRole, rename, setPin, remove, adminCount,
     isLeader, setSupervisor, addDeputy, removeDeputy, isActiveDeputy, visibleLeaderNames, today,
-    login, logout, restoreSession, currentUser, currentRole,
+    login, logout, restoreSession, currentUser, currentRole, realRole,
+    canViewAs, setViewAs, viewingAs, viewerName, viewer,
     can, canWriteGroup, ownsEmployee, setProba, isProba,
     audit, auditLog,
     validatePin, hashPin, newSalt, fold,

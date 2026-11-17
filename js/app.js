@@ -160,13 +160,48 @@ window.updateHeaderBreadcrumb = function({ sourceName, clientCount, onSourceClic
   el.title = `Verzió ${v.verzio} — kiadva ${v.datum}`;
 })();
 
+// ── Mentés-állapot a fejlécben (plans/TERV-felulet-es-kimenet.md 3.2) ──────
+// Eddig csak a hiba adott hírt a mentésről; most a rendben lévő állapot is látszik.
+(function mentesAllapot() {
+  const el = document.getElementById('header-mentes');
+  if (!el) return;
+  const fuggo = new Set();
+  const hibak = new Map();          // tároló neve → üzenet
+  const ora = d => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  function rajzol() {
+    el.hidden = Auth.isProba();
+    el.classList.toggle('header-mentes--hiba', hibak.size > 0);
+    if (hibak.size) {
+      el.textContent = '⚠ A mentés nem sikerült';
+      el.title = [...hibak].map(([nev, msg]) => `${nev}: ${msg}`).join('\n')
+        + '\nA következő módosítás újra megpróbálja; ütközésnél töltsd újra az oldalt.';
+    } else if (fuggo.size) {
+      el.textContent = 'Mentés…';
+      el.title = '';
+    } else {
+      el.textContent = `Mentve ✓ ${ora(new Date())}`;
+      el.title = 'Minden módosítás a közös fájlban van.';
+    }
+  }
+  [['nyilvántartás', EmployeeRepo], ['ügyek', CaseRepo], ['átutalások', TransferRepo]]
+    .forEach(([nev, repo]) => {
+      repo.onSaveState?.(s => {
+        if (s === 'pending') fuggo.add(nev);
+        else { fuggo.delete(nev); hibak.delete(nev); }
+        rajzol();
+      });
+      repo.onSaveError?.(err => { fuggo.delete(nev); hibak.set(nev, err.message); rajzol(); });
+    });
+})();
+
 // ── A szint érvényesítése a felületen ─────────────────────────────────────
 function applyRole() {
   const vis = visibleTabs();
   tabBtns.forEach(b => { b.hidden = !vis.includes(b.dataset.tab); });
 
   const nev  = Auth.isProba() ? 'próba mód' : Settings.currentUser();
-  const szint = Auth.isProba() ? '' : (Auth.currentRole() ? Auth.roleLabel(Auth.currentRole()) : '');
+  // A fejléc a SAJÁT szintet mutatja; a nézetet a lila sáv.
+  const szint = Auth.isProba() ? '' : (Auth.realRole() ? Auth.roleLabel(Auth.realRole()) : '');
   const un = document.getElementById('header-username');
   if (un) {
     un.textContent = szint ? `${nev} · ${szint}` : nev;
@@ -181,12 +216,83 @@ function applyRole() {
       + '„proba" jelzést kapnak.';
   }
 
+  // Egyszerű vagy szakértő felület: a szakértői vezérlők `expert-only` osztályt kapnak
+  document.body.classList.toggle('ui-simple', !Auth.can('ui.expert'));
+
+  const vb = document.getElementById('viewas-btn');
+  if (vb) { vb.hidden = !Auth.canViewAs(); vb.onclick = openViewAs; }
+  const va = Auth.viewingAs();
+  const vbar = document.getElementById('viewas-bar');
+  if (vbar) {
+    vbar.hidden = !va;
+    vbar.innerHTML = va
+      ? `<b>Nézet: ${escHtml(Auth.roleLabel(va.role))}${va.name ? ' — ' + escHtml(va.name) : ''}.</b>
+         Amit itt módosítasz, a te neveden mentődik; döntést nem rögzíthetsz.
+         <button type="button" class="btn btn-ghost btn-sm" id="viewas-off">Vissza a saját nézetemhez</button>`
+      : '';
+    const off = document.getElementById('viewas-off');
+    if (off) off.onclick = () => valtNezet(null);
+  }
+
   // Kilépés gomb: csak belépett fióknál van értelme
   const lo = document.getElementById('logout-btn');
   if (lo) {
     lo.hidden = !Auth.currentRole();
     lo.onclick = () => LoginModule.logout();
   }
+}
+
+// ── „Megnézem úgy, mint…” (plans/TERV-felulet-es-kimenet.md 1.2) ───────────
+// Élőben vált, újratöltés nélkül: az újratöltés a mappa-engedélyt és a PIN-t is
+// újra kérné. A fülek az aktiváláskor rajzolnak, ezért elég az aktívat újranyitni.
+function valtNezet(v) {
+  try { Auth.setViewAs(v); }
+  catch (e) { toast(e.message, 'error'); return; }
+  BevLogger.info('AUTH', v ? 'Nézet: ' + Auth.roleLabel(v.role) + (v.name ? ' — ' + v.name : '')
+                           : 'Vissza a saját nézetbe', '', Settings.currentUser());
+  closeDialog();
+  applyRole();
+  const aktiv = document.querySelector('.tab-btn.active');
+  switchTab(aktiv ? aktiv.dataset.tab : 'docgen');
+}
+
+function openViewAs() {
+  const szintek = Roles.all();
+  let fiokok = [];
+  try { fiokok = Auth.accounts(); } catch {}
+  const most = Auth.viewingAs() || { role: Auth.realRole(), name: '' };
+  // Személy csak a „saját dolgozók” szinteknél számít: ott a látókör a névhez kötött.
+  const nevhezKotott = key => ((Roles.get(key) || {}).can || []).some(a => a.endsWith('.own'));
+
+  showDialog({
+    title: 'Megnézem úgy, mint…',
+    body: `
+      <label class="cf-field"><span>Szint</span>
+        <select id="va-role" class="field-input">${szintek.map(r =>
+          `<option value="${escHtml(r.key)}"${r.key === most.role ? ' selected' : ''}>${escHtml(r.label)}</option>`).join('')}
+        </select></label>
+      <label class="cf-field" id="va-name-wrap"><span>Kinek a dolgozóit</span>
+        <select id="va-name" class="field-input"></select></label>
+      <p class="ef-hint">Pontosan azt látod, amit ez a szint. Újratöltés vagy kilépés után a
+        saját nézeted jön vissza.</p>`,
+    footer: `<button class="btn btn-primary" id="va-ok">Megnézem</button>
+             <button class="btn" id="va-off">Saját nézetem</button>`,
+  });
+  const role = document.getElementById('va-role');
+  const nev  = document.getElementById('va-name');
+  const frissit = () => {
+    const kell = nevhezKotott(role.value);
+    document.getElementById('va-name-wrap').hidden = !kell;
+    const lista = fiokok.filter(a => a.role === role.value);
+    nev.innerHTML = lista.length
+      ? lista.map(a => `<option${a.name === most.name ? ' selected' : ''}>${escHtml(a.name)}</option>`).join('')
+      : '<option value="">(ezen a szinten nincs fiók)</option>';
+  };
+  role.addEventListener('change', frissit);
+  frissit();
+  document.getElementById('va-ok').addEventListener('click', () =>
+    valtNezet({ role: role.value, name: nevhezKotott(role.value) ? nev.value : '' }));
+  document.getElementById('va-off').addEventListener('click', () => valtNezet(null));
 }
 
 // ── Indítás ───────────────────────────────────────────────────────────────
