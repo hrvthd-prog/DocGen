@@ -93,6 +93,14 @@ Böngészőben, hálózati meghajtón nincs ellenőrizve.
   `REPO_UTKOZES` sora kell (kinek a nevét írja ki).
 - A terv 8. fejezetének D2–D6 döntései nyitottak (a `belso-szerver` ágon).
 
+**Utólag (csak a `belso-szerver` ágon):** a terv **kettévált** —
+`plans/TERV-felulet-es-kimenet.md` (felület, DOCX, a hamis ütközés javítása,
+szervertől független javaslatok; a `main`-re szánt munka, A0–A6) és
+`plans/TERV-belso-szerver.md` (párhuzamos mentés a szerveren, S1–S5). Mindkettő
+saját D1–D4 döntéslistával, jóváhagyásra vár. A PR #4 2026-11-17-én beolvadt
+(`v10.112`, taggel); az ág erre a `main`-re van húzva. Az ágon nincs
+verziólépés és tag (a hookok kikapcsolva).
+
 ## 2026-11-12 (3.) — Munkaviszony megszűnése: EH-űrlap; engedélytípus az ügy nevében
 
 **Cél:** (1) a megszűnés-bejelentés EH-fülén a tartózkodási kérelem adatlapja
