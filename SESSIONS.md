@@ -68,44 +68,38 @@ A sáv `display: none`-t kap, nem `width: 0`-t: így a Tab-láncból is kiesik,
 
 # Napló
 
-## 2026-11-14 — Belső szerver: fejlesztési terv; a hamis „valaki más közben írt” gyökéroka
+## 2026-11-14 — A hamis „valaki más közben írt” gyökéroka és javítása
 
-**Cél:** fejlesztési terv a belső szerverre költözéshez, külön ágon. Súlypontok:
-párhuzamos mentés (a figyelmeztetés egyedül dolgozva is megjelent), bolondbiztos
-felület külön legfőbb adminnal, alapértelmezett DOCX.
-**Változás:** `belso-szerver` ág, **verzió és tag nélkül** (az ágon a hookok
-szándékosan nincsenek bekapcsolva — lásd a terv 1. fejezetét).
-`plans/TERV-belso-szerver.md` (új), `employee-repo.js` (`createFileBackend.save`),
-`case-repo.js`, `transfer-repo.js`, `test/employee-repo.test.js` (+4), CLAUDE.md.
+**Cél:** a figyelmeztetés egyedül dolgozva is megjelent — gyökérok és javítás.
+(A belső szerverre költözés fejlesztési terve a `belso-szerver` ágon van:
+két terv: `plans/TERV-belso-szerver.md` és `plans/TERV-felulet-es-kimenet.md`, draft PR #3.)
+**Változás:** `v10.111` — `employee-repo.js` (`createFileBackend.save`),
+`case-repo.js`, `transfer-repo.js`, `test/employee-repo.test.js` (+4).
 **Miért / döntés:**
 - **A gyökérok:** a fájl-háttér az írás UTÁN, az élő gyorsítótárból vette a
   „mit láttam utoljára” lenyomatot. Ha az írás alatt (Z:-n lassú) a felhasználó
   tovább szerkesztett, a lenyomat olyat írt le, ami nem került a fájlba → a
   következő mentés a saját előző írását vette ütközésnek, és újratöltésig minden
-  mentés elbukott. 300 ms-os hamis írással reprodukálva. Javítás: szöveg +
-  lenyomat egy pillanatban, az írás előtt; a mentések sorban futnak; a repók
-  változás-számlálója őrzi a `dirty`-t (a `flush()` eddig kihagyhatta a mentés
-  alatt jött módosítást).
-- A zárolás helyett a terv **rekordszintű verziót + mezőszintű összefésülést**
-  javasol a szerveren (2.3) — az indoklás ott.
-- Nagyobb változtatás (DOCX-gombok, egyszerű mód, változás-sor) **nem készült**:
-  a felhasználó előbb a tervet akarja látni.
+  mentés elbukott. 300 ms-os hamis írással reprodukálva.
+- Javítás: szöveg + lenyomat egy pillanatban, az írás előtt; a háttér a
+  mentéseket sorba állítja; a repók változás-számlálója őrzi a `dirty`-t (a
+  `flush()` eddig kihagyhatta a mentés alatt jött módosítást).
+- A felhasználó döntése (D1): a javítás a `main`-re is menjen, ne várjon az ágra.
 **Tesztek:** `node test/run-all.js` zöld. Az új 4 tesztből a régi kódon 3 bukik.
 Böngészőben, hálózati meghajtón nincs ellenőrizve.
 **Nyitott / következő:**
-- **Döntésre vár** a terv 8. fejezete (D1–D6). D1: a javítás menjen-e `main`-re.
-- **Céges gépen** (ha a javítás a `main`-re került): Nyilvántartás → két-három
-  dolgozónál 5–6 mező gyors egymás utáni átírása → nem jöhet „valaki más közben
-  írt”. Ha mégis jön: a napló `REPO_UTKOZES` sora kell (kinek a nevét írja ki).
-- Az ágat a `main`-re kell húzni, mielőtt bármi más kerül rá.
+- **Céges gépen:** Nyilvántartás → két-három dolgozónál 5–6 mező gyors egymás
+  utáni átírása → nem jöhet „valaki más közben írt”. Ha mégis jön: a napló
+  `REPO_UTKOZES` sora kell (kinek a nevét írja ki).
+- A terv 8. fejezetének D2–D6 döntései nyitottak (a `belso-szerver` ágon).
 
-**Utólag, ugyanaznap:** a felhasználó kérésére a terv **kettévált**:
+**Utólag (csak a `belso-szerver` ágon):** a terv **kettévált** —
 `plans/TERV-felulet-es-kimenet.md` (felület, DOCX, a hamis ütközés javítása,
-szervertől független javaslatok — a `main`-re szánt munka) és
-`plans/TERV-belso-szerver.md` (párhuzamos mentés a szerveren, S1–S5 fázisok).
-A D1 döntés megvolt: a javítás a `main`-re megy — felhős sessionből a `main`
-és a tag nem pusholható (403), ezért külön ág + PR #4 (`javitas-hamis-utkozes`,
-`v10.111`), „Rebase and merge”-dzsel, a taget a felhasználó tolja fel.
+szervertől független javaslatok; a `main`-re szánt munka, A0–A6) és
+`plans/TERV-belso-szerver.md` (párhuzamos mentés a szerveren, S1–S5). Mindkettő
+saját D1–D4 döntéslistával, jóváhagyásra vár. A PR #4 2026-11-17-én beolvadt
+(`v10.112`, taggel); az ág erre a `main`-re van húzva. Az ágon nincs
+verziólépés és tag (a hookok kikapcsolva).
 
 ## 2026-11-12 (3.) — Munkaviszony megszűnése: EH-űrlap; engedélytípus az ügy nevében
 
